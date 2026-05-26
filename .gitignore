@@ -1,0 +1,5 @@
+node_modules
+dist
+.tsup
+*.log
+.DS_Store
