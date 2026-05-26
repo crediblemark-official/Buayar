@@ -13,13 +13,15 @@ export class DuitkuProvider extends BasePaymentProvider {
       ? "https://sandbox.duitku.com/webapi/api/merchant/v2/inquiry"
       : "https://passport.duitku.com/webapi/api/merchant/v2/inquiry";
 
+    const integerAmount = Math.round(amount);
+
     // Signature formula: md5(merchantCode + orderId + amount + apiKey)
-    const rawSignature = merchantCode + orderId + amount.toString() + apiKey;
+    const rawSignature = merchantCode + orderId + integerAmount.toString() + apiKey;
     const signature = crypto.createHash("md5").update(rawSignature).digest("hex");
 
     const payload = {
       merchantCode,
-      paymentAmount: amount,
+      paymentAmount: integerAmount,
       merchantOrderId: orderId,
       productDetails,
       email: customer.email,
@@ -39,15 +41,19 @@ export class DuitkuProvider extends BasePaymentProvider {
         body: JSON.stringify(payload),
       });
 
+      const text = await response.text();
+      let data: any = null;
+      try {
+        data = JSON.parse(text);
+      } catch (e) {}
+
       if (!response.ok) {
         return {
           success: false,
-          rawResponse: null,
-          error: `HTTP error! Status: ${response.status}`,
+          rawResponse: data,
+          error: data?.Message || data?.statusMessage || `HTTP error! Status: ${response.status} - ${text}`,
         };
       }
-
-      const data = await response.json();
 
       if (data.statusCode === "00") {
         return {
