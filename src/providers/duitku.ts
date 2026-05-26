@@ -15,9 +15,14 @@ export class DuitkuProvider extends BasePaymentProvider {
 
     const integerAmount = Math.round(amount);
 
-    // Signature formula: md5(merchantCode + orderId + amount + apiKey)
-    const rawSignature = merchantCode + orderId + integerAmount.toString() + apiKey;
-    const signature = crypto.createHash("md5").update(rawSignature).digest("hex");
+    // 1. Generate payload signature: md5(merchantCode + orderId + amount + apiKey)
+    const rawPayloadSignature = merchantCode + orderId + integerAmount.toString() + apiKey;
+    const payloadSignature = crypto.createHash("md5").update(rawPayloadSignature).digest("hex");
+
+    // 2. Generate header signature: sha256(merchantCode + timestamp + apiKey)
+    const timestamp = Date.now().toString();
+    const rawHeaderSignature = merchantCode + timestamp + apiKey;
+    const headerSignature = crypto.createHash("sha256").update(rawHeaderSignature).digest("hex");
 
     const payload = {
       merchantCode,
@@ -26,7 +31,7 @@ export class DuitkuProvider extends BasePaymentProvider {
       productDetails,
       email: customer.email,
       phoneNumber: customer.phone || "",
-      signature,
+      signature: payloadSignature,
       callbackUrl,
       returnUrl,
       expiryPeriod: 1440, // 24 hours expiry
@@ -37,6 +42,10 @@ export class DuitkuProvider extends BasePaymentProvider {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          "Accept": "application/json",
+          "x-duitku-signature": headerSignature,
+          "x-duitku-timestamp": timestamp,
+          "x-duitku-merchantcode": merchantCode
         },
         body: JSON.stringify(payload),
       });
