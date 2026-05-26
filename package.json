@@ -1,5 +1,5 @@
 {
-  "name": "buayar",
+  "name": "@crediblemark/buayar",
   "version": "0.1.0",
   "description": "Unified Payment Gateway SDK for CredBuild platforms and sites",
   "main": "./dist/index.js",
