@@ -10,8 +10,8 @@ export class DuitkuProvider extends BasePaymentProvider {
     const { merchantCode, apiKey, sandbox } = config;
 
     const url = sandbox
-      ? "https://sandbox.duitku.com/webapi/api/merchant/v2/inquiry"
-      : "https://passport.duitku.com/webapi/api/merchant/v2/inquiry";
+      ? "https://api-sandbox.duitku.com/api/merchant/createInvoice"
+      : "https://api-prod.duitku.com/api/merchant/createInvoice";
 
     const integerAmount = Math.round(amount);
 
