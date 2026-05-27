@@ -3,9 +3,9 @@
 [![npm version](https://img.shields.io/npm/v/@crediblemark/buayar.svg?style=flat-square&color=amber)](https://www.npmjs.com/package/@crediblemark/buayar)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](https://opensource.org/licenses/MIT)
 
-**`@crediblemark/buayar`** adalah Unified Payment Gateway SDK yang dirancang khusus untuk mempermudah integrasi berbagai gerbang pembayaran (Payment Gateway) pada platform dan situs berbasis **CredBuild**.
+**`@crediblemark/buayar`** adalah Unified Payment Gateway SDK untuk Node.js dan TypeScript yang dirancang untuk mempermudah integrasi berbagai gerbang pembayaran (Payment Gateway) dengan satu struktur API yang seragam.
 
-Dengan SDK ini, Anda cukup menulis kode satu kali menggunakan struktur API yang seragam untuk mengelola pembuatan invoice/transaksi serta verifikasi callback webhook dari berbagai penyedia layanan payment gateway.
+Dengan SDK ini, Anda cukup menulis kode satu kali menggunakan struktur API yang konsisten untuk mengelola pembuatan invoice/transaksi serta verifikasi callback webhook dari berbagai penyedia layanan payment gateway.
 
 ---
 

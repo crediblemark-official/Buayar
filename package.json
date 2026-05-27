@@ -1,7 +1,7 @@
 {
   "name": "@crediblemark/buayar",
-  "version": "0.1.4",
-  "description": "Unified Payment Gateway SDK for CredBuild platforms and sites",
+  "version": "0.1.5",
+  "description": "Unified Payment Gateway SDK for Node.js and TypeScript supporting multiple providers",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
