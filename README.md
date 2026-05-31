@@ -10,13 +10,16 @@ Dengan SDK ini, Anda cukup menulis kode satu kali menggunakan struktur API yang 
 ---
 
 ## 🚀 Fitur Utama
-
+ 
 - 🔄 **Unified API**: Satu antarmuka (interface) terpadu untuk semua provider payment gateway.
+- ⚡ **Direct Payment Support**: Otomatis mendeteksi `paymentMethod` dan beralih ke Direct Inquiry API (v2/inquiry) Duitku untuk mengembalikan `vaNumber`, `qrString` (EMVCo), dan `paymentCode` secara instan tanpa redirect eksternal.
+- 🏷️ **Pre-Categorization (Accordion Ready)**: Menyediakan pengelompokan pembayaran bawaan (`Virtual Account`, `QRIS`, `E-Wallet`, `Retail / Gerai`, `Lainnya`) langsung dari API response untuk memudahkan implementasi UI accordion.
+- 🎨 **Headless SDK Philosophy**: Dirancang murni sebagai core logic & data manager tanpa overhead UI/styling. Memberikan kebebasan penuh bagi pengembang untuk mendesain UI/Tailwind/dark mode di tingkat aplikasi.
 - 🛡️ **Tipe Data Kuat (TypeScript)**: Dilengkapi dengan deklarasi tipe data lengkap untuk mencegah *runtime error*.
 - 🇮🇩 **Dukungan Lokal**: Siap digunakan untuk transaksi di Indonesia (seperti Duitku).
 - ⚙️ **Modular & Dapat Diperluas**: Memungkinkan penambahan provider baru dengan mewarisi kelas base yang disediakan.
 - 🔒 **Otomatisasi Signature**: Keamanan transaksi terjamin dengan pembuatan *hash* signature (MD5, SHA-256) otomatis secara internal.
-
+ 
 ---
 
 ## 📦 Instalasi
@@ -218,8 +221,23 @@ interface InvoiceResponse {
   success: boolean;
   paymentUrl?: string;
   reference?: string;
+  vaNumber?: string;       // Nomor Virtual Account (untuk metode Bank VA)
+  qrString?: string;       // EMVCo QRIS payload mentah (untuk scan langsung)
+  qrCodeUrl?: string;      // Image URL QRIS dari Duitku
+  paymentCode?: string;    // Kode pembayaran retail (Indomaret/Alfamart)
   rawResponse: any;
   error?: string;
+}
+```
+
+### `PaymentMethod`
+```typescript
+interface PaymentMethod {
+  paymentMethod: string;
+  paymentName: string;
+  paymentImage: string;
+  totalFee: string;
+  category: "Virtual Account" | "QRIS" | "E-Wallet" | "Retail / Gerai" | "Lainnya";
 }
 ```
 
@@ -232,6 +250,19 @@ interface VerifyCallbackResult {
   status: "paid" | "pending" | "failed";
   rawPayload: any;
 }
+```
+
+---
+
+## 🛠️ Utilitas Tambahan
+
+### `getPaymentMethodCategory(code, name)`
+Mengkategorikan kode dan nama metode pembayaran Duitku ke kategori terstandarisasi untuk UI Accordion.
+```typescript
+import { getPaymentMethodCategory } from "@crediblemark/buayar";
+
+const cat = getPaymentMethodCategory("BT", "Permata VA"); 
+// Output: "Virtual Account"
 ```
 
 ---

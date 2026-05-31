@@ -1,6 +1,15 @@
 import { BasePaymentProvider } from "./providers/base";
 import { DuitkuProvider } from "./providers/duitku";
-import { CreateInvoiceParams, InvoiceResponse, VerifyCallbackResult, ProviderConfig } from "./types";
+import {
+  CreateInvoiceParams,
+  InvoiceResponse,
+  VerifyCallbackResult,
+  ProviderConfig,
+  GetPaymentMethodsParams,
+  GetPaymentMethodsResult,
+  CheckTransactionParams,
+  CheckTransactionResult,
+} from "./types";
 
 export * from "./types";
 export * from "./providers/base";
@@ -43,6 +52,27 @@ export class PaymentManager {
     const provider = this.getProvider(providerName);
     return provider.verifyCallback(body, config);
   }
+
+  async getPaymentMethods(
+    providerName: string,
+    params: GetPaymentMethodsParams,
+    config: ProviderConfig
+  ): Promise<GetPaymentMethodsResult> {
+    const provider = this.getProvider(providerName);
+    return provider.getPaymentMethods(params, config);
+  }
+
+  async checkTransaction(
+    providerName: string,
+    params: CheckTransactionParams,
+    config: ProviderConfig
+  ): Promise<CheckTransactionResult> {
+    const provider = this.getProvider(providerName);
+    return provider.checkTransaction(params, config);
+  }
 }
 
 export const paymentManager = new PaymentManager();
+
+export { getPaymentMethodCategory } from "./utils";
+

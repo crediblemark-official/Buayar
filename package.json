@@ -1,6 +1,6 @@
 {
   "name": "@crediblemark/buayar",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "Unified Payment Gateway SDK for Node.js and TypeScript supporting multiple providers",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
