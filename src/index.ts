@@ -1,5 +1,7 @@
 import { BasePaymentProvider } from "./providers/base";
 import { DuitkuProvider } from "./providers/duitku";
+import { MidtransProvider } from "./providers/midtrans";
+import { MidtransClient } from "./clients/midtrans";
 import {
   CreateInvoiceParams,
   InvoiceResponse,
@@ -14,6 +16,8 @@ import {
 export * from "./types";
 export * from "./providers/base";
 export * from "./providers/duitku";
+export * from "./providers/midtrans";
+export * from "./clients/midtrans";
 
 export class PaymentManager {
   private providers: Map<string, BasePaymentProvider> = new Map();
@@ -21,6 +25,7 @@ export class PaymentManager {
   constructor() {
     // Register default providers
     this.registerProvider(new DuitkuProvider());
+    this.registerProvider(new MidtransProvider());
   }
 
   registerProvider(provider: BasePaymentProvider) {
@@ -33,6 +38,14 @@ export class PaymentManager {
       throw new Error(`Payment provider '${name}' is not registered`);
     }
     return provider;
+  }
+
+  getMidtransProvider(): MidtransProvider {
+    return this.getProvider("midtrans") as MidtransProvider;
+  }
+
+  getMidtransClient(config: ProviderConfig): MidtransClient {
+    return new MidtransClient(config);
   }
 
   async createInvoice(
@@ -70,7 +83,19 @@ export class PaymentManager {
     const provider = this.getProvider(providerName);
     return provider.checkTransaction(params, config);
   }
+
+  async probePaymentMethods(
+    providerName: string,
+    config: ProviderConfig
+  ): Promise<{ success: boolean; enabled: string[]; error?: string }> {
+    const provider = this.getProvider(providerName);
+    if (provider.probePaymentMethods) {
+      return provider.probePaymentMethods(config);
+    }
+    return { success: false, enabled: [], error: `Provider '${providerName}' does not support payment methods probing` };
+  }
 }
+
 
 export const paymentManager = new PaymentManager();
 

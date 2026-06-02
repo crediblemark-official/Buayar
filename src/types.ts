@@ -11,6 +11,8 @@ export interface CreateInvoiceParams {
   callbackUrl: string;
   /** Specific Duitku payment method code (e.g. "BCA", "I1", "OV"). If omitted, all methods are available via Duitku's redirect page. */
   paymentMethod?: string;
+  /** Provider-specific parameters (e.g., token_id, billing details, custom headers/fields) */
+  providerParams?: any;
 }
 
 export interface InvoiceResponse {

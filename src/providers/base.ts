@@ -15,4 +15,8 @@ export abstract class BasePaymentProvider {
   abstract verifyCallback(body: any, config: ProviderConfig): Promise<VerifyCallbackResult>;
   abstract getPaymentMethods(params: GetPaymentMethodsParams, config: ProviderConfig): Promise<GetPaymentMethodsResult>;
   abstract checkTransaction(params: CheckTransactionParams, config: ProviderConfig): Promise<CheckTransactionResult>;
+  
+  /** Probe/discover which payment methods are actually enabled/active for the merchant */
+  async probePaymentMethods?(config: ProviderConfig): Promise<{ success: boolean; enabled: string[]; error?: string }>;
 }
+

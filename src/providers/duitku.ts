@@ -307,4 +307,13 @@ export class DuitkuProvider extends BasePaymentProvider {
       };
     }
   }
+
+  async probePaymentMethods(config: ProviderConfig): Promise<{ success: boolean; enabled: string[]; error?: string }> {
+    const res = await this.getPaymentMethods({ amount: 10000 }, config);
+    if (res.success) {
+      return { success: true, enabled: res.methods.map(m => m.paymentMethod) };
+    }
+    return { success: false, enabled: [], error: res.error };
+  }
 }
+
