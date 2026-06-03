@@ -3,3 +3,4 @@ dist
 .tsup
 *.log
 .DS_Store
+buayar/
