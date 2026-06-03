@@ -40,6 +40,23 @@ yarn add @crediblemark/buayar
 pnpm add @crediblemark/buayar
 ```
 
+### Instalasi dari GitHub Packages (Alternatif)
+
+Package ini juga tersedia di [GitHub Packages](https://github.com/crediblemark-official/Buayar/packages). Buat file `.npmrc` di root project Anda:
+
+```ini
+@crediblemark:registry=https://npm.pkg.github.com/
+//npm.pkg.github.com/:_authToken=${GITHUB_TOKEN}
+```
+
+Kemudian install seperti biasa:
+
+```bash
+bun add @crediblemark/buayar
+```
+
+> **Catatan:** Anda memerlukan GitHub Personal Access Token (PAT) dengan scope `read:packages` yang di-set sebagai environment variable `GITHUB_TOKEN`.
+
 ---
 
 ## 🗺️ Alur Proses Pembayaran

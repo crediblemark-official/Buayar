@@ -6,9 +6,17 @@ on:
       - main
   workflow_dispatch:
 
+# Izin untuk publish ke GitHub Packages
+permissions:
+  contents: read
+  packages: write
+
 jobs:
+  # ──────────────────────────────────────────────
+  # Job 1: Publish ke npmjs.com (public registry)
+  # ──────────────────────────────────────────────
   publish-npm:
-    name: Publish to npmjs.com
+    name: Publish ke npmjs.com
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
@@ -28,15 +36,60 @@ jobs:
       - name: Install Dependencies
         run: bun install --frozen-lockfile
 
-      - name: Build and Publish to npmjs
+      - name: Build dan Publish ke npmjs
         run: |
           CURRENT_VERSION=$(node -p "require('./package.json').version")
           if npm view @crediblemark/buayar@$CURRENT_VERSION version &>/dev/null; then
-            echo "Version $CURRENT_VERSION is already published on npmjs.com. Skipping publish."
+            echo "Versi $CURRENT_VERSION sudah terpublish di npmjs.com. Lewati publish."
           else
-            echo "Publishing version $CURRENT_VERSION to npmjs.com..."
+            echo "Publish versi $CURRENT_VERSION ke npmjs.com..."
             bun run build
             npm publish --access public
           fi
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  # ──────────────────────────────────────────────
+  # Job 2: Publish ke GitHub Packages (backup)
+  # ──────────────────────────────────────────────
+  publish-github:
+    name: Publish ke GitHub Packages
+    runs-on: ubuntu-latest
+    needs: publish-npm
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Setup Node.js untuk GitHub Packages
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          registry-url: 'https://npm.pkg.github.com/'
+          scope: '@crediblemark'
+
+      - name: Install Dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build dan Publish ke GitHub Packages
+        run: |
+          CURRENT_VERSION=$(node -p "require('./package.json').version")
+
+          # Cek apakah versi sudah terpublish di GitHub Packages
+          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            -H "Authorization: Bearer $NODE_AUTH_TOKEN" \
+            "https://npm.pkg.github.com/@crediblemark/buayar/$CURRENT_VERSION")
+
+          if [ "$HTTP_STATUS" = "200" ]; then
+            echo "Versi $CURRENT_VERSION sudah terpublish di GitHub Packages. Lewati publish."
+          else
+            echo "Publish versi $CURRENT_VERSION ke GitHub Packages..."
+            bun run build
+            npm publish --registry=https://npm.pkg.github.com/
+          fi
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
