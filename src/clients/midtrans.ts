@@ -15,7 +15,7 @@ export class MidtransClient {
       : "https://api.midtrans.com/v2";
   }
 
-  private async request(
+  async request(
     method: "GET" | "POST" | "PATCH" | "DELETE",
     path: string,
     body: any

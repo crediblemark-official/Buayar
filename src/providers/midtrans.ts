@@ -177,31 +177,8 @@ export class MidtransProvider extends BasePaymentProvider {
       }
 
       try {
-        const authHeader = `Basic ${Buffer.from(apiKey + ":").toString("base64")}`;
-
-        const response = await fetch(url, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Accept": "application/json",
-            "Authorization": authHeader,
-          },
-          body: JSON.stringify(payload),
-        });
-
-        const text = await response.text();
-        let data: any = null;
-        try {
-          data = JSON.parse(text);
-        } catch (e) {}
-
-        if (!response.ok || !data) {
-          return {
-            success: false,
-            rawResponse: data || text,
-            error: data?.status_message || `HTTP error! Status: ${response.status} - ${text}`,
-          };
-        }
+        const client = new MidtransClient(config);
+        const data = await client.request("POST", "/charge", payload);
 
         // Midtrans core API success status code is usually "201" (created)
         if (data.status_code === "201" || data.status_code === "200") {
@@ -280,31 +257,8 @@ export class MidtransProvider extends BasePaymentProvider {
     };
 
     try {
-      const authHeader = `Basic ${Buffer.from(apiKey + ":").toString("base64")}`;
-
-      const response = await fetch(url, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Accept": "application/json",
-          "Authorization": authHeader,
-        },
-        body: JSON.stringify(payload),
-      });
-
-      const text = await response.text();
-      let data: any = null;
-      try {
-        data = JSON.parse(text);
-      } catch (e) {}
-
-      if (!response.ok || !data) {
-        return {
-          success: false,
-          rawResponse: data || text,
-          error: data?.error_messages?.[0] || `HTTP error! Status: ${response.status} - ${text}`,
-        };
-      }
+      const client = new MidtransClient(config);
+      const data = await client.request("POST", url, payload);
 
       if (data.token) {
         return {
@@ -546,41 +500,10 @@ export class MidtransProvider extends BasePaymentProvider {
 
   async checkTransaction(params: CheckTransactionParams, config: ProviderConfig): Promise<CheckTransactionResult> {
     const { merchantOrderId } = params;
-    const { apiKey, sandbox } = config;
-
-    const url = `${this.getApiBaseUrl(sandbox)}/${merchantOrderId}/status`;
 
     try {
-      const authHeader = `Basic ${Buffer.from(apiKey + ":").toString("base64")}`;
-
-      const response = await fetch(url, {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-          "Accept": "application/json",
-          "Authorization": authHeader,
-        },
-      });
-
-      const text = await response.text();
-      let data: any = null;
-      try {
-        data = JSON.parse(text);
-      } catch (e) {}
-
-      if (!response.ok || !data) {
-        return {
-          success: false,
-          orderId: merchantOrderId,
-          reference: "",
-          amount: 0,
-          statusCode: "",
-          status: "failed",
-          statusMessage: `HTTP error! Status: ${response.status}`,
-          error: `HTTP ${response.status} - ${text}`,
-          rawResponse: data || text,
-        };
-      }
+      const client = new MidtransClient(config);
+      const data = await client.request("GET", `/${merchantOrderId}/status`, null);
 
       const transactionStatus = data.transaction_status || "";
       const fraudStatus = data.fraud_status || "";
@@ -634,12 +557,6 @@ export class MidtransProvider extends BasePaymentProvider {
   }
 
   async probePaymentMethods(config: ProviderConfig): Promise<{ success: boolean; enabled: string[]; error?: string }> {
-    const { apiKey, sandbox } = config;
-    const baseUrl = sandbox
-      ? "https://api.sandbox.midtrans.com/v2"
-      : "https://api.midtrans.com/v2";
-    const auth = Buffer.from(apiKey + ":").toString("base64");
-
     const probePayloads: Record<string, any> = {
       qris: { payment_type: "qris", qris: { acquirer: "gopay" } },
       gopay: { payment_type: "gopay", gopay: { enable_callback: true, callback_url: "https://example.com" } },
@@ -660,6 +577,7 @@ export class MidtransProvider extends BasePaymentProvider {
     };
 
     const enabled: string[] = [];
+    const client = new MidtransClient(config);
 
     for (const [methodId, specificPayload] of Object.entries(probePayloads)) {
       try {
@@ -671,33 +589,13 @@ export class MidtransProvider extends BasePaymentProvider {
           customer_details: { first_name: "Probe", email: "probe@test.com" },
         };
 
-        const res = await fetch(`${baseUrl}/charge`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Accept": "application/json",
-            "Authorization": `Basic ${auth}`,
-          },
-          body: JSON.stringify(probeBody),
-        });
-
-        const text = await res.text();
-        let result: any = null;
-        try {
-          result = JSON.parse(text);
-        } catch (e) {}
+        const result = await client.request("POST", "/charge", probeBody);
 
         if (result && ["200", "201", "202"].includes(result.status_code)) {
           enabled.push(methodId);
 
           try {
-            await fetch(`${baseUrl}/${probeOrderId}/cancel`, {
-              method: "POST",
-              headers: {
-                "Accept": "application/json",
-                "Authorization": `Basic ${auth}`,
-              },
-            });
+            await client.cancelTransaction(probeOrderId);
           } catch (e) {
             // ignore cancel errors
           }
