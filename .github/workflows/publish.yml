@@ -6,10 +6,7 @@ on:
       - main
   workflow_dispatch:
 
-# Izin untuk publish ke GitHub Packages
-permissions:
-  contents: read
-  packages: write
+# Izin akan dispesifikasikan di setiap job secara modular
 
 jobs:
   # ──────────────────────────────────────────────
@@ -18,6 +15,8 @@ jobs:
   publish-npm:
     name: Publish ke npmjs.com
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -56,6 +55,9 @@ jobs:
     name: Publish ke GitHub Packages
     runs-on: ubuntu-latest
     needs: publish-npm
+    permissions:
+      contents: read
+      packages: write
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -93,3 +95,33 @@ jobs:
           fi
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ──────────────────────────────────────────────
+  # Job 3: Buat GitHub Release Otomatis
+  # ──────────────────────────────────────────────
+  create-release:
+    name: Buat GitHub Release
+    runs-on: ubuntu-latest
+    needs: [publish-npm, publish-github]
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Buat Release di GitHub
+        run: |
+          CURRENT_VERSION=$(node -p "require('./package.json').version")
+          TAG_NAME="v$CURRENT_VERSION"
+          
+          # Cek apakah tag rilis sudah ada di GitHub
+          if gh release view "$TAG_NAME" &>/dev/null; then
+            echo "Release $TAG_NAME sudah ada di GitHub. Lewati pembuatan release."
+          else
+            echo "Membuat GitHub Release $TAG_NAME..."
+            gh release create "$TAG_NAME" \
+              --title "$TAG_NAME" \
+              --generate-notes
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
