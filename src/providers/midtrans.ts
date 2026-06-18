@@ -420,13 +420,6 @@ export class MidtransProvider extends BasePaymentProvider {
         category: "QRIS",
       },
       {
-        paymentMethod: "other_qris",
-        paymentName: "Other QRIS",
-        paymentImage: "https://docs.midtrans.com/asset/payment_methods/other_qris.png",
-        totalFee: "0.7%",
-        category: "QRIS",
-      },
-      {
         paymentMethod: "gopay",
         paymentName: "GoPay E-Wallet",
         paymentImage: "https://docs.midtrans.com/asset/payment_methods/gopay.png",
