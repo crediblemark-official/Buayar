@@ -28,6 +28,7 @@
     "dev": "tsup src/index.ts --format cjs,esm --dts --watch"
   },
   "devDependencies": {
+    "@types/bun": "^1.4.0",
     "@types/node": "^24.12.2",
     "tsup": "^8.5.1",
     "typescript": "^5.9.3"

@@ -176,6 +176,44 @@ async function loadDuitkuMethods() {
     console.log("Metode Pembayaran Aktif:", result.methods);
     // SDK secara otomatis mengelompokkan ke dalam kategori terstandarisasi untuk UI:
     // "Virtual Account", "QRIS", "E-Wallet", "Retail / Gerai", "Lainnya"
-  }
-}
 ```
+
+---
+
+## 🏦 Ekstensi `DuitkuClient` (Disbursement & Saldo)
+
+Selain alur transaksi reguler, SDK menyediakan **`DuitkuClient`** untuk mengelola pengecekan saldo dan transfer dana / payout (*disbursement*):
+
+```typescript
+import { buayar, DuitkuClient } from "@crediblemark/buayar";
+
+// Opsi 1: Dari instance buayar
+const client = buayar.getDuitkuClient();
+
+// Opsi 2: Inisialisasi mandiri
+// const client = new DuitkuClient({ merchantCode: "DXXXX", apiKey: "...", sandbox: true });
+
+// 1. Cek Saldo Merchant
+const balanceResult = await client.checkBalance();
+console.log("Saldo Merchant:", balanceResult.balance);
+
+// 2. Daftar Bank yang Didukung Payout
+const banks = await client.listBanks();
+console.log("Daftar Bank:", banks);
+
+// 3. Validasi Pemilik Rekening Bank (Inquiry)
+const accountInfo = await client.inquiryBankAccount("BCA", "1234567890");
+console.log("Nama Pemilik:", accountInfo.accountName);
+
+// 4. Eksekusi Transfer Dana (Disbursement)
+const disburseResult = await client.disburse({
+  merchantOrderId: "DISBURSE-001",
+  bankCode: "BCA",
+  bankAccount: "1234567890",
+  amount: 500000,
+  purpose: "Penarikan Saldo Mitra",
+  senderName: "PT Bisnis Anda",
+});
+console.log("Status Transfer:", disburseResult);
+```
+

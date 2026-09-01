@@ -4,9 +4,9 @@ export class MidtransClient {
   private apiKey: string;
   private sandbox: boolean;
 
-  constructor(config: { apiKey: string; sandbox: boolean } | ProviderConfig) {
-    this.apiKey = config.apiKey;
-    this.sandbox = config.sandbox;
+  constructor(config: ProviderConfig | { apiKey?: string; serverKey?: string; sandbox?: boolean }) {
+    this.apiKey = (config as any).apiKey || (config as any).serverKey || "";
+    this.sandbox = !!config.sandbox;
   }
 
   private getApiBaseUrl() {

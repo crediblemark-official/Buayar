@@ -1,5 +1,4 @@
-import crypto from "crypto";
-import { BasePaymentProvider } from "./base";
+import { BasePaymentProvider } from "../base";
 import {
   CreateInvoiceParams,
   InvoiceResponse,
@@ -9,8 +8,16 @@ import {
   GetPaymentMethodsResult,
   CheckTransactionParams,
   CheckTransactionResult,
-} from "../types";
-import { getPaymentMethodCategory } from "../utils";
+  PaymentMethod,
+} from "../../types";
+import { getPaymentMethodCategory } from "../../utils/category";
+import { toDuitkuPaymentMethod, toCanonicalPaymentMethod } from "../../core/canonical";
+import {
+  getDuitkuInquirySignatures,
+  verifyDuitkuCallbackSignature,
+  getDuitkuPaymentMethodsSignature,
+  getDuitkuStatusSignatures,
+} from "./signature";
 
 export class DuitkuProvider extends BasePaymentProvider {
   readonly name = "duitku";
@@ -23,9 +30,13 @@ export class DuitkuProvider extends BasePaymentProvider {
 
   async createInvoice(params: CreateInvoiceParams, config: ProviderConfig): Promise<InvoiceResponse> {
     const { orderId, amount, productDetails, customer, returnUrl, callbackUrl } = params;
-    const { merchantCode, apiKey, sandbox } = config;
+    const merchantCode = config.merchantCode || "";
+    const apiKey = config.apiKey || "";
+    const sandbox = !!config.sandbox;
 
-    const isDirectInquiry = !!params.paymentMethod;
+    const duitkuMethod = toDuitkuPaymentMethod(params.paymentMethod);
+    const isDirectInquiry = !!duitkuMethod;
+
     const url = isDirectInquiry
       ? (sandbox
         ? "https://sandbox.duitku.com/webapi/api/merchant/v2/inquiry"
@@ -33,15 +44,12 @@ export class DuitkuProvider extends BasePaymentProvider {
       : `${this.getBaseUrl(sandbox)}/api/merchant/createInvoice`;
 
     const integerAmount = Math.round(amount);
-
-    // 1. Generate payload signature: md5(merchantCode + orderId + amount + apiKey)
-    const rawPayloadSignature = merchantCode + orderId + integerAmount.toString() + apiKey;
-    const payloadSignature = crypto.createHash("md5").update(rawPayloadSignature).digest("hex");
-
-    // 2. Generate header signature: sha256(merchantCode + timestamp + apiKey)
-    const timestamp = Date.now().toString();
-    const rawHeaderSignature = merchantCode + timestamp + apiKey;
-    const headerSignature = crypto.createHash("sha256").update(rawHeaderSignature).digest("hex");
+    const { payloadSignature, timestamp, headerSignature } = getDuitkuInquirySignatures(
+      merchantCode,
+      orderId,
+      integerAmount,
+      apiKey
+    );
 
     const payload = {
       merchantCode,
@@ -51,10 +59,11 @@ export class DuitkuProvider extends BasePaymentProvider {
       email: customer.email,
       phoneNumber: customer.phone || "",
       signature: payloadSignature,
-      callbackUrl,
-      returnUrl,
-      expiryPeriod: 1440, // 24 hours expiry
-      ...(params.paymentMethod ? { paymentMethod: params.paymentMethod } : {}),
+      callbackUrl: callbackUrl || config.callbackUrl || "",
+      returnUrl: returnUrl || config.returnUrl || "",
+      expiryPeriod: 1440,
+      ...(duitkuMethod ? { paymentMethod: duitkuMethod } : {}),
+      ...params.providerParams,
     };
 
     try {
@@ -79,11 +88,14 @@ export class DuitkuProvider extends BasePaymentProvider {
       let data: any = null;
       try {
         data = JSON.parse(text);
-      } catch (e) { }
+      } catch (e) {}
 
       if (!response.ok) {
         return {
           success: false,
+          provider: "duitku",
+          orderId,
+          amount: integerAmount,
           rawResponse: data,
           error: data?.Message || data?.statusMessage || `HTTP error! Status: ${response.status} - ${text}`,
         };
@@ -92,17 +104,25 @@ export class DuitkuProvider extends BasePaymentProvider {
       if (data.statusCode === "00") {
         return {
           success: true,
+          provider: "duitku",
+          orderId,
+          amount: integerAmount,
           paymentUrl: data.paymentUrl,
           reference: data.reference,
           vaNumber: data.vaNumber,
+          vaBank: duitkuMethod ? toCanonicalPaymentMethod("duitku", duitkuMethod).replace("_va", "") : undefined,
           qrString: data.qrString,
           qrCodeUrl: data.qrCodeUrl,
           paymentCode: data.paymentCode,
+          expiresAt: new Date(Date.now() + 1440 * 60 * 1000),
           rawResponse: data,
         };
       } else {
         return {
           success: false,
+          provider: "duitku",
+          orderId,
+          amount: integerAmount,
           rawResponse: data,
           error: data.statusMessage || `Duitku Error: ${data.statusCode}`,
         };
@@ -110,6 +130,9 @@ export class DuitkuProvider extends BasePaymentProvider {
     } catch (e: any) {
       return {
         success: false,
+        provider: "duitku",
+        orderId,
+        amount: integerAmount,
         rawResponse: null,
         error: e.message || "Failed to make inquiry request to Duitku",
       };
@@ -117,54 +140,49 @@ export class DuitkuProvider extends BasePaymentProvider {
   }
 
   async verifyCallback(body: any, config: ProviderConfig): Promise<VerifyCallbackResult> {
-    const { apiKey } = config;
-
-    // Callback parameters signature formula: md5(merchantCode + amount + merchantOrderId + apiKey)
-    const merchantCode = body.merchantCode || "";
-    const amount = body.amount || "";
+    const apiKey = config.apiKey || "";
     const merchantOrderId = body.merchantOrderId || "";
-    const signature = body.signature || "";
+    const amount = body.amount || "";
 
-    const rawSignature = merchantCode + amount + merchantOrderId + apiKey;
-    const computedSignature = crypto.createHash("md5").update(rawSignature).digest("hex");
-
-    const isValid = signature.toLowerCase() === computedSignature.toLowerCase();
-    const isPaid = body.resultCode === "00";
+    const isValid = verifyDuitkuCallbackSignature(body, apiKey);
+    const isPaid = isValid && body.resultCode === "00";
+    const isFailed = !isValid || body.resultCode !== "00";
 
     return {
       isValid,
+      provider: "duitku",
       orderId: merchantOrderId,
       amount: amount ? Number(amount) : 0,
       status: isValid ? (isPaid ? "paid" : "failed") : "failed",
+      isPaid,
+      isPending: false,
+      isFailed,
+      isExpired: isValid && body.resultCode !== "00",
+      statusCode: body.resultCode,
       rawPayload: body,
     };
   }
 
   async getPaymentMethods(params: GetPaymentMethodsParams, config: ProviderConfig): Promise<GetPaymentMethodsResult> {
-    const { amount } = params;
-    const { merchantCode, apiKey, sandbox } = config;
+    const amount = params?.amount ? Math.round(params.amount) : 10000;
+    const merchantCode = config.merchantCode || "";
+    const apiKey = config.apiKey || "";
+    const sandbox = !!config.sandbox;
 
-    // Duitku uses different endpoints for v1 payment methods API
     const url = sandbox
       ? "https://sandbox.duitku.com/webapi/api/merchant/paymentmethod/getpaymentmethod"
       : "https://passport.duitku.com/webapi/api/merchant/paymentmethod/getpaymentmethod";
 
-    const integerAmount = Math.round(amount);
-    const datetime = new Date().toISOString().replace("T", " ").slice(0, 19); // "yyyy-MM-dd HH:mm:ss"
-
-    // Signature: HMAC_SHA256(merchantCode + amount + datetime, apiKey)
-    const stringToSign = merchantCode + integerAmount.toString() + datetime;
-    const signature = crypto.createHmac("sha256", apiKey).update(stringToSign).digest("hex");
+    const datetime = new Date().toISOString().replace("T", " ").slice(0, 19);
+    const signature = getDuitkuPaymentMethodsSignature(merchantCode, amount, datetime, apiKey);
 
     try {
       const response = await fetch(url, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           merchantcode: merchantCode,
-          amount: integerAmount,
+          amount,
           datetime,
           signature,
         }),
@@ -174,11 +192,12 @@ export class DuitkuProvider extends BasePaymentProvider {
       let data: any = null;
       try {
         data = JSON.parse(text);
-      } catch (e) { }
+      } catch (e) {}
 
       if (!response.ok || !data) {
         return {
           success: false,
+          provider: "duitku",
           methods: [],
           rawResponse: data,
           error: data?.responseMessage || `HTTP error! Status: ${response.status}`,
@@ -187,21 +206,44 @@ export class DuitkuProvider extends BasePaymentProvider {
 
       if (data.responseCode === "00") {
         const rawMethods = data.paymentFee || [];
-        const methods = rawMethods.map((m: any) => ({
-          paymentMethod: m.paymentMethod,
-          paymentName: m.paymentName,
-          paymentImage: m.paymentImage,
-          totalFee: m.totalFee,
-          category: getPaymentMethodCategory(m.paymentMethod, m.paymentName),
-        }));
+        const categories: Record<string, PaymentMethod[]> = {};
+
+        const methods: PaymentMethod[] = rawMethods.map((m: any) => {
+          const category = getPaymentMethodCategory(m.paymentMethod, m.paymentName);
+          const canonicalCode = toCanonicalPaymentMethod("duitku", m.paymentMethod);
+          const item: PaymentMethod = {
+            paymentMethod: m.paymentMethod,
+            paymentName: m.paymentName,
+            paymentImage: m.paymentImage,
+            totalFee: m.totalFee,
+            category,
+            code: canonicalCode,
+            feeDetail: {
+              flat: Number(m.totalFee) || 0,
+              percent: 0,
+              totalFee: Number(m.totalFee) || 0,
+            },
+          };
+
+          if (!categories[category]) {
+            categories[category] = [];
+          }
+          categories[category].push(item);
+
+          return item;
+        });
+
         return {
           success: true,
+          provider: "duitku",
           methods,
+          categories,
           rawResponse: data,
         };
       } else {
         return {
           success: false,
+          provider: "duitku",
           methods: [],
           rawResponse: data,
           error: data.responseMessage || `Duitku Error: ${data.responseCode}`,
@@ -210,6 +252,7 @@ export class DuitkuProvider extends BasePaymentProvider {
     } catch (e: any) {
       return {
         success: false,
+        provider: "duitku",
         methods: [],
         rawResponse: null,
         error: e.message || "Failed to get payment methods from Duitku",
@@ -219,21 +262,15 @@ export class DuitkuProvider extends BasePaymentProvider {
 
   async checkTransaction(params: CheckTransactionParams, config: ProviderConfig): Promise<CheckTransactionResult> {
     const { merchantOrderId } = params;
-    const { merchantCode, apiKey, sandbox } = config;
+    const merchantCode = config.merchantCode || "";
+    const apiKey = config.apiKey || "";
+    const sandbox = !!config.sandbox;
 
     const url = sandbox
       ? "https://api-sandbox.duitku.com/api/merchant/transactionStatus"
       : "https://api-prod.duitku.com/api/merchant/transactionStatus";
 
-    const timestamp = Date.now().toString();
-
-    // Header signature: sha256(merchantCode + timestamp + apiKey)
-    const rawHeaderSignature = merchantCode + timestamp + apiKey;
-    const headerSignature = crypto.createHash("sha256").update(rawHeaderSignature).digest("hex");
-
-    // Body signature: md5(merchantCode + merchantOrderId + apiKey)
-    const rawBodySignature = merchantCode + merchantOrderId + apiKey;
-    const bodySignature = crypto.createHash("md5").update(rawBodySignature).digest("hex");
+    const { timestamp, headerSignature, bodySignature } = getDuitkuStatusSignatures(merchantCode, merchantOrderId, apiKey);
 
     try {
       const response = await fetch(url, {
@@ -256,64 +293,91 @@ export class DuitkuProvider extends BasePaymentProvider {
       let data: any = null;
       try {
         data = JSON.parse(text);
-      } catch (e) { }
+      } catch (e) {}
 
       if (!response.ok || !data) {
         return {
           success: false,
+          provider: "duitku",
           orderId: merchantOrderId,
           reference: "",
           amount: 0,
-          statusCode: "",
+          statusCode: response.status.toString(),
           status: "failed",
-          statusMessage: `HTTP error! Status: ${response.status}`,
-          error: `HTTP ${response.status}`,
+          isPaid: false,
+          isPending: false,
+          isFailed: true,
+          isExpired: false,
+          statusMessage: data?.Message || `HTTP error! Status: ${response.status}`,
+          error: data?.Message || `HTTP error! Status: ${response.status}`,
           rawResponse: data,
         };
       }
 
-      // statusCode: "00" = paid, "01" = pending, "02" = failed/expired
-      const statusCode = data.statusCode || "";
-      let status: "paid" | "pending" | "failed";
-      if (statusCode === "00") {
-        status = "paid";
-      } else if (statusCode === "01") {
-        status = "pending";
-      } else {
-        status = "failed";
-      }
+      const isPaid = data.statusCode === "00";
+      const isPending = data.statusCode === "01";
+      const isFailed = data.statusCode !== "00" && data.statusCode !== "01";
+      const status: "paid" | "pending" | "failed" | "expired" = isPaid
+        ? "paid"
+        : isPending
+          ? "pending"
+          : "failed";
 
       return {
         success: true,
+        provider: "duitku",
         orderId: data.merchantOrderId || merchantOrderId,
         reference: data.reference || "",
         amount: data.amount ? Number(data.amount) : 0,
-        statusCode,
+        statusCode: data.statusCode || "",
         status,
+        isPaid,
+        isPending,
+        isFailed,
+        isExpired: isFailed,
         statusMessage: data.statusMessage || "",
         rawResponse: data,
       };
     } catch (e: any) {
       return {
         success: false,
+        provider: "duitku",
         orderId: merchantOrderId,
         reference: "",
         amount: 0,
-        statusCode: "",
+        statusCode: "ERROR",
         status: "failed",
-        statusMessage: "Network error",
-        error: e.message || "Failed to check transaction status",
+        isPaid: false,
+        isPending: false,
+        isFailed: true,
+        isExpired: false,
+        statusMessage: e.message || "Failed to check transaction status in Duitku",
+        error: e.message || "Failed to check transaction status in Duitku",
         rawResponse: null,
       };
     }
   }
 
   async probePaymentMethods(config: ProviderConfig): Promise<{ success: boolean; enabled: string[]; error?: string }> {
-    const res = await this.getPaymentMethods({ amount: 10000 }, config);
-    if (res.success) {
-      return { success: true, enabled: res.methods.map(m => m.paymentMethod) };
+    try {
+      const res = await this.getPaymentMethods({ amount: 10000 }, config);
+      if (res.success && res.methods) {
+        return {
+          success: true,
+          enabled: res.methods.map(m => m.paymentMethod),
+        };
+      }
+      return {
+        success: false,
+        enabled: [],
+        error: res.error || "Failed to probe Duitku payment methods",
+      };
+    } catch (e: any) {
+      return {
+        success: false,
+        enabled: [],
+        error: e.message,
+      };
     }
-    return { success: false, enabled: [], error: res.error };
   }
 }
-
