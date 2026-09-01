@@ -2,322 +2,363 @@
 
 [![npm version](https://img.shields.io/npm/v/@crediblemark/buayar.svg?style=flat-square&color=amber)](https://www.npmjs.com/package/@crediblemark/buayar)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](https://opensource.org/licenses/MIT)
+[![TypeScript](https://img.shields.io/badge/TypeScript-Ready-blue.svg?style=flat-square)](https://www.typescriptlang.org/)
 
-**`@crediblemark/buayar`** adalah **Unified Payment Gateway SDK** untuk Node.js dan TypeScript yang dirancang untuk mempermudah integrasi berbagai Payment Gateway di Indonesia menggunakan satu arsitektur API yang seragam.
-
-> 💡 **Zero-Code PG Switcher:** Berganti provider payment gateway (misal dari Midtrans ke Duitku atau sebaliknya) **tanpa perlu merombak kode controller/service aplikasi**. Cukup ubah kredensial di file `.env`!
-
----
-
-## 🚀 Fitur Utama
-
-- 🔄 **Zero-Code PG Switcher**: Ubah provider dan kredensial langsung via environment variable (`.env`).
-- ⚡ **Dukungan Spektrum Integrasi Penuh**:
-  - 🟡 **Semi Integrasi (Redirect/Hosted)**: Menghasilkan `paymentUrl` atau `snap_token` siap redirect/popup.
-  - 🟢 **Full Integrasi (Custom Native UI / Direct API)**: Mengembalikan data mentah (`vaNumber`, `qrString` EMVCo, `paymentCode`, `deeplink`) untuk dirender langsung di UI custom aplikasi/web Anda.
-- 🏷️ **Canonical Payment Method Mapping**: Gunakan kode universal (`bca_va`, `mandiri_va`, `qris`, `gopay`, `shopeepay`, `alfamart`, `indomaret`), SDK otomatis memetakannya ke format internal provider aktif.
-- 📂 **Pre-Categorization (Accordion Ready)**: Pengelompokan channel pembayaran bawaan (`Virtual Account`, `QRIS`, `E-Wallet`, `Retail / Gerai`, `Kartu Kredit`, `Paylater / Cicilan`) lengkap dengan fee dan icon URL untuk mempermudah pembuatan UI accordion.
-- 🪝 **Universal Webhook Verifier**: Endpoint webhook tunggal untuk memverifikasi signature (SHA-512 Midtrans / MD5 Duitku) dan menormalisasi status (`isPaid`, `isPending`, `isFailed`, `isExpired`).
-- 🛡️ **Tipe Data Kuat (TypeScript)**: Tipe data deklaratif dan ketat untuk mencegah *runtime error*.
+> 🇮🇩 [Baca dalam Bahasa Indonesia](#-bahasa-indonesia) · 🇬🇧 [Read in English](#-english)
 
 ---
 
-## 📦 Provider yang Didukung
+## 🇬🇧 English
 
-* 🏛️ **[Integrasi Midtrans (docs/midtrans.md)](file:///media/rasyiqi/7653717A1C07B131/Buayar/docs/midtrans.md)**
-  * Snap API (Redirect Checkout / Popup JS Modal).
-  * Core API Direct Charge (BCA, BNI, BRI, Mandiri Bill, Permata, CIMB, QRIS Gopay/ShopeePay, E-Wallet deeplinks, Kartu Kredit 3DS, Alfamart/Indomaret, Paylater).
-  * Verifikasi callback otomatis (SHA-512).
-  * Ekstensi `MidtransClient` (Refund, Cancel, Subscription, Recurring, Payment Link).
+**`@crediblemark/buayar`** is a **Unified Payment Gateway SDK** for Node.js and TypeScript, supporting **19 payment providers** (10 Indonesian + 9 International) through a single, consistent API.
 
-* 🏛️ **[Integrasi Duitku (docs/duitku.md)](file:///media/rasyiqi/7653717A1C07B131/Buayar/docs/duitku.md)**
-  * Redirect Checkout (Duitku Hosted Page).
-  * Direct Inquiry API (VA BCA, Mandiri, BNI, BRI, Permata, QRIS ShopeePay/Nobu, Gerai Retail).
-  * Dynamic Payment Methods API (Query channel aktif + dynamic fee).
-  * Verifikasi callback otomatis (MD5).
-  * Ekstensi `DuitkuClient` (Disbursement / Payout, Inquiry Rekening Bank, Saldo Merchant).
+> 💡 **Zero-Code PG Switcher:** Switch your active payment provider — e.g. from Midtrans to Stripe — **without changing a single line in your controller or service layer**. Just update the credentials in your `.env` file.
 
-* 🏛️ **[Integrasi iPaymu (docs/ipaymu.md)](file:///media/rasyiqi/7653717A1C07B131/Buayar/docs/ipaymu.md)**
-  * Redirect Checkout (iPaymu Hosted Page).
-  * Direct Payment API (VA BCA, Mandiri, BNI, BRI, CIMB, Permata, Danamon, BSI, QRIS, Alfamart, Indomaret, CC, Akulaku).
-  * Verifikasi callback otomatis & signature HMAC-SHA256.
-  * Ekstensi `IpaymuClient` (Cek Saldo, Cek Status Transaksi).
+### 🚀 Key Features
 
-* 🏛️ **[Integrasi Xendit (docs/xendit.md)](file:///media/rasyiqi/7653717A1C07B131/Buayar/docs/xendit.md)**
-  * Invoice v2 API (Redirect Checkout).
-  * Payment Requests API v3 Direct Charge (VA BCA, Mandiri, BNI, BRI, Permata, CIMB, Danamon, BSI, QRIS, OVO, DANA, ShopeePay, LinkAja, Alfamart, Indomaret).
-  * Verifikasi webhook callback token.
-  * Ekstensi `XenditClient` (Cek Saldo, Expire Invoice, Disbursement / Payout).
+- 🔄 **Zero-Code PG Switcher** — Swap providers via `.env` only. No code refactoring needed.
+- ⚡ **Semi & Full Integration**:
+  - 🟡 **Semi (Redirect/Hosted)** — Returns a `paymentUrl` to redirect customers to the PG's hosted checkout.
+  - 🟢 **Full (Custom Native UI)** — Returns raw data (`vaNumber`, EMVCo `qrString`, `paymentCode`, `deeplink`) to render a completely custom payment UI.
+- 🏷️ **Canonical Payment Methods** — Use universal codes (`bca_va`, `qris`, `gopay`, etc.) and the SDK maps them automatically to each provider's internal format.
+- 📂 **Accordion-Ready Categorization** — Payment methods are pre-grouped by category (`Virtual Account`, `QRIS`, `E-Wallet`, `Retail`, `Credit Card`, `Paylater`) with fees and icon URLs included.
+- 🪝 **Universal Webhook Verifier** — One endpoint to verify and normalize callbacks from any supported provider. Auto-detects the provider from the payload structure.
+- 🛡️ **Strong TypeScript Types** — Fully typed request and response interfaces to catch errors at compile time.
+- 🌍 **Multi-Currency** — Supports `currency` field for international providers (USD, EUR, GBP, INR, etc.).
 
-* 🏛️ **[Integrasi DOKU Jokul (docs/doku.md)](file:///media/rasyiqi/7653717A1C07B131/Buayar/docs/doku.md)**
-  * Jokul Checkout v1 (Redirect Payment Page).
-  * Direct Payment API v2 (VA BCA, Mandiri, BNI, BRI, Permata, CIMB, Danamon, BSI, QRIS, Alfamart, Indomaret, OVO, DANA, ShopeePay).
-  * Verifikasi signature HMAC-SHA256 & Digest otomatis.
-  * Ekstensi `DokuClient` (Cek Status Pesanan).
+### 📦 Supported Providers
 
-* 🏛️ **[Integrasi PrismaLink (docs/prismalink.md)](file:///media/rasyiqi/7653717A1C07B131/Buayar/docs/prismalink.md)**
-  * Checkout Payment Page (Redirect).
-  * Direct Payment API (VA BCA, Mandiri, BNI, BRI, Permata, CIMB, Danamon, BSI, QRIS, Alfamart, Indomaret, E-Wallet, CC).
-  * Verifikasi signature SHA-256 otomatis.
-  * Ekstensi `PrismalinkClient` (Cek Status Transaksi).
+#### 🇮🇩 Indonesian (10)
 
-* 🏛️ **[Integrasi Faspay (docs/faspay.md)](file:///media/rasyiqi/7653717A1C07B131/Buayar/docs/faspay.md)**
-  * Post Data Transaction (Payment Page & Direct VA/QRIS/Retail).
-  * Channel lengkap (VA BCA, Mandiri, BNI, BRI, Permata, CIMB, Danamon, BSI, QRIS, Alfamart, Indomaret, OVO, DANA, ShopeePay, LinkAja, Kredivo, Akulaku, CC).
-  * Verifikasi signature SHA1(MD5()) otomatis.
-  * Ekstensi `FaspayClient` (Inquiry Status & Cancel Transaction).
+| Provider | Redirect | Direct API | Webhook | Client |
+|---|:---:|:---:|:---:|:---:|
+| Midtrans | ✅ Snap | ✅ Core API | SHA-512 | `MidtransClient` |
+| Duitku | ✅ | ✅ | MD5 | `DuitkuClient` |
+| iPaymu | ✅ | ✅ | HMAC-SHA256 | `IpaymuClient` |
+| Xendit | ✅ Invoice v2 | ✅ Payments v3 | Token | `XenditClient` |
+| DOKU Jokul | ✅ v1 | ✅ v2 | HMAC-SHA256 | `DokuClient` |
+| PrismaLink | ✅ | ✅ | SHA-256 | `PrismalinkClient` |
+| Faspay | ✅ | ✅ | SHA1(MD5) | `FaspayClient` |
+| Finpay | ✅ | ✅ | HMAC-SHA512 | `FinpayClient` |
+| Nicepay | ✅ | ✅ | SHA-256 | `NicepayClient` |
+| OY! Bisnis | ✅ | ✅ | Header Auth | `OyClient` |
 
-* 🏛️ **[Integrasi Finpay (docs/finpay.md)](file:///media/rasyiqi/7653717A1C07B131/Buayar/docs/finpay.md)**
-  * Payment Initiate & Checkout Link (Redirect).
-  * Direct Payment API (VA BCA, Mandiri, BNI, BRI, Permata, CIMB, Danamon, BSI, QRIS, Pos Indonesia, Alfamart, Indomaret, E-Wallet, CC).
-  * Verifikasi signature HMAC-SHA512 otomatis.
-  * Ekstensi `FinpayClient` (Inquiry Status Pembayaran).
+#### 🌍 International (9)
 
-* 🏛️ **[Integrasi Nicepay (docs/nicepay.md)](file:///media/rasyiqi/7653717A1C07B131/Buayar/docs/nicepay.md)**
-  * Order Regist & Hosted Checkout (Redirect).
-  * Direct One-Step API (VA BCA BBBB, Mandiri BMRI, BNI BNIN, BRI BRIN, Permata BBBA, CIMB BNIA, Danamon BDIN, BSI BBSI, QRIS, Alfamart, Indomaret, E-Wallet, Paylater, CC).
-  * Verifikasi merchantToken SHA-256 otomatis.
-  * Ekstensi `NicepayClient` (Inquiry Status & Cancel Transaction).
+| Provider | Redirect | Direct API | Webhook | Client |
+|---|:---:|:---:|:---:|:---:|
+| Stripe | ✅ Checkout Sessions | ✅ Payment Intents | HMAC-SHA256 | `StripeClient` |
+| PayPal | ✅ Orders v2 | ✅ Capture | OAuth2 | `PaypalClient` |
+| Adyen | ✅ Sessions v68 | ✅ Payments v68 | HMAC-SHA256 | `AdyenClient` |
+| Checkout.com | ✅ Payment Links | ✅ Payments API | HMAC-SHA256 | `CheckoutComClient` |
+| Razorpay | ✅ Payment Links | ✅ Orders API | HMAC-SHA256 | `RazorpayClient` |
+| Square | ✅ Payment Links | ✅ Payments API | HMAC-SHA256 | `SquareClient` |
+| PayU | ✅ Orders v2.1 | ✅ Pay Methods | MD5/SHA-256 | `PayuClient` |
+| Braintree | ✅ Drop-in UI Token | ✅ Transaction API | SHA1 HMAC | `BraintreeClient` |
+| 2Checkout | ✅ REST v6.0 | ✅ REST v6.0 | IPN MD5 | `TwoCheckoutClient` |
 
-* 🏛️ **[Integrasi OY! Bisnis (docs/oy.md)](file:///media/rasyiqi/7653717A1C07B131/Buayar/docs/oy.md)**
-  * Payment Checkout v2 (Payment Link / Redirect).
-  * Direct API (Static/Dynamic VA BCA 014, Mandiri 008, BNI 009, BRI 002, Permata 013, CIMB 022, Danamon 011, BSI 451, QRIS, E-Wallet).
-  * Verifikasi Header & Webhook otomatis.
-  * Ekstensi `OyClient` (Inquiry Status, Saldo Merchant & Kirim Uang/Disbursement).
+### ⚙️ Environment Variables
 
-* 🏛️ **[Integrasi Stripe (docs/stripe.md)](file:///media/rasyiqi/7653717A1C07B131/Buayar/docs/stripe.md)**
-  * Checkout Sessions API (Redirect Hosted Page, multi-currency).
-  * Payment Intents API Direct Charge (Kartu Kredit, Debit, Google Pay, Apple Pay, dll).
-  * Verifikasi webhook signature HMAC-SHA256 otomatis.
-  * Ekstensi `StripeClient` (Retrieve Session, Retrieve Intent, Refund, Saldo Merchant).
-  * ⚠️ **Catatan**: Stripe tidak mendukung Virtual Account lokal Indonesia. Cocok untuk pembayaran internasional / kartu kredit global.
-
----
-
-## ⚙️ Konfigurasi Environment Variables (`.env`)
-
-SDK `Buayar` membaca konfigurasi secara otomatis dari `process.env`. Anda dapat menggunakan variabel universal ataupun variabel spesifik provider:
-
-### 1. Standar Universal (Direkomendasikan)
+#### Universal (Recommended)
 ```env
-# Provider aktif: 'midtrans' | 'duitku' | 'ipaymu' | 'xendit' | 'doku' | 'prismalink' | 'faspay' | 'finpay' | 'nicepay' | 'oy' | 'stripe'
-PROVIDER_PG=stripe
+# Active provider: any of the 19 supported names
+PROVIDER_PG=midtrans
 
-# Kredensial Universal
-BUAYAR_MERCHANT_CODE=myusername # Username OY! Bisnis
-BUAYAR_API_KEY=oy-secret-key-xxxxxxxxxxxxxxxx # API Key OY! Bisnis
+# Universal credentials (auto-mapped per provider)
+BUAYAR_API_KEY=your-server-key-or-secret
+BUAYAR_MERCHANT_CODE=your-merchant-id-or-username
 BUAYAR_SANDBOX=true
 
-# Callback & Return URL (Opsional)
+# Callback & Return URLs
 BUAYAR_CALLBACK_URL=https://myapp.com/api/payment/webhook
 BUAYAR_RETURN_URL=https://myapp.com/payment/finish
 ```
 
-### 2. Kamus Variabel Lengkap & Spesifik Provider
+#### Provider-Specific Variables
 
-| Variabel `.env` | Provider | Keterangan |
+| Variable | Provider | Description |
 | :--- | :--- | :--- |
-| `PROVIDER_PG` / `PG_PROVIDER` / `BUAYAR_PROVIDER` / `PAYMENT_PROVIDER` | Semua | Nama provider yang aktif (`midtrans`, `duitku`, `ipaymu`, `xendit`, `doku`, `prismalink`, `faspay`, `finpay`, `nicepay`, `oy`). |
-| `BUAYAR_API_KEY` / `PG_API_KEY` | Semua | Kunci API universal (Server Key Midtrans / API Key Duitku / API Key iPaymu / Secret Key Xendit / Secret Key DOKU / Secret Key PrismaLink / Password Faspay / Merchant Key Finpay / Key Nicepay / API Key OY!). |
-| `BUAYAR_MERCHANT_CODE` / `PG_MERCHANT_CODE` | Semua | Kode Merchant Duitku / Nomor VA iPaymu / Client ID DOKU / Merchant ID PrismaLink / Merchant ID Faspay / Merchant ID Finpay / iMid Nicepay / Username OY!. |
-| `BUAYAR_SANDBOX` / `PG_SANDBOX` | Semua | Mode sandbox / development (`true` atau `false`). |
-| `MIDTRANS_SERVER_KEY` | Midtrans | Midtrans Server Key spesifik. |
-| `MIDTRANS_CLIENT_KEY` | Midtrans | Midtrans Client Key spesifik. |
-| `DUITKU_API_KEY` | Duitku | API Key Duitku spesifik. |
-| `DUITKU_MERCHANT_CODE` | Duitku | Merchant Code Duitku spesifik. |
-| `IPAYMU_API_KEY` | iPaymu | API Key iPaymu spesifik. |
-| `IPAYMU_VA` | iPaymu | Nomor Virtual Account merchant iPaymu. |
-| `XENDIT_SECRET_KEY` | Xendit | Secret Key Xendit (`xnd_development_...` / `xnd_production_...`). |
-| `XENDIT_WEBHOOK_TOKEN` | Xendit | Verification Token Webhook Xendit. |
-| `DOKU_CLIENT_ID` | DOKU | Client ID merchant DOKU Jokul. |
-| `DOKU_SECRET_KEY` | DOKU | Secret Key merchant DOKU Jokul. |
-| `PRISMALINK_MERCHANT_ID` | PrismaLink | Merchant ID merchant PrismaLink. |
-| `PRISMALINK_SECRET_KEY` | PrismaLink | Secret Key merchant PrismaLink. |
-| `FASPAY_MERCHANT_ID` | Faspay | Merchant ID merchant Faspay (misal: `31112`). |
-| `FASPAY_USER_ID` | Faspay | User ID API Faspay (misal: `db31112`). |
-| `FASPAY_PASSWORD` | Faspay | Password API Faspay. |
-| `FASPAY_MERCHANT_NAME` | Faspay | Nama display merchant di Faspay. |
-| `FINPAY_MERCHANT_ID` | Finpay | Merchant ID merchant Finpay. |
-| `FINPAY_MERCHANT_KEY` | Finpay | Merchant Key / Secret Key Finpay. |
-| `NICEPAY_IMID` | Nicepay | Merchant ID (iMid) Nicepay (misal: `IONPAYTEST`). |
-| `NICEPAY_KEY` | Nicepay | Merchant Key rahasia Nicepay. |
-| `OY_USERNAME` | OY! Bisnis | Username akun OY! Bisnis. |
-| `OY_API_KEY` | OY! Bisnis | API Key OY! Bisnis. |
-| `STRIPE_SECRET_KEY` | Stripe | Secret Key Stripe (`sk_test_...` / `sk_live_...`). **Wajib.** |
-| `STRIPE_WEBHOOK_SECRET` | Stripe | Webhook Signing Secret Stripe (`whsec_...`). Wajib untuk verifikasi callback. |
-| `STRIPE_PUBLIC_KEY` | Stripe | Publishable Key Stripe (`pk_test_...` / `pk_live_...`). Opsional, untuk frontend. |
-| `BUAYAR_API_KEY` / `PG_API_KEY` / `PAYMENT_API_KEY` | Semua | API Key / Server Key universal. |
-| `BUAYAR_MERCHANT_CODE` / `PG_MERCHANT_CODE` | Duitku / Umum | Kode merchant dari dashboard payment gateway. |
-| `BUAYAR_SANDBOX` / `PG_SANDBOX` / `PAYMENT_SANDBOX` | Semua | Mode sandbox (`true` / `false`). |
-| `MIDTRANS_SERVER_KEY` | Midtrans | Server key rahasia Midtrans. |
-| `MIDTRANS_CLIENT_KEY` | Midtrans | Client key publik Midtrans. |
-| `MIDTRANS_MERCHANT_ID` | Midtrans | Merchant ID Midtrans (opsional). |
-| `MIDTRANS_IS_PRODUCTION` | Midtrans | `true` untuk production, `false` untuk sandbox. |
-| `DUITKU_API_KEY` | Duitku | API Key merchant Duitku. |
-| `DUITKU_MERCHANT_CODE` | Duitku | Kode Merchant Duitku (misal: `D1234`). |
-| `DUITKU_SANDBOX` | Duitku | `true` untuk sandbox Duitku. |
-| `BUAYAR_PROJECT_ID` / `PG_PROJECT_ID` | Custom / Extra | Project ID untuk provider masa depan yang membutuhkan project scoping. |
-| `BUAYAR_PUBLIC_KEY` / `BUAYAR_PRIVATE_KEY` | Custom / Extra | Public / Private asymmetric key jika dibutuhkan. |
+| `MIDTRANS_SERVER_KEY` | Midtrans | Server Key |
+| `MIDTRANS_CLIENT_KEY` | Midtrans | Client Key (frontend) |
+| `DUITKU_API_KEY` / `DUITKU_MERCHANT_CODE` | Duitku | API Key & Merchant Code |
+| `IPAYMU_API_KEY` / `IPAYMU_VA` | iPaymu | API Key & VA number |
+| `XENDIT_SECRET_KEY` / `XENDIT_WEBHOOK_TOKEN` | Xendit | Secret Key & Webhook Token |
+| `DOKU_CLIENT_ID` / `DOKU_SECRET_KEY` | DOKU | Client ID & Secret Key |
+| `PRISMALINK_MERCHANT_ID` / `PRISMALINK_SECRET_KEY` | PrismaLink | Merchant ID & Secret Key |
+| `FASPAY_MERCHANT_ID` / `FASPAY_USER_ID` / `FASPAY_PASSWORD` | Faspay | Merchant ID, User ID & Password |
+| `FINPAY_MERCHANT_ID` / `FINPAY_MERCHANT_KEY` | Finpay | Merchant ID & Key |
+| `NICEPAY_IMID` / `NICEPAY_KEY` | Nicepay | iMid & Merchant Key |
+| `OY_USERNAME` / `OY_API_KEY` | OY! Bisnis | Username & API Key |
+| `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` / `STRIPE_PUBLIC_KEY` | Stripe | Secret, Webhook Secret, Publishable Key |
+| `PAYPAL_CLIENT_ID` / `PAYPAL_CLIENT_SECRET` / `PAYPAL_WEBHOOK_ID` | PayPal | OAuth2 Credentials & Webhook ID |
+| `ADYEN_API_KEY` / `ADYEN_MERCHANT_ACCOUNT` / `ADYEN_HMAC_KEY` | Adyen | API Key, Merchant Account & HMAC Key |
+| `CHECKOUTCOM_SECRET_KEY` / `CHECKOUTCOM_PUBLIC_KEY` / `CHECKOUTCOM_WEBHOOK_SECRET` | Checkout.com | Secret, Public Key & Webhook Secret |
+| `RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET` / `RAZORPAY_WEBHOOK_SECRET` | Razorpay | Key ID, Key Secret & Webhook Secret |
+| `SQUARE_ACCESS_TOKEN` / `SQUARE_APPLICATION_ID` / `SQUARE_LOCATION_ID` | Square | Access Token, App ID & Location ID |
+| `PAYU_POS_ID` / `PAYU_MD5_KEY` / `PAYU_OAUTH_CLIENT_ID` / `PAYU_OAUTH_CLIENT_SECRET` | PayU | POS ID, MD5 Key & OAuth2 Credentials |
+| `BRAINTREE_MERCHANT_ID` / `BRAINTREE_PUBLIC_KEY` / `BRAINTREE_PRIVATE_KEY` | Braintree | Merchant ID, Public & Private Key |
+| `TWOCHECKOUT_MERCHANT_CODE` / `TWOCHECKOUT_SECRET_KEY` / `TWOCHECKOUT_SECRET_WORD` | 2Checkout | Merchant Code, Secret Key & IPN Word |
 
----
+### 📖 Usage
 
-## 📖 Panduan Penggunaan
-
-### 1. Inisialisasi Klien (Zero-Config)
+#### 1. Initialize (Zero-Config)
 ```typescript
 import { buayar } from "@crediblemark/buayar";
-
-// Otomatis membaca konfigurasi dari process.env
+// Reads config automatically from process.env
 ```
 
----
-
-### 2. Mode Semi Integrasi (Redirect / Hosted Checkout)
-Jika Anda ingin menyerahkan antarmuka pembayaran kepada halaman checkout bawaan Payment Gateway, cukup kosongkan parameter `paymentMethod`:
-
+#### 2. Semi Integration — Redirect / Hosted Checkout
 ```typescript
-import { buayar } from "@crediblemark/buayar";
-
 const invoice = await buayar.createInvoice({
   orderId: "ORDER-1001",
   amount: 150000,
-  productDetails: "Langganan Paket Pro 1 Bulan",
-  customer: {
-    name: "Budi Santoso",
-    email: "budi@example.com",
-    phone: "081234567890",
-  },
+  productDetails: "Pro Plan Subscription",
+  customer: { name: "John Doe", email: "john@example.com" },
   returnUrl: "https://myapp.com/orders/ORDER-1001",
+  // No paymentMethod = redirect to PG hosted page
 });
 
 if (invoice.success) {
-  // Arahkan pelanggan ke URL ini:
-  console.log("Redirect URL:", invoice.paymentUrl);
+  redirect(invoice.paymentUrl!); // redirect user here
 }
 ```
 
----
-
-### 3. Mode Full Integrasi (Custom Native UI / Direct API)
-Jika Anda ingin membangun halaman checkout sendiri di dalam aplikasi tanpa redirect ke halaman luar:
-
-#### Langkah A: Ambil Daftar Metode Pembayaran (Accordion-Ready)
+#### 3. Full Integration — Custom Native UI
 ```typescript
-const result = await buayar.getPaymentMethods({ amount: 150000 });
+// Step A: Get available payment methods (accordion-ready)
+const { categories } = await buayar.getPaymentMethods({ amount: 150000 });
+// categories: { "Virtual Account": [...], "QRIS": [...], "E-Wallet": [...] }
 
-// Akses daftar terkelompok untuk render komponen Accordion UI:
-console.log(result.categories);
-/*
-{
-  "Virtual Account": [
-    { code: "bca_va", paymentName: "BCA Virtual Account", paymentImage: "...", totalFee: "IDR 4,000" },
-    { code: "mandiri_va", paymentName: "Mandiri Bill Payment", ... }
-  ],
-  "QRIS": [
-    { code: "qris", paymentName: "QRIS Universal", paymentImage: "...", totalFee: "0.7%" }
-  ],
-  "E-Wallet": [
-    { code: "gopay", paymentName: "GoPay", ... },
-    { code: "shopeepay", paymentName: "ShopeePay", ... }
-  ]
-}
-*/
-```
-
-#### Langkah B: Direct Charge saat Pelanggan Memilih Metode
-```typescript
-// Contoh 1: Direct Virtual Account (BCA)
+// Step B: Charge with canonical method code
 const vaInvoice = await buayar.createInvoice({
   orderId: "ORDER-1002",
   amount: 150000,
-  paymentMethod: "bca_va", // Canonical ID
-  productDetails: "Topup Saldo",
-  customer: { name: "Budi", email: "budi@example.com" },
+  paymentMethod: "bca_va", // canonical code — works across all providers
+  productDetails: "Wallet Top-up",
+  customer: { name: "John", email: "john@example.com" },
 });
 
-console.log("Nomor VA:", vaInvoice.vaNumber);   // Contoh: "123456789012"
-console.log("Bank:", vaInvoice.vaBank);         // "bca"
-console.log("Batas Bayar:", vaInvoice.expiresAt);
+console.log(vaInvoice.vaNumber);   // "123456789012"
+console.log(vaInvoice.vaBank);     // "bca"
 
-// Contoh 2: Direct QRIS (Render ke Canvas / SVG QR)
+// QRIS
 const qrisInvoice = await buayar.createInvoice({
   orderId: "ORDER-1003",
   amount: 50000,
-  paymentMethod: "qris", // Canonical ID
-  productDetails: "Kopi Kenangan",
-  customer: { name: "Budi", email: "budi@example.com" },
+  paymentMethod: "qris",
+  productDetails: "Coffee",
+  customer: { name: "John", email: "john@example.com" },
 });
 
-console.log("Raw QRIS String (EMVCo):", qrisInvoice.qrString);
-console.log("URL Gambar QR:", qrisInvoice.qrCodeUrl);
-
-// Contoh 3: Gerai Retail (Indomaret / Alfamart)
-const retailInvoice = await buayar.createInvoice({
-  orderId: "ORDER-1004",
-  amount: 100000,
-  paymentMethod: "indomaret",
-  productDetails: "Voucher Game",
-  customer: { name: "Budi", email: "budi@example.com" },
-});
-
-console.log("Kode Bayar Kasir:", retailInvoice.paymentCode);
+console.log(qrisInvoice.qrString); // Raw EMVCo string for QR rendering
 ```
 
----
-
-### 4. Universal Webhook Handler
-Tangani callback notifikasi dari PG manapun hanya dengan 1 endpoint universal:
-
+#### 4. Universal Webhook Handler
 ```typescript
-// Contoh implementasi di Express / Elysia / Next.js API Route
+// Works with Express, Elysia, Hono, Next.js App Router, etc.
 app.post("/api/payment/webhook", async (req, res) => {
   const result = await buayar.verifyWebhook(req.body, req.headers);
+  // Auto-detects the provider from payload — no manual routing needed
 
-  if (!result.isValid) {
-    return res.status(400).json({ error: "Invalid signature" });
-  }
+  if (!result.isValid) return res.status(400).json({ error: "Invalid signature" });
 
   if (result.isPaid) {
-    console.log(`✅ Order ${result.orderId} senilai Rp${result.amount} telah LUNAS!`);
-    // Jalankan logika aktivasi langganan / kirim produk
-  } else if (result.isExpired) {
-    console.log(`⏰ Order ${result.orderId} telah kedaluwarsa.`);
+    // ✅ Payment confirmed — activate subscription, deliver product
+    console.log(`Order ${result.orderId} paid — Amount: ${result.amount}`);
   }
 
-  // Balas respons OK ke gateway
   return res.status(200).json({ status: "OK" });
 });
 ```
 
----
-
-## 🏷️ Daftar Canonical Payment Methods
-
-| Kategori | Canonical Code | Duitku Mapped Code | Midtrans Core Mapped Type |
-| :--- | :--- | :--- | :--- |
-| **Virtual Account** | `bca_va` | `BC` | `bank_transfer (bca)` |
-| | `mandiri_va` | `M2` | `echannel` |
-| | `bni_va` | `I1` | `bank_transfer (bni)` |
-| | `bri_va` | `BR` | `bank_transfer (bri)` |
-| | `permata_va` | `BT` | `bank_transfer (permata)` |
-| | `cimb_va` | `B1` | `bank_transfer (cimb)` |
-| | `danamon_va` | `DM` | `bank_transfer (danamon)` |
-| | `bsi_va` | `BS` | `bank_transfer (bsi)` |
-| | `seabank_va` | `S1` | `bank_transfer (seabank)` |
-| **QRIS** | `qris` | `SP` / `NQ` | `qris` |
-| **E-Wallet** | `gopay` | `GP` | `gopay` |
-| | `shopeepay` | `SA` | `shopeepay` |
-| | `ovo` | `OV` | `ovo` |
-| | `dana` | `DA` | `dana` |
-| | `linkaja` | `LA` | `linkaja` |
-| **Retail** | `alfamart` | `AL` | `cstore (alfamart)` |
-| | `indomaret` | `IR` | `cstore (indomaret)` |
-| **Kartu** | `credit_card` | `VC` | `credit_card` |
-| **Paylater** | `kredivo` | `KV` | `kredivo` |
-| | `akulaku` | `AT` | `akulaku` |
+#### 5. Zero-Code PG Switch
+```env
+# Switch from Midtrans to Stripe — zero code change required
+PROVIDER_PG=stripe
+STRIPE_SECRET_KEY=sk_live_...
+STRIPE_WEBHOOK_SECRET=whsec_...
+```
 
 ---
 
-## 📄 Lisensi
+## 🇮🇩 Bahasa Indonesia
 
-Proyek ini dilisensikan di bawah **MIT License**. Hak Cipta © 2026 Rasyiqi Crediblemark.
+**`@crediblemark/buayar`** adalah **Unified Payment Gateway SDK** untuk Node.js dan TypeScript yang mendukung **19 payment provider** (10 Indonesia + 9 Internasional) melalui satu arsitektur API yang seragam.
+
+> 💡 **Zero-Code PG Switcher:** Berganti provider payment gateway (misal dari Midtrans ke Duitku atau sebaliknya) **tanpa perlu merombak kode controller/service aplikasi**. Cukup ubah kredensial di file `.env`!
+
+### 🚀 Fitur Utama
+
+- 🔄 **Zero-Code PG Switcher** — Ganti provider hanya via `.env`, tanpa refactoring kode.
+- ⚡ **Dukungan Spektrum Integrasi Penuh**:
+  - 🟡 **Semi Integrasi (Redirect/Hosted)** — Menghasilkan `paymentUrl` untuk redirect ke halaman checkout PG.
+  - 🟢 **Full Integrasi (Custom Native UI)** — Mengembalikan data mentah (`vaNumber`, `qrString` EMVCo, `paymentCode`, `deeplink`) untuk dirender di UI custom.
+- 🏷️ **Canonical Payment Method Mapping** — Gunakan kode universal (`bca_va`, `qris`, `gopay`), SDK memetakannya otomatis ke format internal provider aktif.
+- 📂 **Pre-Kategorisasi (Accordion Ready)** — Channel pembayaran sudah dikelompokkan per kategori (`Virtual Account`, `QRIS`, `E-Wallet`, `Retail`, `Kartu Kredit`, `Paylater`) lengkap dengan fee dan icon URL.
+- 🪝 **Universal Webhook Verifier** — Satu endpoint untuk verifikasi dan normalisasi callback dari provider manapun. Provider terdeteksi otomatis dari struktur payload.
+- 🛡️ **TypeScript Strong-Typed** — Interface request & response terdeklarasi penuh untuk mencegah runtime error.
+- 🌍 **Multi-Currency** — Field `currency` untuk provider internasional (USD, EUR, GBP, dll).
+
+### 📦 Provider yang Didukung
+
+#### 🇮🇩 Lokal Indonesia (10)
+
+* **Midtrans** — Snap API (Redirect/Popup) & Core API Direct Charge. Verifikasi SHA-512. `MidtransClient`.
+* **Duitku** — Redirect Checkout & Direct Inquiry API. Verifikasi MD5. `DuitkuClient` (Disbursement, Inquiry Rekening, Saldo).
+* **iPaymu** — Redirect & Direct Payment API v2. Verifikasi HMAC-SHA256. `IpaymuClient` (Cek Saldo, Cek Transaksi).
+* **Xendit** — Invoice v2 & Payment Requests v3. Webhook Token. `XenditClient` (Saldo, Expire Invoice, Disbursement).
+* **DOKU Jokul** — Checkout v1 & Direct API v2. HMAC-SHA256 + Digest. `DokuClient`.
+* **PrismaLink** — Checkout Page & Direct API. SHA-256. `PrismalinkClient`.
+* **Faspay** — Post Data Transaction (Redirect & Direct). SHA1(MD5()). `FaspayClient`.
+* **Finpay** — Payment Initiate & Direct API. HMAC-SHA512. `FinpayClient`.
+* **Nicepay** — Order Regist & One-Step API. SHA-256 merchantToken. `NicepayClient`.
+* **OY! Bisnis** — Payment Checkout v2 & Direct VA/QRIS. Header Auth. `OyClient` (Inquiry, Saldo, Disbursement).
+
+#### 🌍 Internasional (9)
+
+* **Stripe** — Checkout Sessions (redirect) & Payment Intents (direct). HMAC-SHA256. `StripeClient`.
+* **PayPal** — Orders API v2 + OAuth2 auto-token. `PaypalClient` (Capture, Refund, Saldo).
+* **Adyen** — Sessions v68 (redirect) & Payments v68 (direct). HMAC-SHA256. `AdyenClient`.
+* **Checkout.com** — Payment Links & Payments API. HMAC-SHA256. `CheckoutComClient`.
+* **Razorpay** — Payment Links & Orders API. HMAC-SHA256. `RazorpayClient`.
+* **Square** — Payment Links & Payments API. HMAC-SHA256. `SquareClient`.
+* **PayU** — Orders API v2.1 + OAuth2. Verifikasi MD5/SHA-256. `PayuClient`.
+* **Braintree** — Drop-in UI Client Token & Transaction API. SHA1 HMAC. `BraintreeClient`.
+* **2Checkout/Verifone** — REST API 6.0. IPN MD5. `TwoCheckoutClient`.
+
+### ⚙️ Konfigurasi Environment Variables (`.env`)
+
+#### Universal (Direkomendasikan)
+```env
+# Provider aktif (19 pilihan tersedia)
+PROVIDER_PG=midtrans
+
+# Kredensial Universal (dipetakan otomatis per provider)
+BUAYAR_API_KEY=server-key-atau-secret
+BUAYAR_MERCHANT_CODE=merchant-id-atau-username
+BUAYAR_SANDBOX=true
+
+# Callback & Return URL
+BUAYAR_CALLBACK_URL=https://myapp.com/api/payment/webhook
+BUAYAR_RETURN_URL=https://myapp.com/payment/finish
+```
+
+#### Kamus Variabel Lengkap Spesifik Provider
+
+| Variabel `.env` | Provider | Keterangan |
+| :--- | :--- | :--- |
+| `MIDTRANS_SERVER_KEY` / `MIDTRANS_CLIENT_KEY` | Midtrans | Server Key & Client Key |
+| `DUITKU_API_KEY` / `DUITKU_MERCHANT_CODE` | Duitku | API Key & Merchant Code |
+| `IPAYMU_API_KEY` / `IPAYMU_VA` | iPaymu | API Key & Nomor VA Merchant |
+| `XENDIT_SECRET_KEY` / `XENDIT_WEBHOOK_TOKEN` | Xendit | Secret Key & Webhook Token |
+| `DOKU_CLIENT_ID` / `DOKU_SECRET_KEY` | DOKU | Client ID & Secret Key |
+| `PRISMALINK_MERCHANT_ID` / `PRISMALINK_SECRET_KEY` | PrismaLink | Merchant ID & Secret Key |
+| `FASPAY_MERCHANT_ID` / `FASPAY_USER_ID` / `FASPAY_PASSWORD` | Faspay | Merchant ID, User ID & Password |
+| `FASPAY_MERCHANT_NAME` | Faspay | Nama display merchant di halaman Faspay |
+| `FINPAY_MERCHANT_ID` / `FINPAY_MERCHANT_KEY` | Finpay | Merchant ID & Merchant Key |
+| `NICEPAY_IMID` / `NICEPAY_KEY` | Nicepay | iMid & Merchant Key |
+| `OY_USERNAME` / `OY_API_KEY` | OY! Bisnis | Username & API Key |
+| `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` / `STRIPE_PUBLIC_KEY` | Stripe | Secret Key, Webhook Secret & Publishable Key |
+| `PAYPAL_CLIENT_ID` / `PAYPAL_CLIENT_SECRET` / `PAYPAL_WEBHOOK_ID` | PayPal | Client ID, Client Secret & Webhook ID |
+| `ADYEN_API_KEY` / `ADYEN_MERCHANT_ACCOUNT` / `ADYEN_HMAC_KEY` | Adyen | API Key, Merchant Account & HMAC Key |
+| `ADYEN_CLIENT_KEY` / `ADYEN_LIVE_URL_PREFIX` | Adyen | Client Key (frontend) & Live URL prefix (production) |
+| `CHECKOUTCOM_SECRET_KEY` / `CHECKOUTCOM_PUBLIC_KEY` / `CHECKOUTCOM_WEBHOOK_SECRET` | Checkout.com | Secret Key, Public Key & Webhook Secret |
+| `RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET` / `RAZORPAY_WEBHOOK_SECRET` | Razorpay | Key ID, Key Secret & Webhook Secret |
+| `SQUARE_ACCESS_TOKEN` / `SQUARE_APPLICATION_ID` / `SQUARE_LOCATION_ID` | Square | Access Token, App ID & Location ID |
+| `SQUARE_WEBHOOK_SIGNATURE_KEY` | Square | Signature Key untuk verifikasi webhook |
+| `PAYU_POS_ID` / `PAYU_MD5_KEY` | PayU | POS ID (Merchant ID) & MD5 Key untuk webhook |
+| `PAYU_OAUTH_CLIENT_ID` / `PAYU_OAUTH_CLIENT_SECRET` | PayU | OAuth2 Client ID & Secret untuk Bearer Token |
+| `BRAINTREE_MERCHANT_ID` / `BRAINTREE_PUBLIC_KEY` / `BRAINTREE_PRIVATE_KEY` | Braintree | Merchant ID, Public Key & Private Key |
+| `TWOCHECKOUT_MERCHANT_CODE` / `TWOCHECKOUT_SECRET_KEY` / `TWOCHECKOUT_SECRET_WORD` | 2Checkout | Merchant Code, Secret Key & Secret Word (IPN) |
+
+### 📖 Panduan Penggunaan
+
+#### 1. Inisialisasi (Zero-Config)
+```typescript
+import { buayar } from "@crediblemark/buayar";
+// Otomatis membaca konfigurasi dari process.env
+```
+
+#### 2. Mode Semi Integrasi (Redirect / Hosted Checkout)
+```typescript
+const invoice = await buayar.createInvoice({
+  orderId: "ORDER-1001",
+  amount: 150000,
+  productDetails: "Langganan Paket Pro 1 Bulan",
+  customer: { name: "Budi Santoso", email: "budi@example.com" },
+  returnUrl: "https://myapp.com/orders/ORDER-1001",
+  // Tanpa paymentMethod = redirect ke halaman checkout PG
+});
+
+if (invoice.success) {
+  redirect(invoice.paymentUrl!);
+}
+```
+
+#### 3. Mode Full Integrasi (Custom Native UI)
+```typescript
+// Langkah A: Ambil daftar metode pembayaran (Accordion-Ready)
+const { categories } = await buayar.getPaymentMethods({ amount: 150000 });
+// categories: { "Virtual Account": [...], "QRIS": [...], "E-Wallet": [...] }
+
+// Langkah B: Direct Charge dengan kode canonical
+const vaInvoice = await buayar.createInvoice({
+  orderId: "ORDER-1002",
+  amount: 150000,
+  paymentMethod: "bca_va", // kode canonical — berlaku di semua provider
+  productDetails: "Topup Saldo",
+  customer: { name: "Budi", email: "budi@example.com" },
+});
+
+console.log("Nomor VA:", vaInvoice.vaNumber);  // "123456789012"
+console.log("Bank:", vaInvoice.vaBank);        // "bca"
+console.log("QRIS:", vaInvoice.qrString);      // Raw EMVCo string
+```
+
+#### 4. Universal Webhook Handler
+```typescript
+// Bekerja dengan Express, Elysia, Hono, Next.js App Router, dll.
+app.post("/api/payment/webhook", async (req, res) => {
+  const result = await buayar.verifyWebhook(req.body, req.headers);
+  // Provider terdeteksi otomatis dari struktur payload
+
+  if (!result.isValid) return res.status(400).json({ error: "Invalid signature" });
+
+  if (result.isPaid) {
+    console.log(`✅ Order ${result.orderId} senilai ${result.amount} telah LUNAS!`);
+    // Aktifkan langganan / kirim produk
+  }
+
+  return res.status(200).json({ status: "OK" });
+});
+```
+
+#### 5. Zero-Code PG Switch
+```env
+# Ganti dari Midtrans ke Stripe — tanpa ubah satu baris kode pun
+PROVIDER_PG=stripe
+STRIPE_SECRET_KEY=sk_live_...
+STRIPE_WEBHOOK_SECRET=whsec_...
+```
+
+### 🏷️ Daftar Canonical Payment Methods
+
+| Kategori | Canonical Code | Keterangan |
+| :--- | :--- | :--- |
+| **Virtual Account** | `bca_va`, `mandiri_va`, `bni_va`, `bri_va`, `permata_va`, `cimb_va`, `danamon_va`, `bsi_va`, `seabank_va` | Transfer bank via VA |
+| **QRIS** | `qris`, `gopay_qris`, `shopeepay_qris`, `nobu_qris` | QRIS standar EMVCo |
+| **E-Wallet** | `gopay`, `shopeepay`, `ovo`, `dana`, `linkaja`, `jenius` | Dompet digital |
+| **Retail** | `alfamart`, `indomaret`, `pos` | Bayar di gerai retail |
+| **Kartu Kredit** | `credit_card` | Visa, Mastercard, JCB, Amex |
+| **Paylater** | `kredivo`, `akulaku`, `indodana` | Cicilan & paylater |
+| **International** | `apple_pay`, `google_pay`, `paypal`, `klarna`, `sepa` | Metode internasional |
+
+---
+
+## 📄 License / Lisensi
+
+MIT License — Copyright © 2026 Rasyiqi Crediblemark.
+
+This project is licensed under the **MIT License**. You are free to use, modify, and distribute it in personal and commercial projects.
+
+Proyek ini dilisensikan di bawah **MIT License**. Bebas digunakan, dimodifikasi, dan didistribusikan untuk keperluan personal maupun komersial.

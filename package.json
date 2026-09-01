@@ -1,7 +1,7 @@
 {
   "name": "@crediblemark/buayar",
   "version": "0.3.0",
-  "description": "Unified Payment Gateway SDK for Node.js and TypeScript supporting multiple providers",
+  "description": "Unified Payment Gateway SDK for Node.js & TypeScript — 19 providers (Midtrans, Xendit, Duitku, Stripe, PayPal, Adyen, Razorpay, Square, Checkout.com, PayU, Braintree, 2Checkout, DOKU, iPaymu, PrismaLink, Faspay, Finpay, Nicepay, OY!) with zero-code switching via .env",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
@@ -13,11 +13,51 @@
     },
     "./package.json": "./package.json"
   },
+  "keywords": [
+    "payment-gateway",
+    "payment",
+    "sdk",
+    "unified-payment",
+    "midtrans",
+    "xendit",
+    "duitku",
+    "stripe",
+    "paypal",
+    "adyen",
+    "razorpay",
+    "square",
+    "checkout.com",
+    "payu",
+    "braintree",
+    "2checkout",
+    "doku",
+    "ipaymu",
+    "prismalink",
+    "faspay",
+    "finpay",
+    "nicepay",
+    "oy-indonesia",
+    "virtual-account",
+    "qris",
+    "ewallet",
+    "webhook",
+    "typescript",
+    "nodejs",
+    "indonesia",
+    "payment-indonesia",
+    "zero-code",
+    "pg-switcher",
+    "buayar"
+  ],
   "files": [
     "dist",
     "package.json",
     "README.md"
   ],
+  "homepage": "https://github.com/crediblemark-official/Buayar#readme",
+  "bugs": {
+    "url": "https://github.com/crediblemark-official/Buayar/issues"
+  },
   "repository": {
     "type": "git",
     "url": "https://github.com/crediblemark-official/Buayar.git"
@@ -37,3 +77,4 @@
     "typescript": "^5.9.3"
   }
 }
+
