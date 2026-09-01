@@ -91,6 +91,7 @@ jobs:
     name: Publish ke GitHub Packages
     runs-on: ubuntu-latest
     needs: test
+    continue-on-error: true
     permissions:
       contents: read
       packages: write
@@ -108,7 +109,7 @@ jobs:
         with:
           node-version: '20.x'
           registry-url: 'https://npm.pkg.github.com/'
-          scope: '@crediblemark'
+          scope: '@crediblemark-official'
 
       - name: Install Dependencies
         run: bun install --frozen-lockfile
@@ -119,10 +120,12 @@ jobs:
       - name: Publish ke GitHub Packages
         run: |
           CURRENT_VERSION=$(node -p "require('./package.json').version")
-          PACKAGE_NAME=$(node -p "require('./package.json').name")
+          
+          # GitHub Packages mewajibkan scope name sesuai repository owner (@crediblemark-official)
+          npm pkg set name="@crediblemark-official/buayar"
 
-          echo "Memeriksa versi $PACKAGE_NAME@$CURRENT_VERSION di GitHub Packages..."
-          if npm view "$PACKAGE_NAME@$CURRENT_VERSION" version --registry=https://npm.pkg.github.com/ &>/dev/null; then
+          echo "Memeriksa versi @crediblemark-official/buayar@$CURRENT_VERSION di GitHub Packages..."
+          if npm view "@crediblemark-official/buayar@$CURRENT_VERSION" version --registry=https://npm.pkg.github.com/ &>/dev/null; then
             echo "ℹ️ Versi $CURRENT_VERSION sudah terpublish di GitHub Packages. Melewati publish."
           else
             echo "🚀 Mempublish versi $CURRENT_VERSION ke GitHub Packages..."
@@ -137,7 +140,7 @@ jobs:
   create-release:
     name: Buat GitHub Release
     runs-on: ubuntu-latest
-    needs: [publish-npm, publish-github]
+    needs: [publish-npm]
     permissions:
       contents: write
     steps:
