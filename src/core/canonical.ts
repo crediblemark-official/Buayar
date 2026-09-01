@@ -302,6 +302,21 @@ export const CANONICAL_TO_OY: Record<string, { type: "va" | "qris" | "ewallet" |
 };
 
 /**
+ * Mapping dari Canonical Payment Method ke payment_method_types Stripe
+ */
+export const CANONICAL_TO_STRIPE: Record<string, string> = {
+  credit_card: "card",
+  qris: "qris",
+  gopay_qris: "qris",
+  shopeepay_qris: "qris",
+  bca_va: "customer_balance",
+  mandiri_va: "customer_balance",
+  bni_va: "customer_balance",
+  bri_va: "customer_balance",
+  permata_va: "customer_balance",
+};
+
+/**
  * Ubah method code apapun (baik canonical maupun kode raw provider) ke kode Duitku yang valid
  */
 export function toDuitkuPaymentMethod(code?: string): string | undefined {
@@ -425,6 +440,18 @@ export function toOyPaymentMethod(code?: string): { type: "va" | "qris" | "ewall
 }
 
 /**
+ * Ubah method code apapun ke format Stripe
+ */
+export function toStripePaymentMethod(code?: string): string | undefined {
+  if (!code) return undefined;
+  const lower = code.toLowerCase().trim();
+  if (CANONICAL_TO_STRIPE[lower]) {
+    return CANONICAL_TO_STRIPE[lower];
+  }
+  return lower;
+}
+
+/**
  * Ubah method code apapun ke format canonical standar Buayar
  */
 export function toCanonicalPaymentMethod(provider: string, code?: string): string {
@@ -446,7 +473,8 @@ export function toCanonicalPaymentMethod(provider: string, code?: string): strin
     CANONICAL_TO_FASPAY[lower] ||
     CANONICAL_TO_FINPAY[lower] ||
     CANONICAL_TO_NICEPAY[lower] ||
-    CANONICAL_TO_OY[lower]
+    CANONICAL_TO_OY[lower] ||
+    CANONICAL_TO_STRIPE[lower]
   ) {
     return lower;
   }

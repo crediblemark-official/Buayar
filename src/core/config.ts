@@ -45,6 +45,8 @@ export function resolveConfigFromEnv(customConfig?: BuayarConfig): BuayarConfig 
     sandbox = env.NICEPAY_SANDBOX === "true" || env.NICEPAY_SANDBOX === "1";
   } else if (env.OY_SANDBOX !== undefined) {
     sandbox = env.OY_SANDBOX === "true" || env.OY_SANDBOX === "1";
+  } else if (env.STRIPE_SANDBOX !== undefined) {
+    sandbox = env.STRIPE_SANDBOX === "true" || env.STRIPE_SANDBOX === "1";
   } else {
     sandbox = env.NODE_ENV !== "production";
   }
@@ -72,6 +74,8 @@ export function resolveConfigFromEnv(customConfig?: BuayarConfig): BuayarConfig 
       apiKey = env.NICEPAY_KEY || env.NICEPAY_MERCHANT_KEY || env.NICEPAY_SECRET_KEY || env.NICEPAY_API_KEY || env.BUAYAR_API_KEY || env.PG_API_KEY || env.PAYMENT_API_KEY;
     } else if (provider === "oy" || provider === "oyindonesia") {
       apiKey = env.OY_API_KEY || env.BUAYAR_API_KEY || env.PG_API_KEY || env.PAYMENT_API_KEY;
+    } else if (provider === "stripe") {
+      apiKey = env.STRIPE_SECRET_KEY || env.STRIPE_KEY || env.BUAYAR_API_KEY || env.PG_API_KEY || env.PAYMENT_API_KEY;
     } else {
       apiKey = env.BUAYAR_API_KEY || env.PG_API_KEY || env.PAYMENT_API_KEY || env.PG_SECRET_KEY || env.BUAYAR_SECRET_KEY;
     }
@@ -109,20 +113,24 @@ export function resolveConfigFromEnv(customConfig?: BuayarConfig): BuayarConfig 
   } else if (provider === "oy" || provider === "oyindonesia") {
     merchantCode = merchantCode || env.OY_USERNAME || env.BUAYAR_MERCHANT_CODE || env.PG_MERCHANT_CODE || env.PAYMENT_MERCHANT_CODE;
     clientKey = clientKey || env.OY_USERNAME || env.BUAYAR_CLIENT_KEY;
+  } else if (provider === "stripe") {
+    clientKey = clientKey || env.STRIPE_PUBLIC_KEY || env.STRIPE_PUBLISHABLE_KEY || env.BUAYAR_CLIENT_KEY || env.BUAYAR_PUBLIC_KEY;
+    merchantCode = merchantCode || clientKey || "stripe";
   } else {
     merchantCode = merchantCode || env.BUAYAR_MERCHANT_CODE || env.PG_MERCHANT_CODE || env.PAYMENT_MERCHANT_CODE;
   }
 
   // 5. Resolve Project ID / Public Key / URLs / Webhook Tokens / Extra
   const projectId = customConfig?.projectId || env.BUAYAR_PROJECT_ID || env.PG_PROJECT_ID || env.PROJECT_ID;
-  const publicKey = customConfig?.publicKey || env.BUAYAR_PUBLIC_KEY || env.PG_PUBLIC_KEY || env.PUBLIC_KEY;
+  const publicKey = customConfig?.publicKey || env.BUAYAR_PUBLIC_KEY || env.PG_PUBLIC_KEY || env.PUBLIC_KEY || env.STRIPE_PUBLIC_KEY || env.STRIPE_PUBLISHABLE_KEY;
   const privateKey = customConfig?.privateKey || env.BUAYAR_PRIVATE_KEY || env.PG_PRIVATE_KEY || env.PRIVATE_KEY;
-  const secretKey = customConfig?.secretKey || env.BUAYAR_SECRET_KEY || env.PG_SECRET_KEY || env.SECRET_KEY || env.XENDIT_SECRET_KEY || env.DOKU_SECRET_KEY || env.PRISMALINK_SECRET_KEY || env.FASPAY_PASSWORD || env.FINPAY_MERCHANT_KEY || env.NICEPAY_KEY || env.OY_API_KEY;
+  const secretKey = customConfig?.secretKey || env.BUAYAR_SECRET_KEY || env.PG_SECRET_KEY || env.SECRET_KEY || env.XENDIT_SECRET_KEY || env.DOKU_SECRET_KEY || env.PRISMALINK_SECRET_KEY || env.FASPAY_PASSWORD || env.FINPAY_MERCHANT_KEY || env.NICEPAY_KEY || env.OY_API_KEY || env.STRIPE_SECRET_KEY;
   const callbackUrl = customConfig?.callbackUrl || env.BUAYAR_CALLBACK_URL || env.PG_CALLBACK_URL || env.PAYMENT_CALLBACK_URL;
   const returnUrl = customConfig?.returnUrl || env.BUAYAR_RETURN_URL || env.PG_RETURN_URL || env.PAYMENT_RETURN_URL;
 
   const extra = {
     webhookToken: env.XENDIT_WEBHOOK_TOKEN || env.BUAYAR_WEBHOOK_TOKEN,
+    webhookSecret: env.STRIPE_WEBHOOK_SECRET || env.BUAYAR_WEBHOOK_SECRET,
     merchantName: env.FASPAY_MERCHANT_NAME || env.BUAYAR_MERCHANT_NAME,
     userId: env.FASPAY_USER_ID,
     iMid: env.NICEPAY_IMID,

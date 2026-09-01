@@ -30,6 +30,8 @@ export * from "./providers/nicepay/provider";
 export * from "./providers/nicepay/signature";
 export * from "./providers/oy/provider";
 export * from "./providers/oy/signature";
+export * from "./providers/stripe/provider";
+export * from "./providers/stripe/signature";
 
 // Clients
 export * from "./clients/midtrans";
@@ -42,6 +44,7 @@ export * from "./clients/faspay";
 export * from "./clients/finpay";
 export * from "./clients/nicepay";
 export * from "./clients/oy";
+export * from "./clients/stripe";
 
 // Utilities
 export * from "./utils/crypto";

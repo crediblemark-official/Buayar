@@ -85,6 +85,13 @@
   * Verifikasi Header & Webhook otomatis.
   * Ekstensi `OyClient` (Inquiry Status, Saldo Merchant & Kirim Uang/Disbursement).
 
+* 🏛️ **[Integrasi Stripe (docs/stripe.md)](file:///media/rasyiqi/7653717A1C07B131/Buayar/docs/stripe.md)**
+  * Checkout Sessions API (Redirect Hosted Page, multi-currency).
+  * Payment Intents API Direct Charge (Kartu Kredit, Debit, Google Pay, Apple Pay, dll).
+  * Verifikasi webhook signature HMAC-SHA256 otomatis.
+  * Ekstensi `StripeClient` (Retrieve Session, Retrieve Intent, Refund, Saldo Merchant).
+  * ⚠️ **Catatan**: Stripe tidak mendukung Virtual Account lokal Indonesia. Cocok untuk pembayaran internasional / kartu kredit global.
+
 ---
 
 ## ⚙️ Konfigurasi Environment Variables (`.env`)
@@ -93,8 +100,8 @@ SDK `Buayar` membaca konfigurasi secara otomatis dari `process.env`. Anda dapat 
 
 ### 1. Standar Universal (Direkomendasikan)
 ```env
-# Provider aktif: 'midtrans' | 'duitku' | 'ipaymu' | 'xendit' | 'doku' | 'prismalink' | 'faspay' | 'finpay' | 'nicepay' | 'oy'
-PROVIDER_PG=oy
+# Provider aktif: 'midtrans' | 'duitku' | 'ipaymu' | 'xendit' | 'doku' | 'prismalink' | 'faspay' | 'finpay' | 'nicepay' | 'oy' | 'stripe'
+PROVIDER_PG=stripe
 
 # Kredensial Universal
 BUAYAR_MERCHANT_CODE=myusername # Username OY! Bisnis
@@ -136,6 +143,9 @@ BUAYAR_RETURN_URL=https://myapp.com/payment/finish
 | `NICEPAY_KEY` | Nicepay | Merchant Key rahasia Nicepay. |
 | `OY_USERNAME` | OY! Bisnis | Username akun OY! Bisnis. |
 | `OY_API_KEY` | OY! Bisnis | API Key OY! Bisnis. |
+| `STRIPE_SECRET_KEY` | Stripe | Secret Key Stripe (`sk_test_...` / `sk_live_...`). **Wajib.** |
+| `STRIPE_WEBHOOK_SECRET` | Stripe | Webhook Signing Secret Stripe (`whsec_...`). Wajib untuk verifikasi callback. |
+| `STRIPE_PUBLIC_KEY` | Stripe | Publishable Key Stripe (`pk_test_...` / `pk_live_...`). Opsional, untuk frontend. |
 | `BUAYAR_API_KEY` / `PG_API_KEY` / `PAYMENT_API_KEY` | Semua | API Key / Server Key universal. |
 | `BUAYAR_MERCHANT_CODE` / `PG_MERCHANT_CODE` | Duitku / Umum | Kode merchant dari dashboard payment gateway. |
 | `BUAYAR_SANDBOX` / `PG_SANDBOX` / `PAYMENT_SANDBOX` | Semua | Mode sandbox (`true` / `false`). |

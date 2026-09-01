@@ -22,6 +22,11 @@ export interface CreateInvoiceParams {
    * Jika dikosongkan, akan beralih ke Mode Semi Integrasi (Redirect Checkout).
    */
   paymentMethod?: CanonicalPaymentMethod | string;
+  /**
+   * Kode mata uang ISO 4217 (opsional). Default: 'IDR'.
+   * Contoh: 'idr', 'usd', 'sgd'
+   */
+  currency?: string;
   /** Parameter kustom tambahan untuk provider spesifik (opsional) */
   providerParams?: any;
 }

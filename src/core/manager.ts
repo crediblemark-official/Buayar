@@ -9,6 +9,7 @@ import { FaspayProvider } from "../providers/faspay/provider";
 import { FinpayProvider } from "../providers/finpay/provider";
 import { NicepayProvider } from "../providers/nicepay/provider";
 import { OyProvider } from "../providers/oy/provider";
+import { StripeProvider } from "../providers/stripe/provider";
 import { MidtransClient } from "../clients/midtrans";
 import { DuitkuClient } from "../clients/duitku";
 import { IpaymuClient } from "../clients/ipaymu";
@@ -19,6 +20,7 @@ import { FaspayClient } from "../clients/faspay";
 import { FinpayClient } from "../clients/finpay";
 import { NicepayClient } from "../clients/nicepay";
 import { OyClient } from "../clients/oy";
+import { StripeClient } from "../clients/stripe";
 import {
   CreateInvoiceParams,
   InvoiceResponse,
@@ -45,6 +47,7 @@ export class PaymentManager {
     this.registerProvider(new FinpayProvider());
     this.registerProvider(new NicepayProvider());
     this.registerProvider(new OyProvider());
+    this.registerProvider(new StripeProvider());
   }
 
   registerProvider(provider: BasePaymentProvider) {
@@ -137,6 +140,14 @@ export class PaymentManager {
 
   getOyClient(config: ProviderConfig): OyClient {
     return new OyClient(config);
+  }
+
+  getStripeProvider(): StripeProvider {
+    return this.getProvider("stripe") as StripeProvider;
+  }
+
+  getStripeClient(config: ProviderConfig): StripeClient {
+    return new StripeClient(config);
   }
 
   async createInvoice(

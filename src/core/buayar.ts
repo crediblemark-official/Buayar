@@ -20,6 +20,7 @@ import { FaspayClient } from "../clients/faspay";
 import { FinpayClient } from "../clients/finpay";
 import { NicepayClient } from "../clients/nicepay";
 import { OyClient } from "../clients/oy";
+import { StripeClient } from "../clients/stripe";
 import { BasePaymentProvider } from "../providers/base";
 import { resolveConfigFromEnv } from "./config";
 
@@ -55,7 +56,7 @@ export class Buayar {
   }
 
   /**
-   * Dapatkan nama provider aktif ('midtrans' | 'duitku' | 'ipaymu' | 'xendit' | 'doku' | 'prismalink' | 'faspay' | 'finpay' | 'nicepay' | 'oy' | ...)
+   * Dapatkan nama provider aktif ('midtrans' | 'duitku' | 'ipaymu' | 'xendit' | 'doku' | 'prismalink' | 'faspay' | 'finpay' | 'nicepay' | 'oy' | 'stripe' | ...)
    */
   get provider(): string {
     return this.config.provider || "midtrans";
@@ -126,6 +127,14 @@ export class Buayar {
   ): Promise<VerifyCallbackResult> {
     const mergedConfig: ProviderConfig = { ...this.config, ...configOverride };
 
+    if (headers) {
+      const sigHeader = headers["stripe-signature"] || headers["Stripe-Signature"];
+      if (sigHeader) {
+        if (!mergedConfig.extra) mergedConfig.extra = {};
+        mergedConfig.extra.signatureHeader = Array.isArray(sigHeader) ? sigHeader[0] : sigHeader;
+      }
+    }
+
     let providerName = (configOverride as any)?.provider || this.provider;
 
     if (payload) {
@@ -147,6 +156,8 @@ export class Buayar {
         providerName = "oy";
       } else if (payload.merchant_id && payload.order_id && payload.signature) {
         providerName = "prismalink";
+      } else if (payload.object === "event" || (payload.type && payload.data?.object && payload.api_version)) {
+        providerName = "stripe";
       } else if (payload.external_id || payload.event?.startsWith("payment.") || payload.event?.startsWith("qr.") || payload.data?.reference_id) {
         providerName = "xendit";
       }
@@ -228,6 +239,13 @@ export class Buayar {
 
   getOyClient(configOverride?: Partial<ProviderConfig>): OyClient {
     return new OyClient({
+      ...this.config,
+      ...configOverride,
+    });
+  }
+
+  getStripeClient(configOverride?: Partial<ProviderConfig>): StripeClient {
+    return new StripeClient({
       ...this.config,
       ...configOverride,
     });
