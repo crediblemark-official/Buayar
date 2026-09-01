@@ -1,4 +1,4 @@
-name: Publish Package
+name: CI & Publish Package
 
 on:
   push:
@@ -6,17 +6,48 @@ on:
       - main
   workflow_dispatch:
 
-# Izin akan dispesifikasikan di setiap job secara modular
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   # ──────────────────────────────────────────────
-  # Job 1: Publish ke npmjs.com (public registry)
+  # Job 1: Test & Quality Check
+  # ──────────────────────────────────────────────
+  test:
+    name: Test & Validate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install Dependencies
+        run: bun install --frozen-lockfile
+
+      - name: TypeScript Type Check
+        run: bun tsc --noEmit
+
+      - name: Run Test Suite
+        run: bun test
+
+      - name: Validate Build
+        run: bun run build
+
+  # ──────────────────────────────────────────────
+  # Job 2: Publish ke npmjs.com (Public Registry)
   # ──────────────────────────────────────────────
   publish-npm:
     name: Publish ke npmjs.com
     runs-on: ubuntu-latest
+    needs: test
     permissions:
       contents: read
+      id-token: write
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -35,26 +66,31 @@ jobs:
       - name: Install Dependencies
         run: bun install --frozen-lockfile
 
-      - name: Build dan Publish ke npmjs
+      - name: Build Bundle
+        run: bun run build
+
+      - name: Publish ke npmjs
         run: |
           CURRENT_VERSION=$(node -p "require('./package.json').version")
-          if npm view @crediblemark/buayar@$CURRENT_VERSION version &>/dev/null; then
-            echo "Versi $CURRENT_VERSION sudah terpublish di npmjs.com. Lewati publish."
+          PACKAGE_NAME=$(node -p "require('./package.json').name")
+          
+          echo "Memeriksa versi $PACKAGE_NAME@$CURRENT_VERSION di npmjs.com..."
+          if npm view "$PACKAGE_NAME@$CURRENT_VERSION" version &>/dev/null; then
+            echo "ℹ️ Versi $CURRENT_VERSION sudah terpublish di npmjs.com. Melewati publish."
           else
-            echo "Publish versi $CURRENT_VERSION ke npmjs.com..."
-            bun run build
+            echo "🚀 Mempublish versi $CURRENT_VERSION ke npmjs.com..."
             npm publish --access public
           fi
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
   # ──────────────────────────────────────────────
-  # Job 2: Publish ke GitHub Packages (backup)
+  # Job 3: Publish ke GitHub Packages
   # ──────────────────────────────────────────────
   publish-github:
     name: Publish ke GitHub Packages
     runs-on: ubuntu-latest
-    needs: publish-npm
+    needs: test
     permissions:
       contents: read
       packages: write
@@ -77,27 +113,26 @@ jobs:
       - name: Install Dependencies
         run: bun install --frozen-lockfile
 
-      - name: Build dan Publish ke GitHub Packages
+      - name: Build Bundle
+        run: bun run build
+
+      - name: Publish ke GitHub Packages
         run: |
           CURRENT_VERSION=$(node -p "require('./package.json').version")
+          PACKAGE_NAME=$(node -p "require('./package.json').name")
 
-          # Cek apakah versi sudah terpublish di GitHub Packages
-          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
-            -H "Authorization: Bearer $NODE_AUTH_TOKEN" \
-            "https://npm.pkg.github.com/@crediblemark/buayar/$CURRENT_VERSION")
-
-          if [ "$HTTP_STATUS" = "200" ]; then
-            echo "Versi $CURRENT_VERSION sudah terpublish di GitHub Packages. Lewati publish."
+          echo "Memeriksa versi $PACKAGE_NAME@$CURRENT_VERSION di GitHub Packages..."
+          if npm view "$PACKAGE_NAME@$CURRENT_VERSION" version --registry=https://npm.pkg.github.com/ &>/dev/null; then
+            echo "ℹ️ Versi $CURRENT_VERSION sudah terpublish di GitHub Packages. Melewati publish."
           else
-            echo "Publish versi $CURRENT_VERSION ke GitHub Packages..."
-            bun run build
+            echo "🚀 Mempublish versi $CURRENT_VERSION ke GitHub Packages..."
             npm publish --registry=https://npm.pkg.github.com/
           fi
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   # ──────────────────────────────────────────────
-  # Job 3: Buat GitHub Release Otomatis
+  # Job 4: Buat GitHub Release Otomatis
   # ──────────────────────────────────────────────
   create-release:
     name: Buat GitHub Release
@@ -114,13 +149,12 @@ jobs:
           CURRENT_VERSION=$(node -p "require('./package.json').version")
           TAG_NAME="v$CURRENT_VERSION"
           
-          # Cek apakah tag rilis sudah ada di GitHub
           if gh release view "$TAG_NAME" &>/dev/null; then
-            echo "Release $TAG_NAME sudah ada di GitHub. Lewati pembuatan release."
+            echo "ℹ️ Release $TAG_NAME sudah ada di GitHub. Melewati pembuatan release."
           else
-            echo "Membuat GitHub Release $TAG_NAME..."
+            echo "🎉 Membuat GitHub Release $TAG_NAME..."
             gh release create "$TAG_NAME" \
-              --title "$TAG_NAME" \
+              --title "Release $TAG_NAME" \
               --generate-notes
           fi
         env:
