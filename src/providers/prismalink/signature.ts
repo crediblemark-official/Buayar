@@ -25,7 +25,8 @@ export function verifyPrismalinkSignature(
   secretKey: string,
   incomingSignature: string
 ): boolean {
-  if (!incomingSignature || !secretKey) return true; // Tolerant if not configured
+  // SECURITY: Jika signature atau secret key tidak ada → INVALID
+  if (!incomingSignature || !secretKey) return false;
   const computed = generatePrismalinkSignature(merchantId, orderId, amount, secretKey);
   return safeCompare(incomingSignature, computed);
 }

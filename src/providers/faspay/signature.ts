@@ -19,7 +19,8 @@ export function verifyFaspaySignature(
   paymentStatusCode: string,
   incomingSignature: string
 ): boolean {
-  if (!incomingSignature || !password) return true; // Tolerant if not configured
+  // SECURITY: Jika signature atau password tidak ada → INVALID
+  if (!incomingSignature || !password) return false;
   // Faspay callback signature often hashes with payment status code
   const md5Hash = crypto.createHash("md5").update(`${userId}${password}${billNo}${paymentStatusCode}`).digest("hex");
   const computed = crypto.createHash("sha1").update(md5Hash).digest("hex");

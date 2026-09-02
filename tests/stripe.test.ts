@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { Buayar } from "../src";
+import { verifyStripeWebhook } from "../src/providers/stripe/signature";
 
 describe("Stripe Provider & Client Integration", () => {
   it("should resolve Stripe config from environment variables", () => {
@@ -33,11 +34,7 @@ describe("Stripe Provider & Client Integration", () => {
     };
 
     try {
-      const buayar = new Buayar({
-        provider: "stripe",
-        apiKey: "sk_test_51MockStripeKey12345",
-      });
-
+      const buayar = new Buayar({ provider: "stripe", apiKey: "sk_test_51MockStripeKey12345" });
       const response = await buayar.createInvoice({
         orderId: "ORDER-STRIPE-001",
         amount: 150000,
@@ -71,11 +68,7 @@ describe("Stripe Provider & Client Integration", () => {
     };
 
     try {
-      const buayar = new Buayar({
-        provider: "stripe",
-        apiKey: "sk_test_51MockStripeKey12345",
-      });
-
+      const buayar = new Buayar({ provider: "stripe", apiKey: "sk_test_51MockStripeKey12345" });
       const response = await buayar.createInvoice({
         orderId: "ORDER-STRIPE-002",
         amount: 250000,
@@ -119,17 +112,8 @@ describe("Stripe Provider & Client Integration", () => {
     const signature = crypto.createHmac("sha256", webhookSecret).update(`${timestamp}.${payloadString}`).digest("hex");
     const sigHeader = `t=${timestamp},v1=${signature}`;
 
-    const buayar = new Buayar({
-      provider: "stripe",
-      apiKey: "sk_test_51MockStripeKey12345",
-      extra: {
-        webhookSecret,
-      },
-    });
-
-    const result = await buayar.verifyWebhook(payload, {
-      "stripe-signature": sigHeader,
-    });
+    const buayar = new Buayar({ provider: "stripe", apiKey: "sk_test_51MockStripeKey12345", extra: { webhookSecret } });
+    const result = await buayar.verifyWebhook(payload, { "stripe-signature": sigHeader });
 
     expect(result.isValid).toBe(true);
     expect(result.provider).toBe("stripe");
@@ -138,5 +122,66 @@ describe("Stripe Provider & Client Integration", () => {
     expect(result.isPaid).toBe(true);
     expect(result.isPending).toBe(false);
     expect(result.isFailed).toBe(false);
+  });
+
+  // ─── Security Regression Tests ───────────────────────────────────────────
+
+  it("[SECURITY] should return false when stripe-signature header is missing", () => {
+    const result = verifyStripeWebhook(
+      JSON.stringify({ type: "checkout.session.completed" }),
+      "",
+      "whsec_mockSecret123"
+    );
+    expect(result).toBe(false);
+  });
+
+  it("[SECURITY] should return false when webhookSecret is not configured", () => {
+    const ts = Math.floor(Date.now() / 1000).toString();
+    const result = verifyStripeWebhook(
+      JSON.stringify({ type: "checkout.session.completed" }),
+      `t=${ts},v1=somesignature`,
+      ""
+    );
+    expect(result).toBe(false);
+  });
+
+  it("[SECURITY] should reject expired timestamp — replay attack protection", async () => {
+    const secret = "whsec_mockSecret123";
+    const oldTs = Math.floor(Date.now() / 1000) - 400; // 400s ago > 300s tolerance
+    const payload = JSON.stringify({ type: "checkout.session.completed" });
+    const crypto = await import("crypto");
+    const sig = crypto.createHmac("sha256", secret).update(`${oldTs}.${payload}`).digest("hex");
+
+    const result = verifyStripeWebhook(payload, `t=${oldTs},v1=${sig}`, secret, 300);
+    expect(result).toBe(false);
+  });
+
+  it("[SECURITY] should reject tampered signature", async () => {
+    const secret = "whsec_mockSecret123";
+    const ts = Math.floor(Date.now() / 1000).toString();
+    const payload = JSON.stringify({ type: "checkout.session.completed" });
+    // Use a fake signature (all 'a')
+    const result = verifyStripeWebhook(payload, `t=${ts},v1=${"a".repeat(64)}`, secret);
+    expect(result).toBe(false);
+  });
+
+  it("[SECURITY] should reject non-numeric timestamp", () => {
+    const result = verifyStripeWebhook(
+      JSON.stringify({ type: "test" }),
+      "t=not-a-number,v1=somesig",
+      "whsec_mockSecret123"
+    );
+    expect(result).toBe(false);
+  });
+
+  it("[SECURITY] should accept valid webhook within tolerance window", async () => {
+    const secret = "whsec_mockSecret123";
+    const ts = Math.floor(Date.now() / 1000).toString();
+    const payload = JSON.stringify({ type: "checkout.session.completed" });
+    const crypto = await import("crypto");
+    const sig = crypto.createHmac("sha256", secret).update(`${ts}.${payload}`).digest("hex");
+
+    const result = verifyStripeWebhook(payload, `t=${ts},v1=${sig}`, secret, 300);
+    expect(result).toBe(true);
   });
 });

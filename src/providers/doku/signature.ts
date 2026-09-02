@@ -65,7 +65,8 @@ export function verifyDokuWebhookSignature(
   const reqTimestamp = (headers["request-timestamp"] || headers["Request-Timestamp"] || "") as string;
   const incomingSignature = (headers["signature"] || headers["Signature"] || "") as string;
 
-  if (!incomingSignature || !secretKey) return true; // Tolerant if not passed
+  // SECURITY: Jika signature atau secret key tidak ada → INVALID, bukan bypass
+  if (!incomingSignature || !secretKey) return false;
 
   let component = `Client-Id:${reqClientId || clientId}\nRequest-Id:${reqId}\nRequest-Timestamp:${reqTimestamp}\nRequest-Target:${requestTarget}`;
 

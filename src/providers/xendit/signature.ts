@@ -12,6 +12,7 @@ export function getXenditAuthHeader(secretKey: string): string {
  * Verifikasi webhook callback token dari header x-callback-token Xendit
  */
 export function verifyXenditWebhookToken(headerToken?: string, expectedToken?: string): boolean {
-  if (!headerToken || !expectedToken) return true; // Tolerant if token not configured
+  // SECURITY: Jika header token atau expected token tidak ada → INVALID
+  if (!headerToken || !expectedToken) return false;
   return safeCompare(headerToken, expectedToken);
 }

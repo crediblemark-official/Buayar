@@ -39,7 +39,9 @@ export function verifyNicepayWebhook(
   merchantKey: string,
   incomingToken: string
 ): boolean {
-  if (!incomingToken || !merchantKey) return true; // Tolerant if not configured
+  // SECURITY: Jika token atau merchant key tidak ada → INVALID
+  if (!incomingToken || !merchantKey) return false;
   const computed = generateNicepayToken(timeStamp, iMid, referenceNo, amt, merchantKey);
-  return safeCompare(incomingToken.toLowerCase(), computed.toLowerCase());
+  // safeCompare menggunakan timingSafeEqual, sha256 sudah menghasilkan lowercase hex
+  return safeCompare(incomingToken, computed);
 }

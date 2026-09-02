@@ -24,7 +24,9 @@ export function verifyFinpaySignature(
   merchantKey: string,
   incomingSignature: string
 ): boolean {
-  if (!incomingSignature || !merchantKey) return true; // Tolerant if not configured
+  // SECURITY: Jika signature atau merchant key tidak ada → INVALID
+  if (!incomingSignature || !merchantKey) return false;
   const computed = generateFinpaySignature(merchantId, orderId, amount, merchantKey);
-  return safeCompare(incomingSignature.toLowerCase(), computed.toLowerCase());
+  // hmacSha256 dan safeCompare sudah bekerja dengan hex lowercase
+  return safeCompare(incomingSignature, computed);
 }

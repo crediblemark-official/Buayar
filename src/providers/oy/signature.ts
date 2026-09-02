@@ -19,8 +19,9 @@ export function verifyOyWebhook(
   headers: Record<string, string | string[] | undefined>,
   expectedUsername: string
 ): boolean {
-  if (!expectedUsername) return true;
+  // SECURITY: Jika expectedUsername tidak dikonfigurasi atau header username tidak ada → INVALID
+  if (!expectedUsername) return false;
   const username = (headers["x-oy-username"] || headers["X-Oy-Username"] || "") as string;
-  if (!username) return true; // Tolerant if header not available
+  if (!username) return false;
   return safeCompare(username.toLowerCase(), expectedUsername.toLowerCase());
 }
