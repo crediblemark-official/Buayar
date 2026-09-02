@@ -109,7 +109,7 @@ export class RazorpayProvider extends BasePaymentProvider {
 
     const isValid = signatureHeader
       ? verifyRazorpayWebhook(rawBody, signatureHeader, webhookSecret)
-      : true;
+      : false;
 
     const eventType = parsedBody?.event || "";
     const payload = parsedBody?.payload;

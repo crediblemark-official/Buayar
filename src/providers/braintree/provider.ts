@@ -111,7 +111,7 @@ export class BraintreeProvider extends BasePaymentProvider {
 
     const isValid = btSignature && btPayload
       ? verifyBraintreeWebhook(btSignature, btPayload, privateKey)
-      : true;
+      : false;
 
     const parsedBody = typeof body === "string" ? JSON.parse(body) : body;
     const subject = parsedBody?.subject || parsedBody;

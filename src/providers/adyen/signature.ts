@@ -1,4 +1,5 @@
 import { createHmac } from "crypto";
+import { safeCompare } from "../../utils/crypto";
 
 /**
  * Verifikasi Adyen webhook signature (HMAC-SHA256).
@@ -22,7 +23,8 @@ export function verifyAdyenWebhook(notificationItem: any, hmacKey: string): bool
     const signedData = fields.join(":");
     const keyBytes = Buffer.from(hmacKey, "hex");
     const expected = createHmac("sha256", keyBytes).update(signedData, "utf8").digest("base64");
-    return expected === notificationItem.additionalData?.hmacSignature;
+    const provided = notificationItem.additionalData?.hmacSignature || "";
+    return safeCompare(expected, provided);
   } catch {
     return false;
   }

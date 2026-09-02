@@ -126,7 +126,7 @@ export class SquareProvider extends BasePaymentProvider {
 
     const isValid = signatureHeader
       ? verifySquareWebhook(rawBody, signatureHeader, signatureKey, notificationUrl)
-      : true;
+      : false;
 
     const eventType = parsedBody?.type || "";
     const data = parsedBody?.data?.object || parsedBody?.data || parsedBody;

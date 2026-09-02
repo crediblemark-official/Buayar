@@ -1,4 +1,5 @@
 import { createHmac } from "crypto";
+import { safeCompare } from "../../utils/crypto";
 
 /**
  * Verifikasi Checkout.com webhook signature (HMAC-SHA256).
@@ -10,7 +11,7 @@ export function verifyCheckoutComWebhook(body: string, signatureHeader: string, 
   try {
     const expected = createHmac("sha256", secret).update(body, "utf8").digest("hex");
     const provided = signatureHeader.replace(/^sha256=/, "");
-    return expected === provided;
+    return safeCompare(expected, provided);
   } catch {
     return false;
   }

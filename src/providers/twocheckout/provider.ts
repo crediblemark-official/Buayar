@@ -117,7 +117,7 @@ export class TwoCheckoutProvider extends BasePaymentProvider {
 
     const isValid = secretWord
       ? verifyTwoCheckoutWebhook(secretWord, saleId, productId, invoiceId, providedHash)
-      : true;
+      : false;
 
     const orderId = parsedBody?.REFNOEXT || parsedBody?.ext_ref_no || parsedBody?.SALE_ID || "";
     const amount = Math.round(Number(parsedBody?.IPN_TOTAL_GENERAL || parsedBody?.total || 0) * 100);

@@ -1,4 +1,5 @@
 import { createHmac } from "crypto";
+import { safeCompare } from "../../utils/crypto";
 
 /**
  * Verifikasi Square webhook signature (HMAC-SHA256).
@@ -16,7 +17,7 @@ export function verifySquareWebhook(
   try {
     const payload = notificationUrl + rawBody;
     const expected = createHmac("sha256", signatureKey).update(payload).digest("base64");
-    return expected === signatureHeader;
+    return safeCompare(expected, signatureHeader);
   } catch {
     return false;
   }

@@ -18,7 +18,7 @@ export class MidtransClient {
   async request(
     method: "GET" | "POST" | "PATCH" | "DELETE",
     path: string,
-    body: any
+    body?: any
   ): Promise<any> {
     let url = path.startsWith("http") ? path : `${this.getApiBaseUrl()}${path}`;
 

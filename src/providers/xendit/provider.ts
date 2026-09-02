@@ -233,9 +233,19 @@ export class XenditProvider extends BasePaymentProvider {
         : isExpired
           ? "expired"
           : "failed";
+    const webhookToken = config.extra?.webhookToken;
+    const headerToken =
+      config.extra?.callbackToken ||
+      config.extra?.headers?.["x-callback-token"] ||
+      config.extra?.headers?.["X-Callback-Token"];
+
+    let isValid = true;
+    if (webhookToken || headerToken) {
+      isValid = verifyXenditWebhookToken(headerToken, webhookToken);
+    }
 
     return {
-      isValid: true,
+      isValid,
       provider: "xendit",
       orderId: String(orderId),
       amount: Number(amount) || 0,

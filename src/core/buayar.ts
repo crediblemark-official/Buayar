@@ -140,43 +140,55 @@ export class Buayar {
     const mergedConfig: ProviderConfig = { ...this.config, ...configOverride };
 
     if (headers) {
+      if (!mergedConfig.extra) mergedConfig.extra = {};
+      mergedConfig.extra.headers = headers;
+
       // Stripe
       const stripeSig = headers["stripe-signature"] || headers["Stripe-Signature"];
       if (stripeSig) {
-        if (!mergedConfig.extra) mergedConfig.extra = {};
         mergedConfig.extra.signatureHeader = Array.isArray(stripeSig) ? stripeSig[0] : stripeSig;
       }
       // Checkout.com
       const ckoSig = headers["cko-signature"] || headers["Cko-Signature"];
       if (ckoSig) {
-        if (!mergedConfig.extra) mergedConfig.extra = {};
         mergedConfig.extra.signatureHeader = Array.isArray(ckoSig) ? ckoSig[0] : ckoSig;
       }
       // Razorpay
       const rzpSig = headers["x-razorpay-signature"] || headers["X-Razorpay-Signature"];
       if (rzpSig) {
-        if (!mergedConfig.extra) mergedConfig.extra = {};
         mergedConfig.extra.signatureHeader = Array.isArray(rzpSig) ? rzpSig[0] : rzpSig;
       }
       // Square
       const squareSig = headers["x-square-hmacsha256-signature"] || headers["x-square-signature"];
       if (squareSig) {
-        if (!mergedConfig.extra) mergedConfig.extra = {};
         mergedConfig.extra.signatureHeader = Array.isArray(squareSig) ? squareSig[0] : squareSig;
       }
       // PayU
       const payuSig = headers["openpayu-signature"] || headers["OpenPayU-Signature"];
       if (payuSig) {
-        if (!mergedConfig.extra) mergedConfig.extra = {};
         mergedConfig.extra.signatureHeader = Array.isArray(payuSig) ? payuSig[0] : payuSig;
       }
       // Braintree
       const btSig = headers["bt_signature"];
       const btPayload = headers["bt_payload"];
       if (btSig && btPayload) {
-        if (!mergedConfig.extra) mergedConfig.extra = {};
         mergedConfig.extra.btSignature = Array.isArray(btSig) ? btSig[0] : btSig;
         mergedConfig.extra.btPayload = Array.isArray(btPayload) ? btPayload[0] : btPayload;
+      }
+      // Xendit
+      const xenditToken = headers["x-callback-token"] || headers["X-Callback-Token"];
+      if (xenditToken) {
+        mergedConfig.extra.callbackToken = Array.isArray(xenditToken) ? xenditToken[0] : xenditToken;
+      }
+      // DOKU
+      const dokuSig = headers["signature"] || headers["Signature"];
+      if (dokuSig) {
+        mergedConfig.extra.dokuSignature = Array.isArray(dokuSig) ? dokuSig[0] : dokuSig;
+      }
+      // OY!
+      const oyUser = headers["x-oy-username"] || headers["X-Oy-Username"];
+      if (oyUser) {
+        mergedConfig.extra.oyUsername = Array.isArray(oyUser) ? oyUser[0] : oyUser;
       }
     }
 
@@ -214,8 +226,6 @@ export class Buayar {
         providerName = "adyen";
       } else if (payload.type && payload.data?._links && (payload.type.startsWith("payment_") || payload.type.startsWith("refund_"))) {
         providerName = "checkoutcom";
-      } else if (payload.event && payload.payload?.payment?.entity) {
-        providerName = "razorpay";
       } else if (payload.type && payload.data?.object?.status && payload.merchant_id) {
         providerName = "square";
       } else if (payload.order && payload.order?.status && payload.order?.extOrderId) {

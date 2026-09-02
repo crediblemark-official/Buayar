@@ -30,25 +30,26 @@ export function hmacSha256(data: string, secret: string): string {
 
 /**
  * Timing-safe string comparison menggunakan crypto.timingSafeEqual
- * untuk mencegah timing attack pada perbandingan signature.
- * Kedua string dibandingkan dalam format hex yang konsisten (tidak di-lowercase
- * di sini karena hmacSha256 sudah mengembalikan lowercase hex).
+ * untuk mencegah timing attack pada perbandingan signature / token.
+ * Menggunakan SHA-256 digest untuk memastikan kedua buffer selalu berukuran 32 bytes,
+ * mencegah kebocoran informasi panjang string dan mengatasi penanganan string non-hex / ganjil oleh Buffer.from.
  */
 export function safeCompare(a: string, b: string): boolean {
   if (typeof a !== "string" || typeof b !== "string") return false;
-  try {
-    const bufA = Buffer.from(a, "hex");
-    const bufB = Buffer.from(b, "hex");
-    if (bufA.length !== bufB.length) return false;
-    return crypto.timingSafeEqual(bufA, bufB);
-  } catch {
-    // Fallback: jika bukan hex valid, bandingkan sebagai string biasa
-    // Ini tetap timing-safe untuk string dengan panjang sama
-    if (a.length !== b.length) return false;
-    try {
-      return crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b));
-    } catch {
-      return false;
-    }
+  if (!a && !b) return true;
+  if (!a || !b) return false;
+
+  // Jika kedua string adalah hex dengan panjang sama, normalkan ke lowercase
+  const isHexA = /^[0-9a-fA-F]+$/.test(a);
+  const isHexB = /^[0-9a-fA-F]+$/.test(b);
+  let strA = a;
+  let strB = b;
+  if (isHexA && isHexB && a.length === b.length) {
+    strA = a.toLowerCase();
+    strB = b.toLowerCase();
   }
+
+  const hashA = crypto.createHash("sha256").update(strA).digest();
+  const hashB = crypto.createHash("sha256").update(strB).digest();
+  return crypto.timingSafeEqual(hashA, hashB);
 }

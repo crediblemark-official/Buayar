@@ -1,4 +1,5 @@
 import { createHash, createHmac } from "crypto";
+import { safeCompare } from "../../utils/crypto";
 
 /**
  * Verifikasi PayU webhook signature (MD5 atau SHA-256 dari OpenPayU-Signature header).
@@ -17,12 +18,14 @@ export function verifyPayuWebhook(rawBody: string, signatureHeader: string, md5K
     const providedSig = parts["signature"];
     const algorithm = (parts["algorithm"] || "MD5").toUpperCase();
 
+    if (!providedSig) return false;
+
     if (algorithm === "MD5") {
       const expected = createHash("md5").update(rawBody + md5Key).digest("hex");
-      return expected === providedSig;
+      return safeCompare(expected, providedSig);
     } else if (algorithm === "SHA-256") {
       const expected = createHash("sha256").update(rawBody + md5Key).digest("hex");
-      return expected === providedSig;
+      return safeCompare(expected, providedSig);
     }
 
     return false;

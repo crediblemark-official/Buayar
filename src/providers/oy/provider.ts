@@ -188,7 +188,7 @@ export class OyProvider extends BasePaymentProvider {
   }
 
   async verifyCallback(body: any, config: ProviderConfig): Promise<VerifyCallbackResult> {
-    const username = config.clientKey || config.merchantCode || config.merchantId || "";
+    const username = config.clientKey || config.merchantCode || config.merchantId || config.extra?.username || "";
 
     const orderId = body.partner_tx_id || body.partner_trx_id || body.trx_id || "";
     const amount = body.amount || body.settlement_amount || 0;
@@ -206,9 +206,16 @@ export class OyProvider extends BasePaymentProvider {
         : isExpired
           ? "expired"
           : "failed";
+    const headers = config.extra?.headers || {};
+    const oyUsernameHeader = headers["x-oy-username"] || headers["X-Oy-Username"] || config.extra?.oyUsername;
+
+    let isValid = true;
+    if (oyUsernameHeader || (username && headers && Object.keys(headers).length > 0)) {
+      isValid = verifyOyWebhook(headers, username);
+    }
 
     return {
-      isValid: true,
+      isValid,
       provider: "oy",
       orderId: String(orderId),
       amount: Number(amount) || 0,

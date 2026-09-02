@@ -129,7 +129,7 @@ export class AdyenProvider extends BasePaymentProvider {
     const notificationItems: any[] = body?.notificationItems || [body];
     const item = notificationItems[0]?.NotificationRequestItem || notificationItems[0] || body;
 
-    const isValid = hmacKey ? verifyAdyenWebhook(item, hmacKey) : true;
+    const isValid = hmacKey ? verifyAdyenWebhook(item, hmacKey) : false;
 
     const eventCode = (item.eventCode || "").toUpperCase();
     const success = item.success === "true" || item.success === true;

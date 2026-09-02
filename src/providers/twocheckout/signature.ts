@@ -1,4 +1,5 @@
 import { createHash, createHmac } from "crypto";
+import { safeCompare } from "../../utils/crypto";
 
 /**
  * Build 2Checkout API Authentication header.
@@ -27,8 +28,8 @@ export function verifyTwoCheckoutWebhook(
 
   try {
     const raw = secretWord + saleId + productId + invoiceId;
-    const expected = createHash("md5").update(raw).digest("hex").toUpperCase();
-    return expected === (providedHash || "").toUpperCase();
+    const expected = createHash("md5").update(raw).digest("hex");
+    return safeCompare(expected, providedHash);
   } catch {
     return false;
   }

@@ -68,7 +68,8 @@ export function verifyDokuWebhookSignature(
   // SECURITY: Jika signature atau secret key tidak ada → INVALID, bukan bypass
   if (!incomingSignature || !secretKey) return false;
 
-  let component = `Client-Id:${reqClientId || clientId}\nRequest-Id:${reqId}\nRequest-Timestamp:${reqTimestamp}\nRequest-Target:${requestTarget}`;
+  const target = (headers["request-target"] || headers["Request-Target"] || requestTarget) as string;
+  let component = `Client-Id:${reqClientId || clientId}\nRequest-Id:${reqId}\nRequest-Timestamp:${reqTimestamp}\nRequest-Target:${target}`;
 
   if (body) {
     const rawBody = typeof body === "string" ? body : JSON.stringify(body);

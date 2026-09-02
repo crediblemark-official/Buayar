@@ -1,4 +1,5 @@
 import { createHash, createHmac } from "crypto";
+import { safeCompare } from "../../utils/crypto";
 
 /**
  * Verifikasi Braintree webhook signature (SHA1 HMAC dari bt_payload).
@@ -16,7 +17,7 @@ export function verifyBraintreeWebhook(btSignature: string, btPayload: string, p
 
     const secretHash = createHash("sha1").update(privateKey).digest("hex");
     const expected = createHmac("sha1", secretHash).update(payload).digest("hex");
-    return expected === providedHmac;
+    return safeCompare(expected, providedHmac);
   } catch {
     return false;
   }

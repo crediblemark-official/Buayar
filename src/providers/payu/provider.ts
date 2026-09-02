@@ -146,7 +146,7 @@ export class PayuProvider extends BasePaymentProvider {
 
     const isValid = signatureHeader
       ? verifyPayuWebhook(rawBody, signatureHeader, md5Key)
-      : true;
+      : false;
 
     const order = parsedBody?.order || parsedBody;
     const orderId = order.extOrderId || order.orderId || "";

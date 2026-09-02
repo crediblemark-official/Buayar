@@ -119,7 +119,7 @@ export class CheckoutComProvider extends BasePaymentProvider {
 
     const isValid = signatureHeader
       ? verifyCheckoutComWebhook(rawBody, signatureHeader, webhookSecret)
-      : true;
+      : false;
 
     const eventType = parsedBody?.type || "";
     const data = parsedBody?.data || parsedBody;

@@ -1,4 +1,5 @@
 import { createHmac } from "crypto";
+import { safeCompare } from "../../utils/crypto";
 
 /**
  * Verifikasi Razorpay webhook signature (HMAC-SHA256).
@@ -9,7 +10,7 @@ export function verifyRazorpayWebhook(rawBody: string, signature: string, webhoo
 
   try {
     const expected = createHmac("sha256", webhookSecret).update(rawBody).digest("hex");
-    return expected === signature;
+    return safeCompare(expected, signature);
   } catch {
     return false;
   }

@@ -258,8 +258,18 @@ export class DokuProvider extends BasePaymentProvider {
           ? "expired"
           : "failed";
 
+    const secretKey = config.secretKey || config.apiKey || "";
+    const headers = config.extra?.headers || {};
+    const signature = headers["signature"] || headers["Signature"] || config.extra?.dokuSignature || config.extra?.signatureHeader;
+    const clientId = config.merchantCode || config.clientKey || "";
+
+    let isValid = true;
+    if (signature || (headers && (headers["request-id"] || headers["Request-Id"]))) {
+      isValid = verifyDokuWebhookSignature(headers, body, clientId, secretKey);
+    }
+
     return {
-      isValid: true,
+      isValid,
       provider: "doku",
       orderId: String(orderId),
       amount: Number(amount) || 0,

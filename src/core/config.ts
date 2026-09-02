@@ -128,7 +128,7 @@ export function resolveConfigFromEnv(customConfig?: BuayarConfig): BuayarConfig 
     merchantCode = merchantCode || env.IPAYMU_VA || env.IPAYMU_MERCHANT_CODE || env.BUAYAR_MERCHANT_CODE || env.PG_MERCHANT_CODE || env.PAYMENT_MERCHANT_CODE;
   } else if (provider === "doku") {
     merchantCode = merchantCode || env.DOKU_CLIENT_ID || env.DOKU_MERCHANT_ID || env.BUAYAR_MERCHANT_CODE || env.PG_MERCHANT_CODE || env.PAYMENT_MERCHANT_CODE;
-    clientKey = clientKey || env.DOKU_CLIENT_ID || env.BUAYAR_CLIENT_KEY;
+    clientKey = clientKey || customConfig?.merchantCode || env.DOKU_CLIENT_ID || env.BUAYAR_CLIENT_KEY;
   } else if (provider === "prismalink") {
     merchantCode = merchantCode || env.PRISMALINK_MERCHANT_ID || env.BUAYAR_MERCHANT_CODE || env.PG_MERCHANT_CODE || env.PAYMENT_MERCHANT_CODE;
     merchantId = merchantId || env.PRISMALINK_MERCHANT_ID || env.BUAYAR_MERCHANT_ID;
@@ -144,7 +144,7 @@ export function resolveConfigFromEnv(customConfig?: BuayarConfig): BuayarConfig 
     merchantId = merchantId || env.NICEPAY_IMID || env.BUAYAR_MERCHANT_ID;
   } else if (provider === "oy" || provider === "oyindonesia") {
     merchantCode = merchantCode || env.OY_USERNAME || env.BUAYAR_MERCHANT_CODE || env.PG_MERCHANT_CODE || env.PAYMENT_MERCHANT_CODE;
-    clientKey = clientKey || env.OY_USERNAME || env.BUAYAR_CLIENT_KEY;
+    clientKey = clientKey || customConfig?.merchantCode || env.OY_USERNAME || env.BUAYAR_CLIENT_KEY;
   } else if (provider === "stripe") {
     clientKey = clientKey || env.STRIPE_PUBLIC_KEY || env.STRIPE_PUBLISHABLE_KEY || env.BUAYAR_CLIENT_KEY || env.BUAYAR_PUBLIC_KEY;
     merchantCode = merchantCode || clientKey || "stripe";
@@ -182,13 +182,13 @@ export function resolveConfigFromEnv(customConfig?: BuayarConfig): BuayarConfig 
   const projectId = customConfig?.projectId || env.BUAYAR_PROJECT_ID || env.PG_PROJECT_ID || env.PROJECT_ID || env.SQUARE_LOCATION_ID;
   const publicKey = customConfig?.publicKey || env.BUAYAR_PUBLIC_KEY || env.PG_PUBLIC_KEY || env.PUBLIC_KEY || env.STRIPE_PUBLIC_KEY || env.STRIPE_PUBLISHABLE_KEY || env.CHECKOUTCOM_PUBLIC_KEY;
   const privateKey = customConfig?.privateKey || env.BUAYAR_PRIVATE_KEY || env.PG_PRIVATE_KEY || env.PRIVATE_KEY || env.BRAINTREE_PRIVATE_KEY;
-  const secretKey = customConfig?.secretKey || env.BUAYAR_SECRET_KEY || env.PG_SECRET_KEY || env.SECRET_KEY || env.XENDIT_SECRET_KEY || env.DOKU_SECRET_KEY || env.PRISMALINK_SECRET_KEY || env.FASPAY_PASSWORD || env.FINPAY_MERCHANT_KEY || env.NICEPAY_KEY || env.OY_API_KEY || env.STRIPE_SECRET_KEY || env.PAYPAL_CLIENT_SECRET || env.CHECKOUTCOM_SECRET_KEY || env.RAZORPAY_KEY_SECRET || env.SQUARE_ACCESS_TOKEN || env.BRAINTREE_PRIVATE_KEY || env.TWOCHECKOUT_SECRET_KEY;
+  const secretKey = customConfig?.secretKey || customConfig?.apiKey || customConfig?.serverKey || env.BUAYAR_SECRET_KEY || env.PG_SECRET_KEY || env.SECRET_KEY || env.XENDIT_SECRET_KEY || env.DOKU_SECRET_KEY || env.PRISMALINK_SECRET_KEY || env.FASPAY_PASSWORD || env.FINPAY_MERCHANT_KEY || env.NICEPAY_KEY || env.OY_API_KEY || env.STRIPE_SECRET_KEY || env.PAYPAL_CLIENT_SECRET || env.CHECKOUTCOM_SECRET_KEY || env.RAZORPAY_KEY_SECRET || env.SQUARE_ACCESS_TOKEN || env.BRAINTREE_PRIVATE_KEY || env.TWOCHECKOUT_SECRET_KEY;
   const callbackUrl = customConfig?.callbackUrl || env.BUAYAR_CALLBACK_URL || env.PG_CALLBACK_URL || env.PAYMENT_CALLBACK_URL;
   const returnUrl = customConfig?.returnUrl || env.BUAYAR_RETURN_URL || env.PG_RETURN_URL || env.PAYMENT_RETURN_URL;
 
   const extra = {
     webhookToken: env.XENDIT_WEBHOOK_TOKEN || env.BUAYAR_WEBHOOK_TOKEN,
-    webhookSecret: env.STRIPE_WEBHOOK_SECRET || env.CHECKOUTCOM_WEBHOOK_SECRET || env.BUAYAR_WEBHOOK_SECRET,
+    webhookSecret: env.STRIPE_WEBHOOK_SECRET || env.CHECKOUTCOM_WEBHOOK_SECRET || env.RAZORPAY_WEBHOOK_SECRET || env.BUAYAR_WEBHOOK_SECRET,
     merchantName: env.FASPAY_MERCHANT_NAME || env.BUAYAR_MERCHANT_NAME,
     userId: env.FASPAY_USER_ID,
     iMid: env.NICEPAY_IMID,
