@@ -115,16 +115,20 @@ export const CANONICAL_TO_IPAYMU: Record<string, { paymentMethod: string; paymen
   danamon_va: { paymentMethod: "va", paymentChannel: "danamon" },
   bsi_va: { paymentMethod: "va", paymentChannel: "bsi" },
   bag_va: { paymentMethod: "va", paymentChannel: "bag" },
+  btn_va: { paymentMethod: "va", paymentChannel: "btn" },
   muamalat_va: { paymentMethod: "va", paymentChannel: "bmi" },
   bmi_va: { paymentMethod: "va", paymentChannel: "bmi" },
   qris: { paymentMethod: "qris", paymentChannel: "mpm" },
   gopay_qris: { paymentMethod: "qris", paymentChannel: "mpm" },
   shopeepay_qris: { paymentMethod: "qris", paymentChannel: "mpm" },
+  dana: { paymentMethod: "ewallet", paymentChannel: "dana" },
+  shopeepay: { paymentMethod: "ewallet", paymentChannel: "shopeepay" },
   alfamart: { paymentMethod: "cstore", paymentChannel: "alfamart" },
   indomaret: { paymentMethod: "cstore", paymentChannel: "indomaret" },
   credit_card: { paymentMethod: "cc", paymentChannel: "cc" },
   akulaku: { paymentMethod: "paylater", paymentChannel: "akulaku" },
   kredivo: { paymentMethod: "paylater", paymentChannel: "kredivo" },
+  cod: { paymentMethod: "cod", paymentChannel: "cod" },
 };
 
 /**
@@ -348,6 +352,9 @@ export function toIpaymuPaymentMethod(code?: string): { paymentMethod: string; p
   }
   if (lower.includes("alfa") || lower.includes("indo")) {
     return { paymentMethod: "cstore", paymentChannel: lower };
+  }
+  if (lower.includes("dana") || lower.includes("shopee") || lower.includes("ovo") || lower.includes("gopay") || lower.includes("linkaja")) {
+    return { paymentMethod: "ewallet", paymentChannel: lower };
   }
   return { paymentMethod: lower };
 }

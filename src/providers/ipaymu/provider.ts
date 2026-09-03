@@ -137,14 +137,25 @@ export class IpaymuProvider extends BasePaymentProvider {
           if (ipaymuMethod?.paymentMethod === "va") {
             res.vaNumber = resData.PaymentNo;
             res.vaBank = ipaymuMethod.paymentChannel;
+            res.mode = "va";
           } else if (ipaymuMethod?.paymentMethod === "cstore") {
             res.paymentCode = resData.PaymentNo;
+            res.mode = "retail";
           }
         }
 
         if (resData.QrString || resData.QrImage) {
           res.qrString = resData.QrString;
           res.qrCodeUrl = resData.QrImage || resData.QrTemplate;
+          res.mode = "qris";
+        }
+
+        if (ipaymuMethod?.paymentMethod === "ewallet") {
+          res.mode = "ewallet";
+          if (resData.Url) {
+            res.deeplink = resData.Url;
+            res.paymentUrl = resData.Url;
+          }
         }
 
         if (resData.Expired) {
@@ -243,6 +254,8 @@ export class IpaymuProvider extends BasePaymentProvider {
           else if (groupCode === "cc") category = "Kartu Kredit";
           else if (groupCode === "paylater") category = "Paylater / Cicilan";
           else if (groupCode === "cod") category = "COD";
+          else if (groupCode === "ewallet" || groupCode === "ewallet-asia") category = "E-Wallet";
+          else if (groupCode === "debitonline") category = "Debit Online";
           else category = groupName;
 
           for (const ch of channels) {
@@ -252,6 +265,8 @@ export class IpaymuProvider extends BasePaymentProvider {
               canonicalCode = chCode === "bag" ? "bag_va" : chCode === "bmi" ? "muamalat_va" : `${chCode}_va`;
             } else if (groupCode === "cc") {
               canonicalCode = "credit_card";
+            } else if (groupCode === "qris") {
+              canonicalCode = "qris";
             }
 
             let totalFee = "-";

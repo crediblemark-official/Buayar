@@ -11,6 +11,7 @@ export type CanonicalPaymentMethod =
   | "seabank_va"
   | "muamalat_va"
   | "bag_va"
+  | "btn_va"
   | "artajasa_va"
   // QRIS
   | "qris"
@@ -34,4 +35,6 @@ export type CanonicalPaymentMethod =
   | "kredivo"
   | "akulaku"
   | "indodana"
+  // COD
+  | "cod"
   | string;

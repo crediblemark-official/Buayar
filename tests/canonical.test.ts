@@ -44,6 +44,18 @@ describe("Canonical Payment Methods Mapping", () => {
     const qris = toIpaymuPaymentMethod("qris");
     expect(qris?.paymentMethod).toBe("qris");
     expect(qris?.paymentChannel).toBe("mpm");
+
+    const btn = toIpaymuPaymentMethod("btn_va");
+    expect(btn?.paymentMethod).toBe("va");
+    expect(btn?.paymentChannel).toBe("btn");
+
+    const dana = toIpaymuPaymentMethod("dana");
+    expect(dana?.paymentMethod).toBe("ewallet");
+    expect(dana?.paymentChannel).toBe("dana");
+
+    const cod = toIpaymuPaymentMethod("cod");
+    expect(cod?.paymentMethod).toBe("cod");
+    expect(cod?.paymentChannel).toBe("cod");
   });
 
   it("should correctly classify payment method categories for Accordion UI", () => {
