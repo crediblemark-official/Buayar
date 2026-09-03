@@ -84,7 +84,87 @@ export class IpaymuClient {
   /**
    * Cek detail transaksi iPaymu
    */
-  async checkTransaction(transactionId: string): Promise<any> {
+  async checkTransaction(transactionId: string | number): Promise<any> {
     return this.request("POST", "/transaction", { transactionId });
+  }
+
+  /**
+   * Ambil daftar channel pembayaran aktif milik merchant
+   */
+  async getPaymentMethods(): Promise<any> {
+    return this.request("POST", "/payment-method-list", { account: this.va });
+  }
+
+  /**
+   * Ambil riwayat transaksi merchant berpaginasi
+   */
+  async getHistory(params?: {
+    page?: number;
+    limit?: number;
+    status?: number;
+    date?: string;
+    start_date?: string;
+    end_date?: string;
+    bulkId?: string[];
+  }): Promise<any> {
+    const payload = {
+      account: this.va,
+      page: params?.page || 1,
+      limit: params?.limit || 10,
+      ...params,
+    };
+    return this.request("POST", "/history", payload);
+  }
+
+  /**
+   * Ambil daftar seluruh bank di Indonesia
+   */
+  async getBankList(): Promise<any> {
+    return this.request("POST", "/banklist", { account: this.va });
+  }
+
+  /**
+   * Ambil jangkauan area pengiriman COD
+   */
+  async getCodArea(postalCode?: string): Promise<any> {
+    const payload: any = { account: this.va };
+    if (postalCode) payload.postalCode = postalCode;
+    return this.request("POST", "/cod/getarea", payload);
+  }
+
+  /**
+   * Hitung tarif ongkir pengiriman COD
+   */
+  async getCodRate(params: {
+    pickupArea: string;
+    deliveryArea: string;
+    weight: number;
+    height?: number;
+    length?: number;
+    width?: number;
+    [key: string]: any;
+  }): Promise<any> {
+    return this.request("POST", "/cod/getrate", { account: this.va, ...params });
+  }
+
+  /**
+   * Request pickup kurir COD
+   */
+  async getCodPickup(params: any): Promise<any> {
+    return this.request("POST", "/cod/pickup", { account: this.va, ...params });
+  }
+
+  /**
+   * Ambil nomor resi / AWB pengiriman COD
+   */
+  async getCodAwb(transactionId: string | number): Promise<any> {
+    return this.request("POST", "/cod/getawb", { account: this.va, transactionId });
+  }
+
+  /**
+   * Lacak status pengiriman kurir berdasarkan no resi / AWB
+   */
+  async getCodTracking(awb: string): Promise<any> {
+    return this.request("POST", "/cod/tracking", { account: this.va, awb });
   }
 }

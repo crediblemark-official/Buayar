@@ -30,32 +30,32 @@
 
 #### 🇮🇩 Indonesian (10)
 
-| Provider | Redirect | Direct API | Webhook | Client |
-|---|:---:|:---:|:---:|:---:|
-| Midtrans | ✅ Snap | ✅ Core API | SHA-512 | `MidtransClient` |
-| Duitku | ✅ | ✅ | MD5 | `DuitkuClient` |
-| iPaymu | ✅ | ✅ | HMAC-SHA256 | `IpaymuClient` |
-| Xendit | ✅ Invoice v2 | ✅ Payments v3 | Token | `XenditClient` |
-| DOKU Jokul | ✅ v1 | ✅ v2 | HMAC-SHA256 | `DokuClient` |
-| PrismaLink | ✅ | ✅ | SHA-256 | `PrismalinkClient` |
-| Faspay | ✅ | ✅ | SHA1(MD5) | `FaspayClient` |
-| Finpay | ✅ | ✅ | HMAC-SHA512 | `FinpayClient` |
-| Nicepay | ✅ | ✅ | SHA-256 | `NicepayClient` |
-| OY! Bisnis | ✅ | ✅ | Header Auth | `OyClient` |
+| Provider | Status | Redirect | Direct API | Webhook | Client |
+|---|:---:|:---:|:---:|:---:|:---:|
+| Midtrans | Tested | ✅ Snap | ✅ Core API | SHA-512 | `MidtransClient` |
+| Duitku | Tested | ✅ | ✅ | MD5 | `DuitkuClient` |
+| iPaymu | Tested | ✅ | ✅ | HMAC-SHA256 | `IpaymuClient` |
+| Xendit | Tested | ✅ Invoice v2 | ✅ Payments v3 | Token | `XenditClient` |
+| DOKU Jokul | Tested | ✅ v1 | ✅ v2 | HMAC-SHA256 | `DokuClient` |
+| PrismaLink | Tested | ✅ | ✅ | SHA-256 | `PrismalinkClient` |
+| Faspay | Tested | ✅ | ✅ | SHA1(MD5) | `FaspayClient` |
+| Finpay | Tested | ✅ | ✅ | HMAC-SHA512 | `FinpayClient` |
+| Nicepay | Tested | ✅ | ✅ | SHA-256 | `NicepayClient` |
+| OY! Bisnis | Tested | ✅ | ✅ | Header Auth | `OyClient` |
 
 #### 🌍 International (9)
 
-| Provider | Redirect | Direct API | Webhook | Client |
-|---|:---:|:---:|:---:|:---:|
-| Stripe | ✅ Checkout Sessions | ✅ Payment Intents | HMAC-SHA256 | `StripeClient` |
-| PayPal | ✅ Orders v2 | ✅ Capture | OAuth2 | `PaypalClient` |
-| Adyen | ✅ Sessions v68 | ✅ Payments v68 | HMAC-SHA256 | `AdyenClient` |
-| Checkout.com | ✅ Payment Links | ✅ Payments API | HMAC-SHA256 | `CheckoutComClient` |
-| Razorpay | ✅ Payment Links | ✅ Orders API | HMAC-SHA256 | `RazorpayClient` |
-| Square | ✅ Payment Links | ✅ Payments API | HMAC-SHA256 | `SquareClient` |
-| PayU | ✅ Orders v2.1 | ✅ Pay Methods | MD5/SHA-256 | `PayuClient` |
-| Braintree | ✅ Drop-in UI Token | ✅ Transaction API | SHA1 HMAC | `BraintreeClient` |
-| 2Checkout | ✅ REST v6.0 | ✅ REST v6.0 | IPN MD5 | `TwoCheckoutClient` |
+| Provider | Status | Redirect | Direct API | Webhook | Client |
+|---|:---:|:---:|:---:|:---:|:---:|
+| Stripe | Tested | ✅ Checkout Sessions | ✅ Payment Intents | HMAC-SHA256 | `StripeClient` |
+| PayPal | Tested | ✅ Orders v2 | ✅ Capture | OAuth2 | `PaypalClient` |
+| Adyen | Tested | ✅ Sessions v68 | ✅ Payments v68 | HMAC-SHA256 | `AdyenClient` |
+| Checkout.com | Tested | ✅ Payment Links | ✅ Payments API | HMAC-SHA256 | `CheckoutComClient` |
+| Razorpay | Tested | ✅ Payment Links | ✅ Orders API | HMAC-SHA256 | `RazorpayClient` |
+| Square | Tested | ✅ Payment Links | ✅ Payments API | HMAC-SHA256 | `SquareClient` |
+| PayU | Tested | ✅ Orders v2.1 | ✅ Pay Methods | MD5/SHA-256 | `PayuClient` |
+| Braintree | Tested | ✅ Drop-in UI Token | ✅ Transaction API | SHA1 HMAC | `BraintreeClient` |
+| 2Checkout | Tested | ✅ REST v6.0 | ✅ REST v6.0 | IPN MD5 | `TwoCheckoutClient` |
 
 ### ⚙️ Environment Variables
 
@@ -93,30 +93,31 @@ buayar.supports("xendit", "checkBalance"); // true
 buayar.supportsMethod("qris", "stripe");   // true
 ```
 
-#### Provider-Specific Variables
+#### Universal Credential Mapping (`BUAYAR_*`)
 
-| Variable | Provider | Description |
-| :--- | :--- | :--- |
-| `MIDTRANS_SERVER_KEY` | Midtrans | Server Key |
-| `MIDTRANS_CLIENT_KEY` | Midtrans | Client Key (frontend) |
-| `DUITKU_API_KEY` / `DUITKU_MERCHANT_CODE` | Duitku | API Key & Merchant Code |
-| `IPAYMU_API_KEY` / `IPAYMU_VA` | iPaymu | API Key & VA number |
-| `XENDIT_SECRET_KEY` / `XENDIT_WEBHOOK_TOKEN` | Xendit | Secret Key & Webhook Token |
-| `DOKU_CLIENT_ID` / `DOKU_SECRET_KEY` | DOKU | Client ID & Secret Key |
-| `PRISMALINK_MERCHANT_ID` / `PRISMALINK_SECRET_KEY` | PrismaLink | Merchant ID & Secret Key |
-| `FASPAY_MERCHANT_ID` / `FASPAY_USER_ID` / `FASPAY_PASSWORD` | Faspay | Merchant ID, User ID & Password |
-| `FINPAY_MERCHANT_ID` / `FINPAY_MERCHANT_KEY` | Finpay | Merchant ID & Key |
-| `NICEPAY_IMID` / `NICEPAY_KEY` | Nicepay | iMid & Merchant Key |
-| `OY_USERNAME` / `OY_API_KEY` | OY! Bisnis | Username & API Key |
-| `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` / `STRIPE_PUBLIC_KEY` | Stripe | Secret, Webhook Secret, Publishable Key |
-| `PAYPAL_CLIENT_ID` / `PAYPAL_CLIENT_SECRET` / `PAYPAL_WEBHOOK_ID` | PayPal | OAuth2 Credentials & Webhook ID |
-| `ADYEN_API_KEY` / `ADYEN_MERCHANT_ACCOUNT` / `ADYEN_HMAC_KEY` | Adyen | API Key, Merchant Account & HMAC Key |
-| `CHECKOUTCOM_SECRET_KEY` / `CHECKOUTCOM_PUBLIC_KEY` / `CHECKOUTCOM_WEBHOOK_SECRET` | Checkout.com | Secret, Public Key & Webhook Secret |
-| `RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET` / `RAZORPAY_WEBHOOK_SECRET` | Razorpay | Key ID, Key Secret & Webhook Secret |
-| `SQUARE_ACCESS_TOKEN` / `SQUARE_APPLICATION_ID` / `SQUARE_LOCATION_ID` | Square | Access Token, App ID & Location ID |
-| `PAYU_POS_ID` / `PAYU_MD5_KEY` / `PAYU_OAUTH_CLIENT_ID` / `PAYU_OAUTH_CLIENT_SECRET` | PayU | POS ID, MD5 Key & OAuth2 Credentials |
-| `BRAINTREE_MERCHANT_ID` / `BRAINTREE_PUBLIC_KEY` / `BRAINTREE_PRIVATE_KEY` | Braintree | Merchant ID, Public & Private Key |
-| `TWOCHECKOUT_MERCHANT_CODE` / `TWOCHECKOUT_SECRET_KEY` / `TWOCHECKOUT_SECRET_WORD` | 2Checkout | Merchant Code, Secret Key & IPN Word |
+You don't need provider-specific variable names. Simply use unified **`BUAYAR_*`** variables:
+
+| Provider | `BUAYAR_PROVIDER` | `BUAYAR_API_KEY` | `BUAYAR_MERCHANT_CODE` | `BUAYAR_CLIENT_KEY` / Extra |
+| :--- | :--- | :--- | :--- | :--- |
+| **Midtrans** | `midtrans` | Server Key | *(optional)* | Client Key |
+| **Duitku** | `duitku` | API Key | Merchant Code | *(not needed)* |
+| **iPaymu** | `ipaymu` | API Key | Virtual Account (VA) | *(not needed)* |
+| **Xendit** | `xendit` | Secret Key | *(optional)* | Webhook Token (`BUAYAR_WEBHOOK_SECRET`) |
+| **DOKU Jokul** | `doku` | Secret Key | Client ID / Merchant ID | Client ID |
+| **PrismaLink** | `prismalink` | Secret Key | Merchant ID | *(not needed)* |
+| **Faspay** | `faspay` | Password | Merchant ID | User ID |
+| **Finpay** | `finpay` | Merchant Key | Merchant ID | *(not needed)* |
+| **Nicepay** | `nicepay` | Server Key | I-MID | *(not needed)* |
+| **OY! Bisnis** | `oy` | API Key | Username | Username |
+| **Stripe** | `stripe` | Secret Key | *(not needed)* | Publishable Key / Webhook Secret |
+| **PayPal** | `paypal` | Client Secret | Client ID | Client ID |
+| **Adyen** | `adyen` | API Key | Merchant Account | Client Key / HMAC Key |
+| **Checkout.com** | `checkoutcom` | Secret Key | *(not needed)* | Public Key / Webhook Secret |
+| **Razorpay** | `razorpay` | Key Secret | Key ID | Key ID |
+| **Square** | `square` | Access Token | App ID | Location ID (`BUAYAR_PROJECT_ID`) |
+| **PayU** | `payu` | MD5 Key | POS ID | POS ID |
+| **Braintree** | `braintree` | Private Key | Merchant ID | Public Key |
+| **2Checkout** | `twocheckout` | Secret Key | Merchant Code | Secret Word (`BUAYAR_WEBHOOK_SECRET`) |
 
 ### 📖 Usage
 
@@ -225,7 +226,7 @@ BUAYAR_WEBHOOK_SECRET=whsec_...
 
 * **Midtrans** — Snap API (Redirect/Popup) & Core API Direct Charge. Verifikasi SHA-512. `MidtransClient`.
 * **Duitku** — Redirect Checkout & Direct Inquiry API. Verifikasi MD5. `DuitkuClient` (Disbursement, Inquiry Rekening, Saldo).
-* **iPaymu** — Redirect & Direct Payment API v2. Verifikasi HMAC-SHA256. `IpaymuClient` (Cek Saldo, Cek Transaksi).
+* **iPaymu** `[Tested]` — Redirect & Direct Payment API v2. Verifikasi HMAC-SHA256. `IpaymuClient` (Cek Saldo, Cek Transaksi, Histori, Bank List, Dynamic Methods, COD).
 * **Xendit** — Invoice v2 & Payment Requests v3. Webhook Token. `XenditClient` (Saldo, Expire Invoice, Disbursement).
 * **DOKU Jokul** — Checkout v1 & Direct API v2. HMAC-SHA256 + Digest. `DokuClient`.
 * **PrismaLink** — Checkout Page & Direct API. SHA-256. `PrismalinkClient`.
@@ -266,33 +267,31 @@ BUAYAR_CALLBACK_URL=https://myapp.com/api/payment/webhook
 BUAYAR_RETURN_URL=https://myapp.com/payment/finish
 ```
 
-#### Kamus Variabel Lengkap Spesifik Provider
+#### Pemetaan Kredensial ke Variabel Universal `BUAYAR_*`
 
-| Variabel `.env` | Provider | Keterangan |
-| :--- | :--- | :--- |
-| `MIDTRANS_SERVER_KEY` / `MIDTRANS_CLIENT_KEY` | Midtrans | Server Key & Client Key |
-| `DUITKU_API_KEY` / `DUITKU_MERCHANT_CODE` | Duitku | API Key & Merchant Code |
-| `IPAYMU_API_KEY` / `IPAYMU_VA` | iPaymu | API Key & Nomor VA Merchant |
-| `XENDIT_SECRET_KEY` / `XENDIT_WEBHOOK_TOKEN` | Xendit | Secret Key & Webhook Token |
-| `DOKU_CLIENT_ID` / `DOKU_SECRET_KEY` | DOKU | Client ID & Secret Key |
-| `PRISMALINK_MERCHANT_ID` / `PRISMALINK_SECRET_KEY` | PrismaLink | Merchant ID & Secret Key |
-| `FASPAY_MERCHANT_ID` / `FASPAY_USER_ID` / `FASPAY_PASSWORD` | Faspay | Merchant ID, User ID & Password |
-| `FASPAY_MERCHANT_NAME` | Faspay | Nama display merchant di halaman Faspay |
-| `FINPAY_MERCHANT_ID` / `FINPAY_MERCHANT_KEY` | Finpay | Merchant ID & Merchant Key |
-| `NICEPAY_IMID` / `NICEPAY_KEY` | Nicepay | iMid & Merchant Key |
-| `OY_USERNAME` / `OY_API_KEY` | OY! Bisnis | Username & API Key |
-| `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` / `STRIPE_PUBLIC_KEY` | Stripe | Secret Key, Webhook Secret & Publishable Key |
-| `PAYPAL_CLIENT_ID` / `PAYPAL_CLIENT_SECRET` / `PAYPAL_WEBHOOK_ID` | PayPal | Client ID, Client Secret & Webhook ID |
-| `ADYEN_API_KEY` / `ADYEN_MERCHANT_ACCOUNT` / `ADYEN_HMAC_KEY` | Adyen | API Key, Merchant Account & HMAC Key |
-| `ADYEN_CLIENT_KEY` / `ADYEN_LIVE_URL_PREFIX` | Adyen | Client Key (frontend) & Live URL prefix (production) |
-| `CHECKOUTCOM_SECRET_KEY` / `CHECKOUTCOM_PUBLIC_KEY` / `CHECKOUTCOM_WEBHOOK_SECRET` | Checkout.com | Secret Key, Public Key & Webhook Secret |
-| `RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET` / `RAZORPAY_WEBHOOK_SECRET` | Razorpay | Key ID, Key Secret & Webhook Secret |
-| `SQUARE_ACCESS_TOKEN` / `SQUARE_APPLICATION_ID` / `SQUARE_LOCATION_ID` | Square | Access Token, App ID & Location ID |
-| `SQUARE_WEBHOOK_SIGNATURE_KEY` | Square | Signature Key untuk verifikasi webhook |
-| `PAYU_POS_ID` / `PAYU_MD5_KEY` | PayU | POS ID (Merchant ID) & MD5 Key untuk webhook |
-| `PAYU_OAUTH_CLIENT_ID` / `PAYU_OAUTH_CLIENT_SECRET` | PayU | OAuth2 Client ID & Secret untuk Bearer Token |
-| `BRAINTREE_MERCHANT_ID` / `BRAINTREE_PUBLIC_KEY` / `BRAINTREE_PRIVATE_KEY` | Braintree | Merchant ID, Public Key & Private Key |
-| `TWOCHECKOUT_MERCHANT_CODE` / `TWOCHECKOUT_SECRET_KEY` / `TWOCHECKOUT_SECRET_WORD` | 2Checkout | Merchant Code, Secret Key & Secret Word (IPN) |
+Anda **tidak perlu** membuat nama variabel khusus per provider. Cukup gunakan set variabel seragam **`BUAYAR_*`**. Tabel berikut menunjukkan data apa dari dashboard masing-masing payment gateway yang perlu Anda masukkan ke variabel `BUAYAR_*`:
+
+| Provider | `BUAYAR_PROVIDER` | `BUAYAR_API_KEY` | `BUAYAR_MERCHANT_CODE` | `BUAYAR_CLIENT_KEY` / Tambahan |
+| :--- | :--- | :--- | :--- | :--- |
+| **Midtrans** | `midtrans` | Server Key | *(opsional)* | Client Key |
+| **Duitku** | `duitku` | API Key | Merchant Code | *(tidak perlu)* |
+| **iPaymu** | `ipaymu` | API Key | Nomor Virtual Account (VA) | *(tidak perlu)* |
+| **Xendit** | `xendit` | Secret Key | *(opsional)* | Webhook Token (`BUAYAR_WEBHOOK_SECRET`) |
+| **DOKU Jokul** | `doku` | Secret Key | Client ID / Merchant ID | Client ID |
+| **PrismaLink** | `prismalink` | Secret Key | Merchant ID | *(tidak perlu)* |
+| **Faspay** | `faspay` | Password | Merchant ID | User ID |
+| **Finpay** | `finpay` | Merchant Key | Merchant ID | *(tidak perlu)* |
+| **Nicepay** | `nicepay` | Server Key | I-MID | *(tidak perlu)* |
+| **OY! Bisnis** | `oy` | API Key | Username | Username |
+| **Stripe** | `stripe` | Secret Key | *(tidak perlu)* | Publishable Key / Webhook Secret |
+| **PayPal** | `paypal` | Client Secret | Client ID | Client ID |
+| **Adyen** | `adyen` | API Key | Merchant Account | Client Key / HMAC Key |
+| **Checkout.com** | `checkoutcom` | Secret Key | *(tidak perlu)* | Public Key / Webhook Secret |
+| **Razorpay** | `razorpay` | Key Secret | Key ID | Key ID |
+| **Square** | `square` | Access Token | App ID | Location ID (`BUAYAR_PROJECT_ID`) |
+| **PayU** | `payu` | MD5 Key | POS ID | POS ID |
+| **Braintree** | `braintree` | Private Key | Merchant ID | Public Key |
+| **2Checkout** | `twocheckout` | Secret Key | Merchant Code | Secret Word (`BUAYAR_WEBHOOK_SECRET`) |
 
 ### 📖 Panduan Penggunaan
 

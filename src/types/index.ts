@@ -27,8 +27,34 @@ export interface CreateInvoiceParams {
    * Contoh: 'idr', 'usd', 'sgd'
    */
   currency?: string;
+  /**
+   * Pilihan pembebanan biaya transaksi (didukung iPaymu dll).
+   * 'MERCHANT' = biaya transaksi dipotong dari omset merchant (default).
+   * 'BUYER' = biaya transaksi ditambahkan ke total tagihan pembeli.
+   */
+  feeDirection?: "MERCHANT" | "BUYER";
+  /**
+   * Mengaktifkan sistem Escrow (Rekening Bersama) jika didukung provider.
+   */
+  escrow?: boolean;
+  /**
+   * Rincian item produk (opsional, untuk multi-item cart / logistik).
+   */
+  items?: Array<{
+    id?: string;
+    name: string;
+    price: number;
+    quantity: number;
+    description?: string;
+    weight?: number;
+    length?: number;
+    width?: number;
+    height?: number;
+  }>;
   /** Parameter kustom tambahan untuk provider spesifik (opsional) */
   providerParams?: any;
+  /** Konfigurasi atau data kustom tambahan untuk provider (opsional) */
+  extra?: Record<string, any>;
 }
 
 export interface MandiriBillInfo {
@@ -181,7 +207,7 @@ export interface PaymentMethodItem {
   /** Status ketersediaan channel */
   isOnline: boolean;
   /** Kategori grup untuk Accordion UI */
-  category: "Virtual Account" | "QRIS" | "E-Wallet" | "Retail / Gerai" | "Kartu Kredit" | "Paylater / Cicilan" | "Lainnya";
+  category: "Virtual Account" | "QRIS" | "E-Wallet" | "Retail / Gerai" | "Kartu Kredit" | "Paylater / Cicilan" | "Lainnya" | string;
 }
 
 export interface PaymentMethod {
@@ -189,8 +215,9 @@ export interface PaymentMethod {
   paymentName: string;
   paymentImage: string;
   totalFee: string;
-  category: "Virtual Account" | "QRIS" | "E-Wallet" | "Retail / Gerai" | "Kartu Kredit" | "Paylater / Cicilan" | "Lainnya";
+  category: "Virtual Account" | "QRIS" | "E-Wallet" | "Retail / Gerai" | "Kartu Kredit" | "Paylater / Cicilan" | "Lainnya" | string;
   code?: string;
+  extra?: any;
   feeDetail?: {
     flat: number;
     percent: number;

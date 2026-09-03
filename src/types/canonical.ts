@@ -10,6 +10,7 @@ export type CanonicalPaymentMethod =
   | "bsi_va"
   | "seabank_va"
   | "muamalat_va"
+  | "bag_va"
   | "artajasa_va"
   // QRIS
   | "qris"

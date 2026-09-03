@@ -36,35 +36,52 @@ export class IpaymuProvider extends BasePaymentProvider {
     const endpoint = isDirect ? "/payment/direct" : "/payment";
     const url = `${baseUrl}${endpoint}`;
 
+    const notifyUrl = callbackUrl || config.callbackUrl || "https://localhost/callback";
+    const redirectUrl = returnUrl || config.returnUrl || "https://localhost/return";
+    const feeDirection = params.feeDirection || params.extra?.feeDirection || config.extra?.feeDirection;
+    const escrow = params.escrow !== undefined ? params.escrow : (params.extra?.escrow !== undefined ? params.extra?.escrow : config.extra?.escrow);
+
     let payload: any;
     if (isDirect) {
       payload = {
         name: customer.name,
         email: customer.email,
-        phone: customer.phone || "",
+        phone: customer.phone || "081234567890",
         amount: integerAmount,
-        notifyUrl: callbackUrl || config.callbackUrl || "",
+        notifyUrl,
         expired: 24,
         expiredType: "hours",
         comments: productDetails,
         referenceId: orderId,
         paymentMethod: ipaymuMethod.paymentMethod,
         ...(ipaymuMethod.paymentChannel ? { paymentChannel: ipaymuMethod.paymentChannel } : {}),
+        ...(feeDirection ? { feeDirection } : {}),
+        ...(escrow !== undefined ? { escrow } : {}),
         ...params.providerParams,
       };
     } else {
+      const hasItems = params.items && params.items.length > 0;
+      const product = hasItems
+        ? params.items!.map(i => i.name)
+        : [productDetails.length > 50 ? productDetails.substring(0, 47) + "..." : productDetails];
+      const qty = hasItems ? params.items!.map(i => i.quantity) : [1];
+      const price = hasItems ? params.items!.map(i => Math.round(i.price)) : [integerAmount];
+      const description = hasItems ? params.items!.map(i => i.description || i.name) : [productDetails];
+
       payload = {
-        product: [productDetails.length > 50 ? productDetails.substring(0, 47) + "..." : productDetails],
-        qty: [1],
-        price: [integerAmount],
-        description: [productDetails],
-        returnUrl: returnUrl || config.returnUrl || "",
-        notifyUrl: callbackUrl || config.callbackUrl || "",
-        cancelUrl: returnUrl || config.returnUrl || "",
+        product,
+        qty,
+        price,
+        description,
+        returnUrl: redirectUrl,
+        notifyUrl,
+        cancelUrl: redirectUrl,
         referenceId: orderId,
         buyerName: customer.name,
         buyerEmail: customer.email,
-        buyerPhone: customer.phone || "",
+        buyerPhone: customer.phone || "081234567890",
+        ...(feeDirection ? { feeDirection } : {}),
+        ...(escrow !== undefined ? { escrow } : {}),
         ...params.providerParams,
       };
     }
@@ -108,8 +125,8 @@ export class IpaymuProvider extends BasePaymentProvider {
           provider: "ipaymu",
           orderId,
           amount: integerAmount,
-          reference: resData.TransactionId ? String(resData.TransactionId) : String(resData.SessionId || ""),
-          paymentUrl: resData.Url,
+          reference: resData.TransactionId ? String(resData.TransactionId) : String(resData.SessionId || resData.SessionID || ""),
+          paymentUrl: resData.Url || resData.url,
           rawResponse: data,
         };
 
@@ -175,6 +192,101 @@ export class IpaymuProvider extends BasePaymentProvider {
   }
 
   async getPaymentMethods(params: GetPaymentMethodsParams, config: ProviderConfig): Promise<GetPaymentMethodsResult> {
+    const va = config.merchantCode || config.merchantId || "";
+    const apiKey = config.apiKey || "";
+    const sandbox = !!config.sandbox;
+
+    // Coba ambil channel aktif dinamis langsung dari API v2
+    if (va && apiKey) {
+      try {
+        const url = `${this.getBaseUrl(sandbox)}/payment-method-list`;
+        const payload = { account: va };
+        const { signature, timestamp } = generateIpaymuSignature("POST", va, apiKey, payload);
+
+        const response = await fetch(url, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "va": va,
+            "signature": signature,
+            "timestamp": timestamp,
+          },
+          body: JSON.stringify(payload),
+        });
+
+        const data: any = await response.json().catch(() => null);
+        if (response.ok && data?.Data && Array.isArray(data.Data)) {
+          const methods: PaymentMethod[] = [];
+          const categories: Record<string, PaymentMethod[]> = {};
+
+          for (const group of data.Data) {
+            const groupCode = (group.Code || "").toLowerCase();
+            const groupName = group.Name || group.Description || "Lainnya";
+            const channels = group.Channels || [];
+
+            let category = "Lainnya";
+            if (groupCode === "va") category = "Virtual Account";
+            else if (groupCode === "cstore") category = "Retail / Gerai";
+            else if (groupCode === "qris") category = "QRIS";
+            else if (groupCode === "cc") category = "Kartu Kredit";
+            else if (groupCode === "paylater") category = "Paylater / Cicilan";
+            else if (groupCode === "cod") category = "COD";
+            else category = groupName;
+
+            for (const ch of channels) {
+              const chCode = (ch.Code || "").toLowerCase();
+              let canonicalCode = chCode;
+              if (groupCode === "va") {
+                canonicalCode = chCode === "bag" ? "bag_va" : chCode === "bmi" ? "muamalat_va" : `${chCode}_va`;
+              } else if (groupCode === "cc") {
+                canonicalCode = "credit_card";
+              }
+
+              let totalFee = "-";
+              if (ch.TransactionFee) {
+                if (ch.TransactionFee.ActualFeeType === "PERCENT") {
+                  totalFee = `${ch.TransactionFee.ActualFee}%`;
+                } else if (ch.TransactionFee.ActualFee !== undefined) {
+                  totalFee = `IDR ${Number(ch.TransactionFee.ActualFee).toLocaleString()}`;
+                }
+              }
+
+              const pm: PaymentMethod = {
+                paymentMethod: canonicalCode,
+                code: canonicalCode,
+                paymentName: ch.Name || ch.Description || canonicalCode,
+                paymentImage: `https://my.ipaymu.com/images/banks/${chCode}.png`,
+                totalFee,
+                category,
+                extra: {
+                  healthStatus: ch.HealthStatus,
+                  instructionsDoc: ch.PaymentInstructionsDoc,
+                  feeDetail: ch.TransactionFee,
+                },
+              };
+
+              methods.push(pm);
+              if (!categories[category]) categories[category] = [];
+              categories[category].push(pm);
+            }
+          }
+
+          if (methods.length > 0) {
+            return {
+              success: true,
+              provider: "ipaymu",
+              methods,
+              categories,
+              rawResponse: data,
+            };
+          }
+        }
+      } catch (err) {
+        // Fallback ke staticMethods di bawah
+      }
+    }
+
     const staticMethods: PaymentMethod[] = [
       {
         paymentMethod: "bca_va",
@@ -237,6 +349,22 @@ export class IpaymuProvider extends BasePaymentProvider {
         code: "bsi_va",
         paymentName: "BSI Virtual Account",
         paymentImage: "https://my.ipaymu.com/images/banks/bsi.png",
+        totalFee: "IDR 3,500",
+        category: "Virtual Account",
+      },
+      {
+        paymentMethod: "bag_va",
+        code: "bag_va",
+        paymentName: "Bank Artha Graha Virtual Account",
+        paymentImage: "https://my.ipaymu.com/images/banks/bag.png",
+        totalFee: "IDR 3,500",
+        category: "Virtual Account",
+      },
+      {
+        paymentMethod: "muamalat_va",
+        code: "muamalat_va",
+        paymentName: "Bank Muamalat Virtual Account",
+        paymentImage: "https://my.ipaymu.com/images/banks/bmi.png",
         totalFee: "IDR 3,500",
         category: "Virtual Account",
       },
@@ -348,11 +476,15 @@ export class IpaymuProvider extends BasePaymentProvider {
       }
 
       const txData = data.Data || {};
-      const statusText = (txData.Status || txData.status || "").toString().toLowerCase();
-      const isPaid = statusText === "berhasil" || statusText === "success" || txData.StatusCode === 1;
-      const isPending = statusText === "pending" || txData.StatusCode === 0;
-      const isFailed = !isPaid && !isPending;
-      const isExpired = statusText === "expired";
+      const rawStatus = txData.Status !== undefined ? txData.Status : txData.status;
+      const statusDesc = (txData.StatusDesc || "").toString().toLowerCase();
+      const paidStatus = (txData.PaidStatus || "").toString().toLowerCase();
+      const statusCode = txData.StatusCode !== undefined ? Number(txData.StatusCode) : (rawStatus !== undefined ? Number(rawStatus) : undefined);
+
+      const isPaid = statusCode === 1 || paidStatus === "paid" || statusDesc.includes("berhasil") || statusDesc.includes("success");
+      const isPending = statusCode === 0 || paidStatus === "unpaid" || statusDesc.includes("menunggu") || statusDesc.includes("pending");
+      const isExpired = statusCode === 2 || statusDesc.includes("expired") || statusDesc.includes("kadaluarsa");
+      const isFailed = !isPaid && !isPending && !isExpired;
 
       const status: "paid" | "pending" | "failed" | "expired" = isPaid
         ? "paid"

@@ -19,7 +19,8 @@ Panduan ini adalah **satu-satunya** panduan yang Anda butuhkan untuk mengintegra
 9. [Provider Dinamis & Autodetect](#-provider-dinamis--autodetect)
 10. [Cek Capability Provider (Portabilitas)](#-cek-capability-provider-portabilitas)
 11. [Fitur Khusus Provider (`<X>Client`)](#-fitur-khusus-provider-xclient)
-12. [Kamus Variabel `.env` per Provider](#-kamus-variabel-env-per-provider)
+12. [Panduan Pengisian Variabel Universal (`BUAYAR_*`) per Provider](#-panduan-pengisian-variabel-universal-buayar_-per-provider)
+13. [Daftar Canonical Payment Methods](#-daftar-canonical-payment-methods)
 
 ---
 
@@ -370,57 +371,59 @@ const balance = await xendit.checkBalance("CASH");
 
 Rangkuman kemampuan ekstra tiap provider:
 
-| Provider | Getter | Kemampuan ekstra |
-| :--- | :--- | :--- |
-| Midtrans | `getMidtransClient()` | cancel/refund/expire/approve/deny/capture, GoPay tokenization, Subscription, Payment Link, IRIS balance |
-| Duitku | `getDuitkuClient()` | balance, listBanks, inquiryBankAccount, disburse, checkDisbursementStatus |
-| iPaymu | `getIpaymuClient()` | balance, checkTransaction |
-| Xendit | `getXenditClient()` | balance, expireInvoice, createDisbursement |
-| DOKU | `getDokuClient()` | checkTransaction |
-| PrismaLink | `getPrismalinkClient()` | checkTransaction |
-| Faspay | `getFaspayClient()` | cancelTransaction, checkTransaction |
-| Finpay | `getFinpayClient()` | checkTransaction |
-| Nicepay | `getNicepayClient()` | cancelTransaction, checkTransaction |
-| OY! Bisnis | `getOyClient()` | checkTransaction, balance, remit (transfer dana) |
-| Stripe | `getStripeClient()` | balance, createRefund, retrieveCheckoutSession, retrievePaymentIntent |
-| PayPal | `getPaypalClient()` | captureOrder, getOrder, refundCapture, checkBalance, verifyWebhookSignature |
-| Adyen | `getAdyenClient()` | capturePayment, cancelPayment, refundPayment, getPaymentDetails, getAvailablePaymentMethods |
-| Checkout.com | `getCheckoutComClient()` | balance, refundPayment, voidPayment, getPaymentDetails, listPaymentLinks |
-| Razorpay | `getRazorpayClient()` | capturePayment, createRefund, checkBalance, fetchPayment, listPayments |
-| Square | `getSquareClient()` | retrieveBalance, refundPayment, cancelPayment, getPayment, listLocations |
-| PayU | `getPayuClient()` | cancelOrder, getOrder, refundOrder |
-| Braintree | `getBraintreeClient()` | getClientToken, findTransaction, refundTransaction, voidTransaction |
-| 2Checkout | `getTwoCheckoutClient()` | getOrder, listOrders, getSubscription, refundOrder |
+| Provider | Status | Getter | Kemampuan ekstra |
+| :--- | :---: | :--- | :--- |
+| Midtrans | Tested | `getMidtransClient()` | cancel/refund/expire/approve/deny/capture, GoPay tokenization, Subscription, Payment Link, IRIS balance |
+| Duitku | Tested | `getDuitkuClient()` | balance, listBanks, inquiryBankAccount, disburse, checkDisbursementStatus |
+| iPaymu | Tested | `getIpaymuClient()` | balance, checkTransaction, getHistory, getBankList, getPaymentMethods, COD logistics (getArea, getRate, getPickup, getAwb, getTracking) |
+| Xendit | Tested | `getXenditClient()` | balance, expireInvoice, createDisbursement |
+| DOKU | Tested | `getDokuClient()` | checkTransaction |
+| PrismaLink | Tested | `getPrismalinkClient()` | checkTransaction |
+| Faspay | Tested | `getFaspayClient()` | cancelTransaction, checkTransaction |
+| Finpay | Tested | `getFinpayClient()` | checkTransaction |
+| Nicepay | Tested | `getNicepayClient()` | cancelTransaction, checkTransaction |
+| OY! Bisnis | Tested | `getOyClient()` | checkTransaction, balance, remit (transfer dana) |
+| Stripe | Tested | `getStripeClient()` | balance, createRefund, retrieveCheckoutSession, retrievePaymentIntent |
+| PayPal | Tested | `getPaypalClient()` | captureOrder, getOrder, refundCapture, checkBalance, verifyWebhookSignature |
+| Adyen | Tested | `getAdyenClient()` | capturePayment, cancelPayment, refundPayment, getPaymentDetails, getAvailablePaymentMethods |
+| Checkout.com | Tested | `getCheckoutComClient()` | balance, refundPayment, voidPayment, getPaymentDetails, listPaymentLinks |
+| Razorpay | Tested | `getRazorpayClient()` | capturePayment, createRefund, checkBalance, fetchPayment, listPayments |
+| Square | Tested | `getSquareClient()` | retrieveBalance, refundPayment, cancelPayment, getPayment, listLocations |
+| PayU | Tested | `getPayuClient()` | cancelOrder, getOrder, refundOrder |
+| Braintree | Tested | `getBraintreeClient()` | getClientToken, findTransaction, refundTransaction, voidTransaction |
+| 2Checkout | Tested | `getTwoCheckoutClient()` | getOrder, listOrders, getSubscription, refundOrder |
 
 ---
 
-## 📚 Kamus Variabel `.env` per Provider
+## 📚 Panduan Pengisian Variabel Universal (`BUAYAR_*`) per Provider
 
-Anda hanya perlu mengisi kredensial provider yang **sedang aktif**. Gunakan variabel universal (`BUAYAR_*`) bila ingin kode benar-benar provider-agnostic, atau variabel spesifik di bawah.
+Anda **tidak perlu** membuat nama variabel khusus per provider (seperti `IPAYMU_API_KEY`, `DUITKU_API_KEY`, dsb.). Cukup gunakan set variabel seragam **`BUAYAR_*`**.
 
-| Provider | Variabel `.env` |
-| :--- | :--- |
-| Midtrans | `MIDTRANS_SERVER_KEY`, `MIDTRANS_CLIENT_KEY` |
-| Duitku | `DUITKU_API_KEY`, `DUITKU_MERCHANT_CODE` |
-| iPaymu | `IPAYMU_API_KEY`, `IPAYMU_VA` |
-| Xendit | `XENDIT_SECRET_KEY`, `XENDIT_WEBHOOK_TOKEN` |
-| DOKU | `DOKU_CLIENT_ID`, `DOKU_SECRET_KEY` |
-| PrismaLink | `PRISMALINK_MERCHANT_ID`, `PRISMALINK_SECRET_KEY` |
-| Faspay | `FASPAY_MERCHANT_ID`, `FASPAY_USER_ID`, `FASPAY_PASSWORD`, `FASPAY_MERCHANT_NAME` |
-| Finpay | `FINPAY_MERCHANT_ID`, `FINPAY_MERCHANT_KEY` |
-| Nicepay | `NICEPAY_IMID`, `NICEPAY_KEY` |
-| OY! Bisnis | `OY_USERNAME`, `OY_API_KEY` |
-| Stripe | `STRIPE_SECRET_KEY`, `STRIPE_PUBLIC_KEY`, `STRIPE_WEBHOOK_SECRET` |
-| PayPal | `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET`, `PAYPAL_WEBHOOK_ID` |
-| Adyen | `ADYEN_API_KEY`, `ADYEN_MERCHANT_ACCOUNT`, `ADYEN_CLIENT_KEY`, `ADYEN_HMAC_KEY`, `ADYEN_LIVE_URL_PREFIX` |
-| Checkout.com | `CHECKOUTCOM_SECRET_KEY`, `CHECKOUTCOM_PUBLIC_KEY`, `CHECKOUTCOM_WEBHOOK_SECRET` |
-| Razorpay | `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET` |
-| Square | `SQUARE_ACCESS_TOKEN`, `SQUARE_APPLICATION_ID`, `SQUARE_LOCATION_ID`, `SQUARE_WEBHOOK_SIGNATURE_KEY` |
-| PayU | `PAYU_POS_ID`, `PAYU_MD5_KEY`, `PAYU_OAUTH_CLIENT_ID`, `PAYU_OAUTH_CLIENT_SECRET` |
-| Braintree | `BRAINTREE_MERCHANT_ID`, `BRAINTREE_PUBLIC_KEY`, `BRAINTREE_PRIVATE_KEY` |
-| 2Checkout | `TWOCHECKOUT_MERCHANT_CODE`, `TWOCHECKOUT_SECRET_KEY`, `TWOCHECKOUT_SECRET_WORD` |
+Tabel berikut menunjukkan data apa dari dashboard masing-masing payment gateway yang perlu Anda masukkan ke variabel `BUAYAR_*`:
 
-Sandbox: otomatis terdeteksi dari `BUAYAR_SANDBOX`/`NODE_ENV`, atau set per-provider (mis. `STRIPE_SANDBOX=true`, `MIDTRANS_SANDBOX=true`).
+| Provider | `BUAYAR_PROVIDER` | `BUAYAR_API_KEY` | `BUAYAR_MERCHANT_CODE` | `BUAYAR_CLIENT_KEY` / Tambahan |
+| :--- | :--- | :--- | :--- | :--- |
+| **Midtrans** | `midtrans` | Server Key | *(opsional)* | Client Key |
+| **Duitku** | `duitku` | API Key | Merchant Code | *(tidak perlu)* |
+| **iPaymu** | `ipaymu` | API Key | Nomor Virtual Account (VA) | *(tidak perlu)* |
+| **Xendit** | `xendit` | Secret Key | *(opsional)* | Webhook Verification Token (`BUAYAR_WEBHOOK_SECRET`) |
+| **DOKU Jokul** | `doku` | Secret Key | Client ID / Merchant ID | Client ID |
+| **PrismaLink** | `prismalink` | Secret Key | Merchant ID | *(tidak perlu)* |
+| **Faspay** | `faspay` | Password | Merchant ID | User ID |
+| **Finpay** | `finpay` | Merchant Key | Merchant ID | *(tidak perlu)* |
+| **Nicepay** | `nicepay` | Server Key (Secret) | I-MID (Merchant ID) | *(tidak perlu)* |
+| **OY! Bisnis** | `oy` | API Key | Username | Username |
+| **Stripe** | `stripe` | Secret Key (`sk_...`) | *(tidak perlu)* | Publishable Key (`pk_...`) / Webhook Secret |
+| **PayPal** | `paypal` | Client Secret | Client ID | Client ID |
+| **Adyen** | `adyen` | API Key | Merchant Account Name | Client Key / HMAC Key (`BUAYAR_WEBHOOK_SECRET`) |
+| **Checkout.com** | `checkoutcom` | Secret Key (`sk_...`) | *(tidak perlu)* | Public Key (`pk_...`) / Webhook Secret |
+| **Razorpay** | `razorpay` | Key Secret | Key ID | Key ID |
+| **Square** | `square` | Access Token | Application ID | Location ID (`BUAYAR_PROJECT_ID`) |
+| **PayU** | `payu` | MD5 Key / Secret | POS ID | POS ID |
+| **Braintree** | `braintree` | Private Key | Merchant ID | Public Key |
+| **2Checkout** | `twocheckout` | Secret Key | Merchant Code | Secret Word (`BUAYAR_WEBHOOK_SECRET`) |
+
+> 💡 **Mode Sandbox:** Cukup tambahkan `BUAYAR_SANDBOX=true` (atau `false` saat production), SDK otomatis menyesuaikan URL endpoint API seluruh provider di atas tanpa perlu konfigurasi tambahan.
 
 ---
 
@@ -428,7 +431,7 @@ Sandbox: otomatis terdeteksi dari `BUAYAR_SANDBOX`/`NODE_ENV`, atau set per-prov
 
 | Kategori | Canonical Code |
 | :--- | :--- |
-| **Virtual Account** | `bca_va`, `mandiri_va`, `bni_va`, `bri_va`, `permata_va`, `cimb_va`, `danamon_va`, `bsi_va`, `seabank_va` |
+| **Virtual Account** | `bca_va`, `mandiri_va`, `bni_va`, `bri_va`, `permata_va`, `cimb_va`, `danamon_va`, `bsi_va`, `seabank_va`, `bag_va`, `muamalat_va` |
 | **QRIS** | `qris`, `gopay_qris`, `shopeepay_qris`, `nobu_qris` |
 | **E-Wallet** | `gopay`, `shopeepay`, `ovo`, `dana`, `linkaja`, `jenius` |
 | **Retail** | `alfamart`, `indomaret`, `pos` |
