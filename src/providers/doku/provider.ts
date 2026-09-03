@@ -343,8 +343,12 @@ export class DokuProvider extends BasePaymentProvider {
     const method = String(params.paymentMethod || "").toLowerCase();
     const bankKey = method.replace(/_va$/, "");
     const channel = config.extra?.vaChannel || bankMap[bankKey] || `VIRTUAL_ACCOUNT_${bankKey.toUpperCase()}`;
-    const partnerServiceId = (config.extra?.partnerServiceId || "").replace(/\s/g, "");
-    const customerNo = (config.extra?.customerNo || "").slice(0, 20) || String(Date.now()).slice(-12);
+    // SNAP Create VA requires partnerServiceId as exactly 8-char left-padded
+    // string (the merchant BIN / company code). Normalize digits then pad.
+    const rawPartnerServiceId = (config.extra?.partnerServiceId || "").replace(/\s/g, "");
+    const partnerServiceId = rawPartnerServiceId.padStart(8, " ").slice(0, 8);
+    const customerNo = (config.extra?.customerNo || "").replace(/\s/g, "").slice(0, 20) || String(Date.now()).slice(-12);
+    // DOKU example: "partnerServiceId (8 left-padded) + customerNo"
     const virtualAccountNo = (partnerServiceId + customerNo).slice(0, 28);
     const reusable = config.extra?.reusableStatus === true;
     const currency = params.currency || "IDR";

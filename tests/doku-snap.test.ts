@@ -62,7 +62,8 @@ describe("DOKU SNAP Integration", () => {
         expect(options.headers["X-SIGNATURE"]).toBeTruthy();
         expect(options.headers["X-TIMESTAMP"]).toBeTruthy();
         const body = JSON.parse(options.body);
-        expect(body.partnerServiceId).toBe("5244497");
+        expect(body.partnerServiceId).toBe(" 5244497");
+        expect(body.virtualAccountNo).toBe(" 52444970000000000001234");
         expect(body.totalAmount.value).toBe("175000.00");
         return {
           ok: true,
