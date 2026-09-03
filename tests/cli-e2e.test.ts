@@ -38,7 +38,8 @@ describe("CLI end-to-end (non-interactive)", () => {
   it("prints version", async () => {
     const { code, stdout } = await runCli(["--version"], tmpDir);
     expect(code).toBe(0);
-    expect(stdout.trim()).toBe("0.5.0");
+    const pkg = require("../package.json");
+    expect(stdout.trim()).toBe(pkg.version);
   });
 
   it("prints help", async () => {
