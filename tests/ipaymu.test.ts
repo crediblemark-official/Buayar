@@ -231,4 +231,249 @@ describe("iPaymu Provider & Client Integration", () => {
       globalThis.fetch = originalFetch;
     }
   });
+
+  it("should return failure without static methods when credentials are missing", async () => {
+    const buayar = new Buayar({
+      provider: "ipaymu",
+    });
+
+    const res = await buayar.getPaymentMethods();
+    expect(res.success).toBe(false);
+    expect(res.methods.length).toBe(0);
+    expect(res.error).toBeDefined();
+  });
+
+  it("should call official v2 COD endpoints and Area API on IpaymuClient", async () => {
+    const calledUrls: { url: string; method: string; body?: any }[] = [];
+    const originalFetch = globalThis.fetch;
+    (globalThis as any).fetch = async (url: any, options: any) => {
+      const urlStr = String(url);
+      calledUrls.push({ url: urlStr, method: options?.method || "GET", body: options?.body });
+
+      if (urlStr.includes("/cod/area")) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () => JSON.stringify({
+            code: "SUCCESS",
+            status: 200,
+            success: true,
+            data: [{ id: 101, label: "Jakarta Barat" }],
+          }),
+        } as any;
+      }
+      if (urlStr.includes("/cod/shipping-calculate")) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () => JSON.stringify({
+            code: "SUCCESS",
+            status: 200,
+            success: true,
+            data: [{ shipping_name: "SICEPAT", shipping_fee: 10000 }],
+          }),
+        } as any;
+      }
+      if (urlStr.includes("/cod/pickup")) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () => JSON.stringify({
+            code: "SUCCESS",
+            status: 200,
+            success: true,
+            message: "Pickup scheduled",
+          }),
+        } as any;
+      }
+      if (urlStr.includes("/cod/download-label")) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () => JSON.stringify({
+            code: "SUCCESS",
+            status: 200,
+            success: true,
+            data: { url: "https://sandbox.ipaymu.com/labels/123.pdf" },
+          }),
+        } as any;
+      }
+      if (urlStr.includes("/cod/tracking")) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () => JSON.stringify({
+            code: "SUCCESS",
+            status: 200,
+            success: true,
+            data: { history: [] },
+          }),
+        } as any;
+      }
+      if (urlStr.includes("/api/areas/province")) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => [{ id: 31, name: "DKI Jakarta" }],
+        } as any;
+      }
+
+      return { ok: true, status: 200, text: async () => "{}" } as any;
+    };
+
+    try {
+      const buayar = new Buayar({
+        provider: "ipaymu",
+        merchantCode: "0000001411234567",
+        apiKey: "test-api-key",
+      });
+
+      const client = buayar.getIpaymuClient();
+
+      const area = await client.getCodArea("jakarta");
+      expect(area.success).toBe(true);
+      expect(calledUrls.some(c => c.url.includes("/cod/area?area=jakarta") && c.method === "GET")).toBe(true);
+
+      const rate = await client.getCodRate({
+        pickup_area_id: "101",
+        destination_area_id: "102",
+        weight: 1,
+      });
+      expect(rate.success).toBe(true);
+      expect(calledUrls.some(c => c.url.includes("/cod/shipping-calculate") && c.method === "POST")).toBe(true);
+
+      const pickup = await client.getCodPickup({
+        transaction_id: "123",
+        pickup_date: "2026-09-04",
+        pickup_time: "10:00",
+        pickup_vehicle: "Motor",
+      });
+      expect(pickup.success).toBe(true);
+      expect(calledUrls.some(c => c.url.includes("/cod/pickup") && c.method === "POST")).toBe(true);
+
+      const awb = await client.getCodAwb("123");
+      expect(awb.success).toBe(true);
+      expect(calledUrls.some(c => c.url.includes("/cod/download-label/123") && c.method === "GET")).toBe(true);
+
+      const tracking = await client.getCodTracking({ awb: "AWB123" });
+      expect(tracking.success).toBe(true);
+      expect(calledUrls.some(c => c.url.includes("/cod/tracking") && c.method === "POST")).toBe(true);
+
+      const prov = await client.getAreasProvince();
+      expect(prov[0].name).toBe("DKI Jakarta");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("should support Split Payment by sending account parameter in createInvoice", async () => {
+    let capturedDirectBody: any = null;
+    let capturedRedirectBody: any = null;
+    const originalFetch = globalThis.fetch;
+    (globalThis as any).fetch = async (url: any, options: any) => {
+      const urlStr = String(url);
+      if (urlStr.includes("/payment/direct")) {
+        capturedDirectBody = JSON.parse(options.body);
+        return {
+          ok: true,
+          status: 200,
+          text: async () => JSON.stringify({
+            Status: 200,
+            Success: true,
+            Data: { TransactionId: 1001, PaymentNo: "00000012345" },
+          }),
+        } as any;
+      }
+      if (urlStr.includes("/payment")) {
+        capturedRedirectBody = JSON.parse(options.body);
+        return {
+          ok: true,
+          status: 200,
+          text: async () => JSON.stringify({
+            Status: 200,
+            Success: true,
+            Data: { SessionID: "sess-1", Url: "https://payment.ipaymu.com" },
+          }),
+        } as any;
+      }
+      return { ok: true, status: 200, text: async () => "{}" } as any;
+    };
+
+    try {
+      const buayar = new Buayar({
+        provider: "ipaymu",
+        merchantCode: "0000001411234567",
+        apiKey: "test-api-key",
+      });
+
+      // Direct payment with subAccountId
+      await buayar.createInvoice({
+        orderId: "SPLIT-DIR-1",
+        amount: 150000,
+        paymentMethod: "bca_va",
+        productDetails: "Split payment test",
+        customer: { name: "Budi", email: "budi@mail.com" },
+        subAccountId: "0000009988776655",
+      });
+      expect(capturedDirectBody.account).toBe("0000009988776655");
+
+      // Redirect payment with subAccountId
+      await buayar.createInvoice({
+        orderId: "SPLIT-REDIR-1",
+        amount: 200000,
+        productDetails: "Split redirect test",
+        customer: { name: "Budi", email: "budi@mail.com" },
+        subAccountId: "0000009988776655",
+      });
+      expect(capturedRedirectBody.account).toBe("0000009988776655");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("should support Split Payment Single Register API via registerUser", async () => {
+    let capturedBody: any = null;
+    const originalFetch = globalThis.fetch;
+    (globalThis as any).fetch = async (url: any, options: any) => {
+      capturedBody = JSON.parse(options.body);
+      return {
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify({
+          Status: 200,
+          Success: true,
+          Message: "Success",
+          Data: {
+            Email: "reseller@example.com",
+            Phone: "08123456789",
+            Va: "0000001234567890",
+            VaName: "IPAYMU - Reseller",
+            IsNewUser: true,
+          },
+        }),
+      } as any;
+    };
+
+    try {
+      const buayar = new Buayar({
+        provider: "ipaymu",
+        merchantCode: "0000001411234567",
+        apiKey: "test-api-key",
+      });
+
+      const client = buayar.getIpaymuClient();
+      const res = await client.registerUser({
+        name: "Reseller Mitra",
+        email: "reseller@example.com",
+        phone: "08123456789",
+      });
+
+      expect(res.Success).toBe(true);
+      expect(res.Data.Va).toBe("0000001234567890");
+      expect(capturedBody.account).toBe("0000001411234567");
+      expect(capturedBody.email).toBe("reseller@example.com");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
 });

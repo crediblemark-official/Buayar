@@ -14,8 +14,11 @@ export function generateIpaymuSignature(
   body?: any
 ): { signature: string; timestamp: string } {
   const timestamp = Date.now().toString();
-  const bodyString = body ? (typeof body === "string" ? body : JSON.stringify(body)) : "";
-  const bodyHash = body ? sha256(bodyString).toLowerCase() : "";
+  // iPaymu v2 signature spec:
+  // For GET: SHA256 of stringified query params (or "{}" if no query)
+  // For POST: SHA256 of JSON body (or "{}" if empty)
+  const bodyString = body ? (typeof body === "string" ? body : JSON.stringify(body)) : "{}";
+  const bodyHash = sha256(bodyString).toLowerCase();
 
   const stringToSign = `${method.toUpperCase()}:${va}:${bodyHash}:${apiKey}`;
   const signature = hmacSha256(stringToSign, apiKey);

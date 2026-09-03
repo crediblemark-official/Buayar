@@ -40,6 +40,7 @@ export class IpaymuProvider extends BasePaymentProvider {
     const redirectUrl = returnUrl || config.returnUrl || "https://localhost/return";
     const feeDirection = params.feeDirection || params.extra?.feeDirection || config.extra?.feeDirection;
     const escrow = params.escrow !== undefined ? params.escrow : (params.extra?.escrow !== undefined ? params.extra?.escrow : config.extra?.escrow);
+    const subAccount = params.subAccountId || params.extra?.subAccountId || params.extra?.account || params.extra?.childAccount || (params as any).account || config.extra?.account;
 
     let payload: any;
     if (isDirect) {
@@ -57,6 +58,7 @@ export class IpaymuProvider extends BasePaymentProvider {
         ...(ipaymuMethod.paymentChannel ? { paymentChannel: ipaymuMethod.paymentChannel } : {}),
         ...(feeDirection ? { feeDirection } : {}),
         ...(escrow !== undefined ? { escrow } : {}),
+        ...(subAccount ? { account: subAccount } : {}),
         ...params.providerParams,
       };
     } else {
@@ -82,6 +84,7 @@ export class IpaymuProvider extends BasePaymentProvider {
         buyerPhone: customer.phone || "081234567890",
         ...(feeDirection ? { feeDirection } : {}),
         ...(escrow !== undefined ? { escrow } : {}),
+        ...(subAccount ? { account: subAccount } : {}),
         ...params.providerParams,
       };
     }
@@ -196,235 +199,118 @@ export class IpaymuProvider extends BasePaymentProvider {
     const apiKey = config.apiKey || "";
     const sandbox = !!config.sandbox;
 
-    // Coba ambil channel aktif dinamis langsung dari API v2
-    if (va && apiKey) {
-      try {
-        const url = `${this.getBaseUrl(sandbox)}/payment-method-list`;
-        const payload = { account: va };
-        const { signature, timestamp } = generateIpaymuSignature("POST", va, apiKey, payload);
+    if (!va || !apiKey) {
+      return {
+        success: false,
+        provider: "ipaymu",
+        methods: [],
+        categories: {},
+        error: "Missing iPaymu credentials (BUAYAR_MERCHANT_CODE/VA or BUAYAR_API_KEY)",
+        rawResponse: null,
+      };
+    }
 
-        const response = await fetch(url, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Accept": "application/json",
-            "va": va,
-            "signature": signature,
-            "timestamp": timestamp,
-          },
-          body: JSON.stringify(payload),
-        });
+    try {
+      // Endpoint resmi iPaymu v2: GET /api/v2/payment-channels
+      const url = `${this.getBaseUrl(sandbox)}/payment-channels`;
+      const { signature, timestamp } = generateIpaymuSignature("GET", va, apiKey);
 
-        const data: any = await response.json().catch(() => null);
-        if (response.ok && data?.Data && Array.isArray(data.Data)) {
-          const methods: PaymentMethod[] = [];
-          const categories: Record<string, PaymentMethod[]> = {};
+      const response = await fetch(url, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          "Accept": "application/json",
+          "va": va,
+          "signature": signature,
+          "timestamp": timestamp,
+        },
+      });
 
-          for (const group of data.Data) {
-            const groupCode = (group.Code || "").toLowerCase();
-            const groupName = group.Name || group.Description || "Lainnya";
-            const channels = group.Channels || [];
+      const data: any = await response.json().catch(() => null);
+      if (response.ok && data?.Data && Array.isArray(data.Data)) {
+        const methods: PaymentMethod[] = [];
+        const categories: Record<string, PaymentMethod[]> = {};
 
-            let category = "Lainnya";
-            if (groupCode === "va") category = "Virtual Account";
-            else if (groupCode === "cstore") category = "Retail / Gerai";
-            else if (groupCode === "qris") category = "QRIS";
-            else if (groupCode === "cc") category = "Kartu Kredit";
-            else if (groupCode === "paylater") category = "Paylater / Cicilan";
-            else if (groupCode === "cod") category = "COD";
-            else category = groupName;
+        for (const group of data.Data) {
+          const groupCode = (group.Code || "").toLowerCase();
+          const groupName = group.Name || group.Description || "Lainnya";
+          const channels = group.Channels || [];
 
-            for (const ch of channels) {
-              const chCode = (ch.Code || "").toLowerCase();
-              let canonicalCode = chCode;
-              if (groupCode === "va") {
-                canonicalCode = chCode === "bag" ? "bag_va" : chCode === "bmi" ? "muamalat_va" : `${chCode}_va`;
-              } else if (groupCode === "cc") {
-                canonicalCode = "credit_card";
-              }
+          let category = "Lainnya";
+          if (groupCode === "va") category = "Virtual Account";
+          else if (groupCode === "cstore") category = "Retail / Gerai";
+          else if (groupCode === "qris") category = "QRIS";
+          else if (groupCode === "cc") category = "Kartu Kredit";
+          else if (groupCode === "paylater") category = "Paylater / Cicilan";
+          else if (groupCode === "cod") category = "COD";
+          else category = groupName;
 
-              let totalFee = "-";
-              if (ch.TransactionFee) {
-                if (ch.TransactionFee.ActualFeeType === "PERCENT") {
-                  totalFee = `${ch.TransactionFee.ActualFee}%`;
-                } else if (ch.TransactionFee.ActualFee !== undefined) {
-                  totalFee = `IDR ${Number(ch.TransactionFee.ActualFee).toLocaleString()}`;
-                }
-              }
-
-              const pm: PaymentMethod = {
-                paymentMethod: canonicalCode,
-                code: canonicalCode,
-                paymentName: ch.Name || ch.Description || canonicalCode,
-                paymentImage: `https://my.ipaymu.com/images/banks/${chCode}.png`,
-                totalFee,
-                category,
-                extra: {
-                  healthStatus: ch.HealthStatus,
-                  instructionsDoc: ch.PaymentInstructionsDoc,
-                  feeDetail: ch.TransactionFee,
-                },
-              };
-
-              methods.push(pm);
-              if (!categories[category]) categories[category] = [];
-              categories[category].push(pm);
+          for (const ch of channels) {
+            const chCode = (ch.Code || "").toLowerCase();
+            let canonicalCode = chCode;
+            if (groupCode === "va") {
+              canonicalCode = chCode === "bag" ? "bag_va" : chCode === "bmi" ? "muamalat_va" : `${chCode}_va`;
+            } else if (groupCode === "cc") {
+              canonicalCode = "credit_card";
             }
-          }
 
-          if (methods.length > 0) {
-            return {
-              success: true,
-              provider: "ipaymu",
-              methods,
-              categories,
-              rawResponse: data,
+            let totalFee = "-";
+            if (ch.TransactionFee) {
+              if (ch.TransactionFee.ActualFeeType === "PERCENT") {
+                totalFee = `${ch.TransactionFee.ActualFee}%`;
+              } else if (ch.TransactionFee.ActualFee !== undefined) {
+                totalFee = `IDR ${Number(ch.TransactionFee.ActualFee).toLocaleString()}`;
+              }
+            }
+
+            const pm: PaymentMethod = {
+              paymentMethod: canonicalCode,
+              code: canonicalCode,
+              paymentName: ch.Name || ch.Description || canonicalCode,
+              paymentImage: ch.Logo || `https://my.ipaymu.com/images/banks/${chCode}.png`,
+              totalFee,
+              category,
+              extra: {
+                healthStatus: ch.HealthStatus,
+                featureStatus: ch.FeatureStatus,
+                instructionsDoc: ch.PaymentInstructionsDoc,
+                feeDetail: ch.TransactionFee,
+              },
             };
+
+            methods.push(pm);
+            if (!categories[category]) categories[category] = [];
+            categories[category].push(pm);
           }
         }
-      } catch (err) {
-        // Fallback ke staticMethods di bawah
+
+        return {
+          success: true,
+          provider: "ipaymu",
+          methods,
+          categories,
+          rawResponse: data,
+        };
       }
+
+      return {
+        success: false,
+        provider: "ipaymu",
+        methods: [],
+        categories: {},
+        error: data?.Message || data?.message || `Failed to fetch payment channels (HTTP ${response.status})`,
+        rawResponse: data,
+      };
+    } catch (err: any) {
+      return {
+        success: false,
+        provider: "ipaymu",
+        methods: [],
+        categories: {},
+        error: err.message || "Failed to fetch iPaymu payment channels",
+        rawResponse: null,
+      };
     }
-
-    const staticMethods: PaymentMethod[] = [
-      {
-        paymentMethod: "bca_va",
-        code: "bca_va",
-        paymentName: "BCA Virtual Account",
-        paymentImage: "https://my.ipaymu.com/images/banks/bca.png",
-        totalFee: "IDR 3,500",
-        category: "Virtual Account",
-      },
-      {
-        paymentMethod: "mandiri_va",
-        code: "mandiri_va",
-        paymentName: "Mandiri Virtual Account",
-        paymentImage: "https://my.ipaymu.com/images/banks/mandiri.png",
-        totalFee: "IDR 3,500",
-        category: "Virtual Account",
-      },
-      {
-        paymentMethod: "bni_va",
-        code: "bni_va",
-        paymentName: "BNI Virtual Account",
-        paymentImage: "https://my.ipaymu.com/images/banks/bni.png",
-        totalFee: "IDR 3,500",
-        category: "Virtual Account",
-      },
-      {
-        paymentMethod: "bri_va",
-        code: "bri_va",
-        paymentName: "BRI Virtual Account",
-        paymentImage: "https://my.ipaymu.com/images/banks/bri.png",
-        totalFee: "IDR 3,500",
-        category: "Virtual Account",
-      },
-      {
-        paymentMethod: "cimb_va",
-        code: "cimb_va",
-        paymentName: "CIMB Niaga Virtual Account",
-        paymentImage: "https://my.ipaymu.com/images/banks/cimb.png",
-        totalFee: "IDR 3,500",
-        category: "Virtual Account",
-      },
-      {
-        paymentMethod: "permata_va",
-        code: "permata_va",
-        paymentName: "Permata Virtual Account",
-        paymentImage: "https://my.ipaymu.com/images/banks/permata.png",
-        totalFee: "IDR 3,500",
-        category: "Virtual Account",
-      },
-      {
-        paymentMethod: "danamon_va",
-        code: "danamon_va",
-        paymentName: "Danamon Virtual Account",
-        paymentImage: "https://my.ipaymu.com/images/banks/danamon.png",
-        totalFee: "IDR 3,500",
-        category: "Virtual Account",
-      },
-      {
-        paymentMethod: "bsi_va",
-        code: "bsi_va",
-        paymentName: "BSI Virtual Account",
-        paymentImage: "https://my.ipaymu.com/images/banks/bsi.png",
-        totalFee: "IDR 3,500",
-        category: "Virtual Account",
-      },
-      {
-        paymentMethod: "bag_va",
-        code: "bag_va",
-        paymentName: "Bank Artha Graha Virtual Account",
-        paymentImage: "https://my.ipaymu.com/images/banks/bag.png",
-        totalFee: "IDR 3,500",
-        category: "Virtual Account",
-      },
-      {
-        paymentMethod: "muamalat_va",
-        code: "muamalat_va",
-        paymentName: "Bank Muamalat Virtual Account",
-        paymentImage: "https://my.ipaymu.com/images/banks/bmi.png",
-        totalFee: "IDR 3,500",
-        category: "Virtual Account",
-      },
-      {
-        paymentMethod: "qris",
-        code: "qris",
-        paymentName: "QRIS (GoPay, ShopeePay, DANA, OVO, LinkAja)",
-        paymentImage: "https://my.ipaymu.com/images/banks/qris.png",
-        totalFee: "0.7%",
-        category: "QRIS",
-      },
-      {
-        paymentMethod: "alfamart",
-        code: "alfamart",
-        paymentName: "Alfamart",
-        paymentImage: "https://my.ipaymu.com/images/banks/alfamart.png",
-        totalFee: "IDR 5,000",
-        category: "Retail / Gerai",
-      },
-      {
-        paymentMethod: "indomaret",
-        code: "indomaret",
-        paymentName: "Indomaret",
-        paymentImage: "https://my.ipaymu.com/images/banks/indomaret.png",
-        totalFee: "IDR 5,000",
-        category: "Retail / Gerai",
-      },
-      {
-        paymentMethod: "credit_card",
-        code: "credit_card",
-        paymentName: "Credit / Debit Card (Visa, Mastercard)",
-        paymentImage: "https://my.ipaymu.com/images/banks/cc.png",
-        totalFee: "2.9% + IDR 2,000",
-        category: "Kartu Kredit",
-      },
-      {
-        paymentMethod: "akulaku",
-        code: "akulaku",
-        paymentName: "Akulaku Paylater",
-        paymentImage: "https://my.ipaymu.com/images/banks/akulaku.png",
-        totalFee: "1.7%",
-        category: "Paylater / Cicilan",
-      },
-    ];
-
-    const categories: Record<string, PaymentMethod[]> = {};
-    for (const item of staticMethods) {
-      if (!categories[item.category]) {
-        categories[item.category] = [];
-      }
-      categories[item.category].push(item);
-    }
-
-    return {
-      success: true,
-      provider: "ipaymu",
-      methods: staticMethods,
-      categories,
-      rawResponse: staticMethods,
-    };
   }
 
   async checkTransaction(params: CheckTransactionParams, config: ProviderConfig): Promise<CheckTransactionResult> {

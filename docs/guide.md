@@ -373,25 +373,25 @@ Rangkuman kemampuan ekstra tiap provider:
 
 | Provider | Status | Getter | Kemampuan ekstra |
 | :--- | :---: | :--- | :--- |
-| Midtrans | Tested | `getMidtransClient()` | cancel/refund/expire/approve/deny/capture, GoPay tokenization, Subscription, Payment Link, IRIS balance |
-| Duitku | Tested | `getDuitkuClient()` | balance, listBanks, inquiryBankAccount, disburse, checkDisbursementStatus |
-| iPaymu | Tested | `getIpaymuClient()` | balance, checkTransaction, getHistory, getBankList, getPaymentMethods, COD logistics (getArea, getRate, getPickup, getAwb, getTracking) |
-| Xendit | Tested | `getXenditClient()` | balance, expireInvoice, createDisbursement |
-| DOKU | Tested | `getDokuClient()` | checkTransaction |
-| PrismaLink | Tested | `getPrismalinkClient()` | checkTransaction |
-| Faspay | Tested | `getFaspayClient()` | cancelTransaction, checkTransaction |
-| Finpay | Tested | `getFinpayClient()` | checkTransaction |
-| Nicepay | Tested | `getNicepayClient()` | cancelTransaction, checkTransaction |
-| OY! Bisnis | Tested | `getOyClient()` | checkTransaction, balance, remit (transfer dana) |
-| Stripe | Tested | `getStripeClient()` | balance, createRefund, retrieveCheckoutSession, retrievePaymentIntent |
-| PayPal | Tested | `getPaypalClient()` | captureOrder, getOrder, refundCapture, checkBalance, verifyWebhookSignature |
-| Adyen | Tested | `getAdyenClient()` | capturePayment, cancelPayment, refundPayment, getPaymentDetails, getAvailablePaymentMethods |
-| Checkout.com | Tested | `getCheckoutComClient()` | balance, refundPayment, voidPayment, getPaymentDetails, listPaymentLinks |
-| Razorpay | Tested | `getRazorpayClient()` | capturePayment, createRefund, checkBalance, fetchPayment, listPayments |
-| Square | Tested | `getSquareClient()` | retrieveBalance, refundPayment, cancelPayment, getPayment, listLocations |
-| PayU | Tested | `getPayuClient()` | cancelOrder, getOrder, refundOrder |
-| Braintree | Tested | `getBraintreeClient()` | getClientToken, findTransaction, refundTransaction, voidTransaction |
-| 2Checkout | Tested | `getTwoCheckoutClient()` | getOrder, listOrders, getSubscription, refundOrder |
+| Midtrans | - | `getMidtransClient()` | cancel/refund/expire/approve/deny/capture, GoPay tokenization, Subscription, Payment Link, IRIS balance |
+| Duitku | - | `getDuitkuClient()` | balance, listBanks, inquiryBankAccount, disburse, checkDisbursementStatus |
+| [iPaymu](ipaymu.md) | Tested | `getIpaymuClient()` | balance, checkTransaction, getHistory, getBankList, getPaymentMethods/getPaymentChannels, Split Payment (registerUser / subAccountId), COD logistics (getArea, getRate, getPickup, getAwb, getTracking), Public Area API (Province, City, District, Village). *Lihat [panduan lengkap iPaymu](ipaymu.md)* |
+| Xendit | - | `getXenditClient()` | balance, expireInvoice, createDisbursement |
+| DOKU | - | `getDokuClient()` | checkTransaction |
+| PrismaLink | - | `getPrismalinkClient()` | checkTransaction |
+| Faspay | - | `getFaspayClient()` | cancelTransaction, checkTransaction |
+| Finpay | - | `getFinpayClient()` | checkTransaction |
+| Nicepay | - | `getNicepayClient()` | cancelTransaction, checkTransaction |
+| OY! Bisnis | - | `getOyClient()` | checkTransaction, balance, remit (transfer dana) |
+| Stripe | - | `getStripeClient()` | balance, createRefund, retrieveCheckoutSession, retrievePaymentIntent |
+| PayPal | - | `getPaypalClient()` | captureOrder, getOrder, refundCapture, checkBalance, verifyWebhookSignature |
+| Adyen | - | `getAdyenClient()` | capturePayment, cancelPayment, refundPayment, getPaymentDetails, getAvailablePaymentMethods |
+| Checkout.com | - | `getCheckoutComClient()` | balance, refundPayment, voidPayment, getPaymentDetails, listPaymentLinks |
+| Razorpay | - | `getRazorpayClient()` | capturePayment, createRefund, checkBalance, fetchPayment, listPayments |
+| Square | - | `getSquareClient()` | retrieveBalance, refundPayment, cancelPayment, getPayment, listLocations |
+| PayU | - | `getPayuClient()` | cancelOrder, getOrder, refundOrder |
+| Braintree | - | `getBraintreeClient()` | getClientToken, findTransaction, refundTransaction, voidTransaction |
+| 2Checkout | - | `getTwoCheckoutClient()` | getOrder, listOrders, getSubscription, refundOrder |
 
 ---
 

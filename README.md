@@ -32,30 +32,30 @@
 
 | Provider | Status | Redirect | Direct API | Webhook | Client |
 |---|:---:|:---:|:---:|:---:|:---:|
-| Midtrans | Tested | ✅ Snap | ✅ Core API | SHA-512 | `MidtransClient` |
-| Duitku | Tested | ✅ | ✅ | MD5 | `DuitkuClient` |
+| Midtrans | - | ✅ Snap | ✅ Core API | SHA-512 | `MidtransClient` |
+| Duitku | - | ✅ | ✅ | MD5 | `DuitkuClient` |
 | iPaymu | Tested | ✅ | ✅ | HMAC-SHA256 | `IpaymuClient` |
-| Xendit | Tested | ✅ Invoice v2 | ✅ Payments v3 | Token | `XenditClient` |
-| DOKU Jokul | Tested | ✅ v1 | ✅ v2 | HMAC-SHA256 | `DokuClient` |
-| PrismaLink | Tested | ✅ | ✅ | SHA-256 | `PrismalinkClient` |
-| Faspay | Tested | ✅ | ✅ | SHA1(MD5) | `FaspayClient` |
-| Finpay | Tested | ✅ | ✅ | HMAC-SHA512 | `FinpayClient` |
-| Nicepay | Tested | ✅ | ✅ | SHA-256 | `NicepayClient` |
-| OY! Bisnis | Tested | ✅ | ✅ | Header Auth | `OyClient` |
+| Xendit | - | ✅ Invoice v2 | ✅ Payments v3 | Token | `XenditClient` |
+| DOKU Jokul | - | ✅ v1 | ✅ v2 | HMAC-SHA256 | `DokuClient` |
+| PrismaLink | - | ✅ | ✅ | SHA-256 | `PrismalinkClient` |
+| Faspay | - | ✅ | ✅ | SHA1(MD5) | `FaspayClient` |
+| Finpay | - | ✅ | ✅ | HMAC-SHA512 | `FinpayClient` |
+| Nicepay | - | ✅ | ✅ | SHA-256 | `NicepayClient` |
+| OY! Bisnis | - | ✅ | ✅ | Header Auth | `OyClient` |
 
 #### 🌍 International (9)
 
 | Provider | Status | Redirect | Direct API | Webhook | Client |
 |---|:---:|:---:|:---:|:---:|:---:|
-| Stripe | Tested | ✅ Checkout Sessions | ✅ Payment Intents | HMAC-SHA256 | `StripeClient` |
-| PayPal | Tested | ✅ Orders v2 | ✅ Capture | OAuth2 | `PaypalClient` |
-| Adyen | Tested | ✅ Sessions v68 | ✅ Payments v68 | HMAC-SHA256 | `AdyenClient` |
-| Checkout.com | Tested | ✅ Payment Links | ✅ Payments API | HMAC-SHA256 | `CheckoutComClient` |
-| Razorpay | Tested | ✅ Payment Links | ✅ Orders API | HMAC-SHA256 | `RazorpayClient` |
-| Square | Tested | ✅ Payment Links | ✅ Payments API | HMAC-SHA256 | `SquareClient` |
-| PayU | Tested | ✅ Orders v2.1 | ✅ Pay Methods | MD5/SHA-256 | `PayuClient` |
-| Braintree | Tested | ✅ Drop-in UI Token | ✅ Transaction API | SHA1 HMAC | `BraintreeClient` |
-| 2Checkout | Tested | ✅ REST v6.0 | ✅ REST v6.0 | IPN MD5 | `TwoCheckoutClient` |
+| Stripe | - | ✅ Checkout Sessions | ✅ Payment Intents | HMAC-SHA256 | `StripeClient` |
+| PayPal | - | ✅ Orders v2 | ✅ Capture | OAuth2 | `PaypalClient` |
+| Adyen | - | ✅ Sessions v68 | ✅ Payments v68 | HMAC-SHA256 | `AdyenClient` |
+| Checkout.com | - | ✅ Payment Links | ✅ Payments API | HMAC-SHA256 | `CheckoutComClient` |
+| Razorpay | - | ✅ Payment Links | ✅ Orders API | HMAC-SHA256 | `RazorpayClient` |
+| Square | - | ✅ Payment Links | ✅ Payments API | HMAC-SHA256 | `SquareClient` |
+| PayU | - | ✅ Orders v2.1 | ✅ Pay Methods | MD5/SHA-256 | `PayuClient` |
+| Braintree | - | ✅ Drop-in UI Token | ✅ Transaction API | SHA1 HMAC | `BraintreeClient` |
+| 2Checkout | - | ✅ REST v6.0 | ✅ REST v6.0 | IPN MD5 | `TwoCheckoutClient` |
 
 ### ⚙️ Environment Variables
 

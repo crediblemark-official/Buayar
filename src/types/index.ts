@@ -51,6 +51,11 @@ export interface CreateInvoiceParams {
     width?: number;
     height?: number;
   }>;
+  /**
+   * Nomor sub-account / child account tujuan split payment (didukung iPaymu dll).
+   * Pada iPaymu, diisi nomor Virtual Account (VA) child account milik agen / reseller / mitra.
+   */
+  subAccountId?: string;
   /** Parameter kustom tambahan untuk provider spesifik (opsional) */
   providerParams?: any;
   /** Konfigurasi atau data kustom tambahan untuk provider (opsional) */

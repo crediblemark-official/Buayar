@@ -6,7 +6,7 @@ import { FRAMEWORKS, PROVIDERS, Framework } from "./templates";
 import { selectPrompt, confirmPrompt } from "./prompts";
 import { scaffold, printScaffoldSummary } from "./scaffold";
 
-const VERSION = "0.8.0";
+const VERSION = "0.8.1";
 
 interface RawOptions {
   flag: string;
