@@ -1,190 +1,215 @@
 import { BuayarConfig } from "../types";
+import { providerRegistry } from "./providerRegistry";
 
 /**
- * Resolver konfigurasi kredensial otomatis dari Environment Variables.
- * Mendukung variabel universal Buayar / PG serta variabel spesifik masing-masing provider.
+ * Skema pemetaan env → field konfigurasi, deklaratif per provider.
+ * Field: apiKey | clientKey | merchantCode | merchantId | secretKey | serverKey
+ * Untuk setiap provider kita daftarkan urutan prioritas env var.
+ * `BUAYAR_*` (universal) selalu didukung untuk SEMUA provider — itulah inti "simple".
  */
+interface FieldMap {
+  apiKey?: string[];
+  clientKey?: string[];
+  merchantCode?: string[];
+  merchantId?: string[];
+  secretKey?: string[];
+  serverKey?: string[];
+  projectId?: string[];
+}
+
+// Variabel universal yang berlaku untuk semua provider.
+// BUAYAR_* adalah standar baru; PG_* dan PAYMENT_* dipertahankan sebagai legacy.
+const UNIVERSAL = {
+  apiKey: ["BUAYAR_API_KEY", "BUAYAR_SERVER_KEY", "PG_API_KEY", "PAYMENT_API_KEY"],
+  clientKey: ["BUAYAR_CLIENT_KEY", "PG_CLIENT_KEY"],
+  merchantCode: ["BUAYAR_MERCHANT_CODE", "PG_MERCHANT_CODE", "PAYMENT_MERCHANT_CODE"],
+  merchantId: ["BUAYAR_MERCHANT_ID", "PG_MERCHANT_ID"],
+  secretKey: ["BUAYAR_SECRET_KEY", "PG_SECRET_KEY", "SECRET_KEY"],
+  serverKey: ["BUAYAR_SERVER_KEY", "PG_SECRET_KEY"],
+  projectId: ["BUAYAR_PROJECT_ID", "PG_PROJECT_ID", "PROJECT_ID"],
+};
+
+// Pemetaan env spesifik per provider (legacy / disarankan kalau mau eksplisit).
+// Prioritas: universal didahulukan, lalu spesifik sebagai fallback.
+const SPECIFIC: Record<string, FieldMap> = {
+  midtrans: {
+    apiKey: ["MIDTRANS_SERVER_KEY"],
+    clientKey: ["MIDTRANS_CLIENT_KEY"],
+    merchantId: ["MIDTRANS_MERCHANT_ID"],
+  },
+  duitku: {
+    apiKey: ["DUITKU_API_KEY"],
+    merchantCode: ["DUITKU_MERCHANT_CODE"],
+  },
+  ipaymu: {
+    apiKey: ["IPAYMU_API_KEY"],
+    merchantCode: ["IPAYMU_VA", "IPAYMU_MERCHANT_CODE"],
+  },
+  xendit: {
+    apiKey: ["XENDIT_SECRET_KEY", "XENDIT_API_KEY"],
+  },
+  doku: {
+    apiKey: ["DOKU_SECRET_KEY", "DOKU_API_KEY"],
+    clientKey: ["DOKU_CLIENT_ID"],
+    merchantCode: ["DOKU_CLIENT_ID", "DOKU_MERCHANT_ID"],
+    merchantId: ["DOKU_MERCHANT_ID"],
+  },
+  prismalink: {
+    apiKey: ["PRISMALINK_SECRET_KEY", "PRISMALINK_API_KEY"],
+    merchantCode: ["PRISMALINK_MERCHANT_ID"],
+    merchantId: ["PRISMALINK_MERCHANT_ID"],
+  },
+  faspay: {
+    apiKey: ["FASPAY_PASSWORD", "FASPAY_API_KEY"],
+    clientKey: ["FASPAY_USER_ID"],
+    merchantCode: ["FASPAY_MERCHANT_ID"],
+    merchantId: ["FASPAY_MERCHANT_ID"],
+  },
+  finpay: {
+    apiKey: ["FINPAY_MERCHANT_KEY", "FINPAY_SECRET_KEY", "FINPAY_API_KEY"],
+    merchantCode: ["FINPAY_MERCHANT_ID"],
+    merchantId: ["FINPAY_MERCHANT_ID"],
+  },
+  nicepay: {
+    apiKey: ["NICEPAY_KEY", "NICEPAY_SECRET_KEY", "NICEPAY_API_KEY"],
+    merchantCode: ["NICEPAY_IMID", "NICEPAY_MERCHANT_ID"],
+    merchantId: ["NICEPAY_IMID"],
+  },
+  oy: {
+    apiKey: ["OY_API_KEY"],
+    clientKey: ["OY_USERNAME"],
+    merchantCode: ["OY_USERNAME"],
+  },
+  stripe: {
+    apiKey: ["STRIPE_SECRET_KEY", "STRIPE_KEY"],
+    clientKey: ["STRIPE_PUBLIC_KEY", "STRIPE_PUBLISHABLE_KEY"],
+  },
+  paypal: {
+    apiKey: ["PAYPAL_CLIENT_SECRET"],
+    clientKey: ["PAYPAL_CLIENT_ID"],
+    merchantCode: ["PAYPAL_CLIENT_ID"],
+  },
+  adyen: {
+    apiKey: ["ADYEN_API_KEY"],
+    clientKey: ["ADYEN_CLIENT_KEY"],
+    merchantCode: ["ADYEN_MERCHANT_ACCOUNT"],
+    merchantId: ["ADYEN_MERCHANT_ACCOUNT"],
+  },
+  checkoutcom: {
+    apiKey: ["CHECKOUTCOM_SECRET_KEY"],
+    clientKey: ["CHECKOUTCOM_PUBLIC_KEY"],
+  },
+  razorpay: {
+    apiKey: ["RAZORPAY_KEY_SECRET"],
+    clientKey: ["RAZORPAY_KEY_ID"],
+    merchantCode: ["RAZORPAY_KEY_ID"],
+  },
+  square: {
+    apiKey: ["SQUARE_ACCESS_TOKEN"],
+    clientKey: ["SQUARE_APPLICATION_ID"],
+    merchantCode: ["SQUARE_APPLICATION_ID"],
+    projectId: ["SQUARE_LOCATION_ID"],
+  },
+  payu: {
+    apiKey: ["PAYU_MD5_KEY"],
+    clientKey: ["PAYU_POS_ID"],
+    merchantCode: ["PAYU_POS_ID"],
+    merchantId: ["PAYU_POS_ID"],
+  },
+  braintree: {
+    apiKey: ["BRAINTREE_PRIVATE_KEY"],
+    clientKey: ["BRAINTREE_PUBLIC_KEY"],
+    merchantCode: ["BRAINTREE_MERCHANT_ID"],
+    merchantId: ["BRAINTREE_MERCHANT_ID"],
+  },
+  twocheckout: {
+    apiKey: ["TWOCHECKOUT_SECRET_KEY"],
+    merchantCode: ["TWOCHECKOUT_MERCHANT_CODE"],
+    merchantId: ["TWOCHECKOUT_MERCHANT_CODE"],
+  },
+};
+
+type FieldName = keyof FieldMap;
+
+function firstDefined(env: Record<string, string | undefined>, keys: string[]): string | undefined {
+  for (const k of keys) {
+    const v = env[k];
+    if (typeof v === "string" && v.trim().length > 0) return v.trim();
+  }
+  return undefined;
+}
+
+function resolveSandbox(env: Record<string, string | undefined>, provider: string): boolean {
+  const universal = firstDefined(env, ["BUAYAR_SANDBOX", "PG_SANDBOX", "PAYMENT_SANDBOX"]);
+  if (universal !== undefined) return universal === "true" || universal === "1";
+  const specificMap: Record<string, string[]> = {
+    midtrans: ["MIDTRANS_IS_PRODUCTION"],
+    duitku: ["DUITKU_SANDBOX"],
+    ipaymu: ["IPAYMU_SANDBOX"],
+    doku: ["DOKU_SANDBOX"],
+    prismalink: ["PRISMALINK_SANDBOX"],
+    faspay: ["FASPAY_SANDBOX"],
+    finpay: ["FINPAY_SANDBOX"],
+    nicepay: ["NICEPAY_SANDBOX"],
+    oy: ["OY_SANDBOX"],
+    stripe: ["STRIPE_SANDBOX"],
+    paypal: ["PAYPAL_SANDBOX"],
+    adyen: ["ADYEN_SANDBOX"],
+    checkoutcom: ["CHECKOUTCOM_SANDBOX"],
+    razorpay: ["RAZORPAY_SANDBOX"],
+    square: ["SQUARE_SANDBOX"],
+    payu: ["PAYU_SANDBOX"],
+    braintree: ["BRAINTREE_SANDBOX"],
+    twocheckout: ["TWOCHECKOUT_SANDBOX"],
+    xendit: ["XENDIT_SANDBOX"],
+  };
+  const specific = firstDefined(env, specificMap[provider]);
+  if (specific !== undefined) {
+    if (provider === "midtrans") return specific !== "true" && specific !== "1";
+    return specific === "true" || specific === "1";
+  }
+  return env.NODE_ENV !== "production";
+}
+
 export function resolveConfigFromEnv(customConfig?: BuayarConfig): BuayarConfig {
   const env = typeof process !== "undefined" && process?.env ? process.env : {};
 
-  // 1. Resolve Provider
-  const provider = (
+  // 1. Provider — config > PROVIDER_PG > autodetect dari kredensial.
+  const explicit = (
     customConfig?.provider ||
     env.PROVIDER_PG ||
     env.PG_PROVIDER ||
     env.BUAYAR_PROVIDER ||
     env.PAYMENT_PROVIDER ||
-    "midtrans"
+    ""
   ).toLowerCase().trim();
+  let provider = explicit || providerRegistry.detectFromEnv(env as any) || "midtrans";
+  provider = provider.replace("oyindonesia", "oy").replace("2checkout", "twocheckout");
 
-  // 2. Resolve Sandbox / Environment Mode
-  let sandbox: boolean;
-  if (customConfig?.sandbox !== undefined) {
-    sandbox = customConfig.sandbox;
-  } else if (env.BUAYAR_SANDBOX !== undefined) {
-    sandbox = env.BUAYAR_SANDBOX === "true" || env.BUAYAR_SANDBOX === "1";
-  } else if (env.PG_SANDBOX !== undefined) {
-    sandbox = env.PG_SANDBOX === "true" || env.PG_SANDBOX === "1";
-  } else if (env.PAYMENT_SANDBOX !== undefined) {
-    sandbox = env.PAYMENT_SANDBOX === "true" || env.PAYMENT_SANDBOX === "1";
-  } else if (env.MIDTRANS_IS_PRODUCTION !== undefined) {
-    sandbox = env.MIDTRANS_IS_PRODUCTION !== "true" && env.MIDTRANS_IS_PRODUCTION !== "1";
-  } else if (env.DUITKU_SANDBOX !== undefined) {
-    sandbox = env.DUITKU_SANDBOX === "true" || env.DUITKU_SANDBOX === "1";
-  } else if (env.IPAYMU_SANDBOX !== undefined) {
-    sandbox = env.IPAYMU_SANDBOX === "true" || env.IPAYMU_SANDBOX === "1";
-  } else if (env.DOKU_SANDBOX !== undefined) {
-    sandbox = env.DOKU_SANDBOX === "true" || env.DOKU_SANDBOX === "1";
-  } else if (env.PRISMALINK_SANDBOX !== undefined) {
-    sandbox = env.PRISMALINK_SANDBOX === "true" || env.PRISMALINK_SANDBOX === "1";
-  } else if (env.FASPAY_SANDBOX !== undefined) {
-    sandbox = env.FASPAY_SANDBOX === "true" || env.FASPAY_SANDBOX === "1";
-  } else if (env.FINPAY_SANDBOX !== undefined) {
-    sandbox = env.FINPAY_SANDBOX === "true" || env.FINPAY_SANDBOX === "1";
-  } else if (env.NICEPAY_SANDBOX !== undefined) {
-    sandbox = env.NICEPAY_SANDBOX === "true" || env.NICEPAY_SANDBOX === "1";
-  } else if (env.OY_SANDBOX !== undefined) {
-    sandbox = env.OY_SANDBOX === "true" || env.OY_SANDBOX === "1";
-  } else if (env.STRIPE_SANDBOX !== undefined) {
-    sandbox = env.STRIPE_SANDBOX === "true" || env.STRIPE_SANDBOX === "1";
-  } else if (env.PAYPAL_SANDBOX !== undefined) {
-    sandbox = env.PAYPAL_SANDBOX === "true" || env.PAYPAL_SANDBOX === "1";
-  } else if (env.ADYEN_SANDBOX !== undefined) {
-    sandbox = env.ADYEN_SANDBOX === "true" || env.ADYEN_SANDBOX === "1";
-  } else if (env.CHECKOUTCOM_SANDBOX !== undefined) {
-    sandbox = env.CHECKOUTCOM_SANDBOX === "true" || env.CHECKOUTCOM_SANDBOX === "1";
-  } else if (env.RAZORPAY_SANDBOX !== undefined) {
-    sandbox = env.RAZORPAY_SANDBOX === "true" || env.RAZORPAY_SANDBOX === "1";
-  } else if (env.SQUARE_SANDBOX !== undefined) {
-    sandbox = env.SQUARE_SANDBOX === "true" || env.SQUARE_SANDBOX === "1";
-  } else if (env.PAYU_SANDBOX !== undefined) {
-    sandbox = env.PAYU_SANDBOX === "true" || env.PAYU_SANDBOX === "1";
-  } else if (env.BRAINTREE_SANDBOX !== undefined) {
-    sandbox = env.BRAINTREE_SANDBOX === "true" || env.BRAINTREE_SANDBOX === "1";
-  } else if (env.TWOCHECKOUT_SANDBOX !== undefined) {
-    sandbox = env.TWOCHECKOUT_SANDBOX === "true" || env.TWOCHECKOUT_SANDBOX === "1";
-  } else {
-    sandbox = env.NODE_ENV !== "production";
+  // 2. Sandbox
+  const sandbox = customConfig?.sandbox ?? resolveSandbox(env, provider);
+
+  // 3. Kredensial — universal didahulukan (intinya simple), lalu spesifik legacy.
+  const spec = SPECIFIC[provider] || {};
+  const cfg: any = {};
+
+  const fields: FieldName[] = ["apiKey", "clientKey", "merchantCode", "merchantId", "secretKey", "serverKey", "projectId"];
+  for (const f of fields) {
+    const universalKeys = UNIVERSAL[f] || [];
+    const specificKeys = spec[f] || [];
+    const universal = firstDefined(env, universalKeys);
+    const specific = firstDefined(env, specificKeys);
+    const value = universal || specific;
+    // Prioritas: config.explicit > env (universal/specific)
+    const explicitValue = (customConfig as any)?.[f] || (customConfig && (f === "apiKey" ? (customConfig as any).secretKey || (customConfig as any).serverKey : undefined));
+    cfg[f] = explicitValue || value || "";
   }
 
-  // 3. Resolve API Key / Server Key / Secret Key / Password
-  let apiKey = customConfig?.apiKey || customConfig?.serverKey || customConfig?.secretKey;
-  if (!apiKey) {
-    if (provider === "midtrans") {
-      apiKey = env.MIDTRANS_SERVER_KEY || env.BUAYAR_API_KEY || env.PG_API_KEY || env.PAYMENT_API_KEY || env.BUAYAR_SERVER_KEY;
-    } else if (provider === "duitku") {
-      apiKey = env.DUITKU_API_KEY || env.BUAYAR_API_KEY || env.PG_API_KEY || env.PAYMENT_API_KEY;
-    } else if (provider === "ipaymu") {
-      apiKey = env.IPAYMU_API_KEY || env.BUAYAR_API_KEY || env.PG_API_KEY || env.PAYMENT_API_KEY;
-    } else if (provider === "xendit") {
-      apiKey = env.XENDIT_SECRET_KEY || env.XENDIT_API_KEY || env.BUAYAR_API_KEY || env.PG_API_KEY || env.PAYMENT_API_KEY;
-    } else if (provider === "doku") {
-      apiKey = env.DOKU_SECRET_KEY || env.DOKU_API_KEY || env.BUAYAR_API_KEY || env.PG_API_KEY || env.PAYMENT_API_KEY;
-    } else if (provider === "prismalink") {
-      apiKey = env.PRISMALINK_SECRET_KEY || env.PRISMALINK_API_KEY || env.BUAYAR_API_KEY || env.PG_API_KEY || env.PAYMENT_API_KEY;
-    } else if (provider === "faspay") {
-      apiKey = env.FASPAY_PASSWORD || env.FASPAY_API_KEY || env.BUAYAR_API_KEY || env.PG_API_KEY || env.PAYMENT_API_KEY;
-    } else if (provider === "finpay") {
-      apiKey = env.FINPAY_MERCHANT_KEY || env.FINPAY_SECRET_KEY || env.FINPAY_API_KEY || env.BUAYAR_API_KEY || env.PG_API_KEY || env.PAYMENT_API_KEY;
-    } else if (provider === "nicepay") {
-      apiKey = env.NICEPAY_KEY || env.NICEPAY_MERCHANT_KEY || env.NICEPAY_SECRET_KEY || env.NICEPAY_API_KEY || env.BUAYAR_API_KEY || env.PG_API_KEY || env.PAYMENT_API_KEY;
-    } else if (provider === "oy" || provider === "oyindonesia") {
-      apiKey = env.OY_API_KEY || env.BUAYAR_API_KEY || env.PG_API_KEY || env.PAYMENT_API_KEY;
-    } else if (provider === "stripe") {
-      apiKey = env.STRIPE_SECRET_KEY || env.STRIPE_KEY || env.BUAYAR_API_KEY || env.PG_API_KEY || env.PAYMENT_API_KEY;
-    } else if (provider === "paypal") {
-      apiKey = env.PAYPAL_CLIENT_SECRET || env.BUAYAR_API_KEY || env.PG_API_KEY || env.PAYMENT_API_KEY;
-    } else if (provider === "adyen") {
-      apiKey = env.ADYEN_API_KEY || env.BUAYAR_API_KEY || env.PG_API_KEY || env.PAYMENT_API_KEY;
-    } else if (provider === "checkoutcom") {
-      apiKey = env.CHECKOUTCOM_SECRET_KEY || env.BUAYAR_API_KEY || env.PG_API_KEY || env.PAYMENT_API_KEY;
-    } else if (provider === "razorpay") {
-      apiKey = env.RAZORPAY_KEY_SECRET || env.BUAYAR_API_KEY || env.PG_API_KEY || env.PAYMENT_API_KEY;
-    } else if (provider === "square") {
-      apiKey = env.SQUARE_ACCESS_TOKEN || env.BUAYAR_API_KEY || env.PG_API_KEY || env.PAYMENT_API_KEY;
-    } else if (provider === "payu") {
-      apiKey = env.PAYU_MD5_KEY || env.BUAYAR_API_KEY || env.PG_API_KEY || env.PAYMENT_API_KEY;
-    } else if (provider === "braintree") {
-      apiKey = env.BRAINTREE_PRIVATE_KEY || env.BUAYAR_API_KEY || env.PG_API_KEY || env.PAYMENT_API_KEY;
-    } else if (provider === "twocheckout" || provider === "2checkout") {
-      apiKey = env.TWOCHECKOUT_SECRET_KEY || env.BUAYAR_API_KEY || env.PG_API_KEY || env.PAYMENT_API_KEY;
-    } else {
-      apiKey = env.BUAYAR_API_KEY || env.PG_API_KEY || env.PAYMENT_API_KEY || env.PG_SECRET_KEY || env.BUAYAR_SECRET_KEY;
-    }
-  }
-
-  // 4. Resolve Merchant Code / Client Key / Client ID / Merchant ID / User ID / iMid / Username
-  let merchantCode = customConfig?.merchantCode;
-  let clientKey = customConfig?.clientKey;
-  let merchantId = customConfig?.merchantId;
-
-  if (provider === "midtrans") {
-    clientKey = clientKey || env.MIDTRANS_CLIENT_KEY || env.BUAYAR_CLIENT_KEY || env.PG_CLIENT_KEY;
-    merchantId = merchantId || env.MIDTRANS_MERCHANT_ID || env.BUAYAR_MERCHANT_ID || env.PG_MERCHANT_ID;
-    merchantCode = merchantCode || clientKey || merchantId || env.BUAYAR_MERCHANT_CODE || env.PG_MERCHANT_CODE;
-  } else if (provider === "duitku") {
-    merchantCode = merchantCode || env.DUITKU_MERCHANT_CODE || env.BUAYAR_MERCHANT_CODE || env.PG_MERCHANT_CODE || env.PAYMENT_MERCHANT_CODE;
-  } else if (provider === "ipaymu") {
-    merchantCode = merchantCode || env.IPAYMU_VA || env.IPAYMU_MERCHANT_CODE || env.BUAYAR_MERCHANT_CODE || env.PG_MERCHANT_CODE || env.PAYMENT_MERCHANT_CODE;
-  } else if (provider === "doku") {
-    merchantCode = merchantCode || env.DOKU_CLIENT_ID || env.DOKU_MERCHANT_ID || env.BUAYAR_MERCHANT_CODE || env.PG_MERCHANT_CODE || env.PAYMENT_MERCHANT_CODE;
-    clientKey = clientKey || customConfig?.merchantCode || env.DOKU_CLIENT_ID || env.BUAYAR_CLIENT_KEY;
-  } else if (provider === "prismalink") {
-    merchantCode = merchantCode || env.PRISMALINK_MERCHANT_ID || env.BUAYAR_MERCHANT_CODE || env.PG_MERCHANT_CODE || env.PAYMENT_MERCHANT_CODE;
-    merchantId = merchantId || env.PRISMALINK_MERCHANT_ID || env.BUAYAR_MERCHANT_ID;
-  } else if (provider === "faspay") {
-    merchantCode = merchantCode || env.FASPAY_MERCHANT_ID || env.BUAYAR_MERCHANT_CODE || env.PG_MERCHANT_CODE || env.PAYMENT_MERCHANT_CODE;
-    merchantId = merchantId || env.FASPAY_MERCHANT_ID || env.BUAYAR_MERCHANT_ID;
-    clientKey = clientKey || env.FASPAY_USER_ID || env.BUAYAR_CLIENT_KEY;
-  } else if (provider === "finpay") {
-    merchantCode = merchantCode || env.FINPAY_MERCHANT_ID || env.BUAYAR_MERCHANT_CODE || env.PG_MERCHANT_CODE || env.PAYMENT_MERCHANT_CODE;
-    merchantId = merchantId || env.FINPAY_MERCHANT_ID || env.BUAYAR_MERCHANT_ID;
-  } else if (provider === "nicepay") {
-    merchantCode = merchantCode || env.NICEPAY_IMID || env.NICEPAY_MERCHANT_ID || env.BUAYAR_MERCHANT_CODE || env.PG_MERCHANT_CODE || env.PAYMENT_MERCHANT_CODE;
-    merchantId = merchantId || env.NICEPAY_IMID || env.BUAYAR_MERCHANT_ID;
-  } else if (provider === "oy" || provider === "oyindonesia") {
-    merchantCode = merchantCode || env.OY_USERNAME || env.BUAYAR_MERCHANT_CODE || env.PG_MERCHANT_CODE || env.PAYMENT_MERCHANT_CODE;
-    clientKey = clientKey || customConfig?.merchantCode || env.OY_USERNAME || env.BUAYAR_CLIENT_KEY;
-  } else if (provider === "stripe") {
-    clientKey = clientKey || env.STRIPE_PUBLIC_KEY || env.STRIPE_PUBLISHABLE_KEY || env.BUAYAR_CLIENT_KEY || env.BUAYAR_PUBLIC_KEY;
-    merchantCode = merchantCode || clientKey || "stripe";
-  } else if (provider === "paypal") {
-    clientKey = clientKey || env.PAYPAL_CLIENT_ID || env.BUAYAR_CLIENT_KEY;
-    merchantCode = merchantCode || env.PAYPAL_CLIENT_ID || env.BUAYAR_MERCHANT_CODE;
-  } else if (provider === "adyen") {
-    clientKey = clientKey || env.ADYEN_CLIENT_KEY || env.BUAYAR_CLIENT_KEY;
-    merchantCode = merchantCode || env.ADYEN_MERCHANT_ACCOUNT || env.BUAYAR_MERCHANT_CODE;
-    merchantId = merchantId || env.ADYEN_MERCHANT_ACCOUNT || env.BUAYAR_MERCHANT_ID;
-  } else if (provider === "checkoutcom") {
-    clientKey = clientKey || env.CHECKOUTCOM_PUBLIC_KEY || env.BUAYAR_CLIENT_KEY;
-    merchantCode = merchantCode || env.BUAYAR_MERCHANT_CODE;
-  } else if (provider === "razorpay") {
-    clientKey = clientKey || env.RAZORPAY_KEY_ID || env.BUAYAR_CLIENT_KEY;
-    merchantCode = merchantCode || env.RAZORPAY_KEY_ID || env.BUAYAR_MERCHANT_CODE;
-  } else if (provider === "square") {
-    clientKey = clientKey || env.SQUARE_APPLICATION_ID || env.BUAYAR_CLIENT_KEY;
-    merchantCode = merchantCode || env.SQUARE_APPLICATION_ID || env.BUAYAR_MERCHANT_CODE;
-  } else if (provider === "payu") {
-    merchantCode = merchantCode || env.PAYU_POS_ID || env.BUAYAR_MERCHANT_CODE;
-    merchantId = merchantId || env.PAYU_POS_ID;
-  } else if (provider === "braintree") {
-    clientKey = clientKey || env.BRAINTREE_PUBLIC_KEY || env.BUAYAR_CLIENT_KEY;
-    merchantCode = merchantCode || env.BRAINTREE_MERCHANT_ID || env.BUAYAR_MERCHANT_CODE;
-    merchantId = merchantId || env.BRAINTREE_MERCHANT_ID;
-  } else if (provider === "twocheckout" || provider === "2checkout") {
-    merchantCode = merchantCode || env.TWOCHECKOUT_MERCHANT_CODE || env.BUAYAR_MERCHANT_CODE;
-    merchantId = merchantId || env.TWOCHECKOUT_MERCHANT_CODE;
-  } else {
-    merchantCode = merchantCode || env.BUAYAR_MERCHANT_CODE || env.PG_MERCHANT_CODE || env.PAYMENT_MERCHANT_CODE;
-  }
-
-  // 5. Resolve Project ID / Public Key / URLs / Webhook Tokens / Extra
-  const projectId = customConfig?.projectId || env.BUAYAR_PROJECT_ID || env.PG_PROJECT_ID || env.PROJECT_ID || env.SQUARE_LOCATION_ID;
-  const publicKey = customConfig?.publicKey || env.BUAYAR_PUBLIC_KEY || env.PG_PUBLIC_KEY || env.PUBLIC_KEY || env.STRIPE_PUBLIC_KEY || env.STRIPE_PUBLISHABLE_KEY || env.CHECKOUTCOM_PUBLIC_KEY;
-  const privateKey = customConfig?.privateKey || env.BUAYAR_PRIVATE_KEY || env.PG_PRIVATE_KEY || env.PRIVATE_KEY || env.BRAINTREE_PRIVATE_KEY;
-  const secretKey = customConfig?.secretKey || customConfig?.apiKey || customConfig?.serverKey || env.BUAYAR_SECRET_KEY || env.PG_SECRET_KEY || env.SECRET_KEY || env.XENDIT_SECRET_KEY || env.DOKU_SECRET_KEY || env.PRISMALINK_SECRET_KEY || env.FASPAY_PASSWORD || env.FINPAY_MERCHANT_KEY || env.NICEPAY_KEY || env.OY_API_KEY || env.STRIPE_SECRET_KEY || env.PAYPAL_CLIENT_SECRET || env.CHECKOUTCOM_SECRET_KEY || env.RAZORPAY_KEY_SECRET || env.SQUARE_ACCESS_TOKEN || env.BRAINTREE_PRIVATE_KEY || env.TWOCHECKOUT_SECRET_KEY;
+  // 4. Field lain (URL, webhook, project, dll)
   const callbackUrl = customConfig?.callbackUrl || env.BUAYAR_CALLBACK_URL || env.PG_CALLBACK_URL || env.PAYMENT_CALLBACK_URL;
   const returnUrl = customConfig?.returnUrl || env.BUAYAR_RETURN_URL || env.PG_RETURN_URL || env.PAYMENT_RETURN_URL;
+  const publicKey = customConfig?.publicKey || firstDefined(env, ["BUAYAR_PUBLIC_KEY", "PG_PUBLIC_KEY", "PUBLIC_KEY"]) || cfg.clientKey;
+  const privateKey = customConfig?.privateKey || firstDefined(env, ["BUAYAR_PRIVATE_KEY", "PG_PRIVATE_KEY", "PRIVATE_KEY"]) || (provider === "braintree" ? cfg.apiKey : undefined);
 
   const extra = {
     webhookToken: env.XENDIT_WEBHOOK_TOKEN || env.BUAYAR_WEBHOOK_TOKEN,
@@ -207,15 +232,17 @@ export function resolveConfigFromEnv(customConfig?: BuayarConfig): BuayarConfig 
     ...customConfig?.extra,
   };
 
+  const apiKey = cfg.apiKey || cfg.secretKey || cfg.serverKey;
+
   return {
-    provider: provider === "oyindonesia" ? "oy" : provider === "2checkout" ? "twocheckout" : provider,
-    apiKey: apiKey || "",
+    provider,
+    apiKey,
     serverKey: apiKey || "",
-    secretKey: secretKey || apiKey || "",
-    merchantCode: merchantCode || "",
-    clientKey: clientKey || "",
-    merchantId: merchantId || "",
-    projectId,
+    secretKey: apiKey || "",
+    merchantCode: cfg.merchantCode || "",
+    clientKey: cfg.clientKey || "",
+    merchantId: cfg.merchantId || "",
+    projectId: cfg.projectId || "",
     publicKey,
     privateKey,
     sandbox,

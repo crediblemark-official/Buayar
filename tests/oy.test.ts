@@ -1,5 +1,12 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it, afterEach } from "bun:test";
 import { Buayar } from "../src";
+
+const OY_ENV = ["PROVIDER_PG", "OY_USERNAME", "OY_API_KEY", "OY_SANDBOX"] as const;
+
+// Hindari pencemaran process.env ke file test lain (mis. webhook.test.ts).
+afterEach(() => {
+  for (const key of OY_ENV) delete process.env[key];
+});
 
 describe("OY! Bisnis Provider & Client Integration", () => {
   it("should resolve OY! config from environment variables", () => {

@@ -1,4 +1,6 @@
 import { PaymentManager, paymentManager } from "./manager";
+import { ProviderRegistry, providerRegistry } from "./providerRegistry";
+import type { ProviderCapability, ProviderDescriptor } from "./providerRegistry";
 import {
   CreateInvoiceParams,
   InvoiceResponse,
@@ -52,9 +54,11 @@ export { resolveConfigFromEnv };
 export class Buayar {
   private manager: PaymentManager;
   private config: BuayarConfig;
+  private registry: ProviderRegistry;
 
-  constructor(config?: BuayarConfig, manager?: PaymentManager) {
+  constructor(config?: BuayarConfig, manager?: PaymentManager, registry?: ProviderRegistry) {
     this.manager = manager || paymentManager;
+    this.registry = registry || providerRegistry;
     this.config = resolveConfigFromEnv(config);
   }
 
@@ -91,6 +95,70 @@ export class Buayar {
    */
   getProvider(name?: string): BasePaymentProvider {
     return this.manager.getProvider(name || this.provider);
+  }
+
+  /**
+   * Daftar nama provider yang terdaftar (bawaan + kustom).
+   */
+  listProviders(): string[] {
+    return this.registry.names();
+  }
+
+  /**
+   * Registrasi metadata provider kustom untuk deteksi & capability.
+   * Contoh: buayar.registerProviderDescriptor({ name, envKeys, methods, operations })
+   */
+  registerProviderDescriptor(desc: ProviderDescriptor): void {
+    this.registry.register(desc);
+  }
+
+  /**
+   * Cek capability (metode + operasi) provider tertentu — atau provider aktif bila kosong.
+   * Jawab pertanyaan "provider ini dukung apa?" secara runtime, tanpa bongkar dokumen.
+   */
+  getCapabilities(name?: string): ProviderCapability | undefined {
+    const n = name || this.provider;
+    const desc = this.registry.get(n);
+    if (!desc) return undefined;
+    return { methods: desc.methods, operations: desc.operations };
+  }
+
+  /**
+   * Deteksi nama provider dari struktur payload webhook.
+   */
+  detectProviderFromPayload(payload: any): string | undefined {
+    return this.registry.detectFromWebhook(payload);
+  }
+
+  /**
+   * Deteksi nama provider aktif dari variabel lingkungan (kredensial yang terisi).
+   */
+  detectProviderFromEnv(env?: Record<string, string | undefined>): string | undefined {
+    return this.registry.detectFromEnv(env || (process.env as any));
+  }
+
+  /**
+   * Logika "bisa pakai X dengan provider Y?" — helper untuk portabilitas.
+   */
+  supports(name: string, operation: "refund" | "checkBalance" | "disburse"): boolean {
+    const desc = this.registry.get(name);
+    return desc ? desc.operations[operation] : false;
+  }
+
+  /**
+   * Daftar metode pembayaran yang benar2 tersedia untuk provider aktif.
+   */
+  getSupportedMethods(name?: string): string[] {
+    const n = name || this.provider;
+    return this.registry.get(n)?.methods || [];
+  }
+
+  /**
+   * Iterasi CEPAT: apakah provider aktif mendukung method kanonik tertentu?
+   */
+  supportsMethod(method: string, name?: string): boolean {
+    const n = name || this.provider;
+    return this.registry.get(n)?.methods.includes(method) ?? false;
   }
 
   /**
@@ -199,48 +267,9 @@ export class Buayar {
 
     let providerName = (configOverride as any)?.provider || this.provider;
 
-    // Auto-detect provider from payload structure
-    if (payload) {
-      if (payload.signature_key && payload.transaction_status) {
-        providerName = "midtrans";
-      } else if (payload.merchantCode && payload.merchantOrderId && payload.resultCode) {
-        providerName = "duitku";
-      } else if (payload.trx_id && (payload.sid || payload.reference_id || payload.via)) {
-        providerName = "ipaymu";
-      } else if (payload.service?.id || (payload.order?.invoice_number && payload.transaction?.status)) {
-        providerName = "doku";
-      } else if (payload.bill_no && (payload.payment_status_code !== undefined || payload.payment_status_desc)) {
-        providerName = "faspay";
-      } else if (payload.merchant_id && payload.order_id && payload.payment_status) {
-        providerName = "finpay";
-      } else if (payload.tXid && payload.merchantToken && (payload.referenceNo || payload.amt)) {
-        providerName = "nicepay";
-      } else if (payload.partner_tx_id || payload.partner_trx_id) {
-        providerName = "oy";
-      } else if (payload.merchant_id && payload.order_id && payload.signature) {
-        providerName = "prismalink";
-      } else if (payload.object === "event" || (payload.type && payload.data?.object && payload.api_version)) {
-        providerName = "stripe";
-      } else if (payload.event && payload.payload?.payment?.entity) {
-        providerName = "razorpay";
-      } else if (payload.external_id || payload.event?.startsWith("payment.") || payload.event?.startsWith("qr.") || payload.data?.reference_id) {
-        providerName = "xendit";
-      } else if (payload.event_type && payload.resource && (payload.event_type.startsWith("PAYMENT.") || payload.event_type.startsWith("CHECKOUT.ORDER."))) {
-        providerName = "paypal";
-      } else if (payload.notificationItems || (payload.merchantAccountCode && payload.pspReference && payload.eventCode)) {
-        providerName = "adyen";
-      } else if (payload.type && payload.data?._links && (payload.type.startsWith("payment_") || payload.type.startsWith("refund_"))) {
-        providerName = "checkoutcom";
-      } else if (payload.type && payload.data?.object?.status && payload.merchant_id) {
-        providerName = "square";
-      } else if (payload.order && payload.order?.status && payload.order?.extOrderId) {
-        providerName = "payu";
-      } else if (payload.kind && payload.subject?.transaction) {
-        providerName = "braintree";
-      } else if (payload.HASH && payload.REFNOEXT && payload.IPN_PID) {
-        providerName = "twocheckout";
-      }
-    }
+    // Auto-detect provider dari struktur payload (via registry terpusat)
+    const detected = this.registry.detectFromWebhook(payload);
+    if (detected) providerName = detected;
 
     return this.manager.verifyCallback(providerName, payload, mergedConfig);
   }

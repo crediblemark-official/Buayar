@@ -6,6 +6,7 @@ export * from "./core/buayar";
 export * from "./core/manager";
 export * from "./core/config";
 export * from "./core/canonical";
+export * from "./core/providerRegistry";
 
 // ─── Indonesian Providers ─────────────────────────────────────────────────
 export * from "./providers/base";
