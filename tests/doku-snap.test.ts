@@ -1,5 +1,11 @@
 import { describe, expect, it } from "bun:test";
-import { Buayar, generateSnapSymmetricSignature, SnapClient } from "../src";
+import {
+  Buayar,
+  generateSnapSymmetricSignature,
+  snapTimestamp,
+  snapUtcTimestamp,
+  SnapClient,
+} from "../src";
 
 const TEST_RSA_PRIVATE_KEY = `-----BEGIN PRIVATE KEY-----
 MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQCigvzSGydgbYZT
@@ -177,5 +183,17 @@ describe("DOKU SNAP Integration", () => {
       sandbox: true,
     });
     await expect(snap.getAccessToken()).rejects.toThrow(/privateKey/);
+  });
+
+  it("snapUtcTimestamp produces UTC+0 Z format (required by Get Token B2B)", () => {
+    const fixed = new Date("2026-09-03T08:46:59Z");
+    expect(snapUtcTimestamp(fixed)).toBe("2026-09-03T08:46:59Z");
+  });
+
+  it("snapUtcTimestamp and snapTimestamp represent the same instant", () => {
+    const fixed = new Date("2026-09-03T08:46:59Z");
+    expect(snapUtcTimestamp(fixed)).toBe("2026-09-03T08:46:59Z");
+    // snapTimestamp = WIB +7 offset on the same moment
+    expect(snapTimestamp(fixed)).toBe("2026-09-03T15:46:59+07:00");
   });
 });

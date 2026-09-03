@@ -3,6 +3,7 @@ import {
   generateSnapSymmetricSignature,
   generateSnapAsymmetricSignature,
   snapTimestamp,
+  snapUtcTimestamp,
   snapExternalId,
 } from "../providers/doku/snap";
 
@@ -61,7 +62,8 @@ export class SnapClient {
     }
 
     const endpoint = "/authorization/v1/access-token/b2b";
-    const timestamp = snapTimestamp();
+    // Get-token (asymmetric) requires UTC+0 ISO8601 with Z suffix.
+    const timestamp = snapUtcTimestamp();
     const signature = generateSnapAsymmetricSignature(privateKey, clientId, timestamp);
 
     const response = await fetch(this.baseUrl + endpoint, {

@@ -29,6 +29,15 @@ export function snapTimestamp(date: Date = new Date()): string {
   return wib.toISOString().slice(0, 19) + "+07:00";
 }
 
+/**
+ * UTC ISO8601 timestamp (UTC+0, `Z` suffix) required by the SNAP
+ * Get Token B2B/B2B2C (asymmetric signature) calls. The `stringToSign`
+ * for get-token uses this exact UTC value: `clientId + "|" + X-TIMESTAMP`.
+ */
+export function snapUtcTimestamp(date: Date = new Date()): string {
+  return date.toISOString().slice(0, 19) + "Z";
+}
+
 /** Compact (minified) JSON — whitespace removed, used as signature input. */
 export function minifyJson(obj: any): string {
   return JSON.stringify(obj);
