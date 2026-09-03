@@ -12,6 +12,8 @@ import {
 } from "../../types";
 import { toDokuPaymentMethod } from "../../core/canonical";
 import { generateDokuHeaders, verifyDokuWebhookSignature } from "./signature";
+import { SnapClient } from "../../clients/snap";
+import { verifySnapWebhookSignature, snapTimestamp, snapExternalId, generateSnapSymmetricSignature, sha256Hex } from "./snap";
 
 export class DokuProvider extends BasePaymentProvider {
   readonly name = "doku";
@@ -20,6 +22,39 @@ export class DokuProvider extends BasePaymentProvider {
     return sandbox
       ? "https://api-sandbox.doku.com"
       : "https://api.doku.com";
+  }
+
+  /**
+   * DETEKSI mode integrasi DOKU:
+   * - SNAP  : kredensial baru (Client ID `doku_...` + Secret Key `SK-...`) + opsional RSA privateKey
+   *           untuk Get Token B2B. Diaktifkan via extra.snap / extra.dokuMode="snap" / doku_ prefix.
+   * - Legacy: Jokul v2 (Client-Id + Signature HMAC-SHA256), default jika bukan SNAP.
+   */
+  private isSnap(config: ProviderConfig): boolean {
+    if (config.extra?.snap === true || config.extra?.snap === "true") return true;
+    if (config.extra?.dokuMode === "snap") return true;
+    const clientId = String(config.merchantCode || config.merchantId || config.clientKey || "").trim().toLowerCase();
+    return /^doku[_:-]/.test(clientId);
+  }
+
+  private buildSnap(config: ProviderConfig): SnapClient {
+    const clientId = config.merchantCode || config.merchantId || config.clientKey || "";
+    const clientSecret = config.apiKey || config.serverKey || config.secretKey || "";
+    return new SnapClient({
+      clientId,
+      clientSecret,
+      privateKey: config.privateKey,
+      sandbox: !!config.sandbox,
+      merchantId: config.extra?.merchantId || config.projectId || "",
+      terminalId: config.extra?.terminalId || "",
+      partnerServiceId: config.extra?.partnerServiceId || "",
+      channelId: config.extra?.channelId || "H2H",
+    });
+  }
+
+  /** Helper: jumlah integer → format SNAP 2-desimal (".00"). */
+  private snapAmount(amount: number, currency = "IDR") {
+    return { value: amount.toFixed(2), currency };
   }
 
   async createInvoice(params: CreateInvoiceParams, config: ProviderConfig): Promise<InvoiceResponse> {
@@ -35,6 +70,9 @@ export class DokuProvider extends BasePaymentProvider {
     const baseUrl = this.getBaseUrl(sandbox);
 
     try {
+      if (this.isSnap(config)) {
+        return await this.createSnapInvoice(params, config, baseUrl);
+      }
       if (isDirect) {
         // Direct Payment API (Jokul v2)
         const endpoint = dokuMethod.endpoint;
@@ -239,7 +277,217 @@ export class DokuProvider extends BasePaymentProvider {
     }
   }
 
+  /**
+   * DOKU SNAP: buat transaksi (Create VA / Generate QRIS / e-Wallet Payment).
+   * Autentikasi via B2B token + symmetric HMAC-SHA512 signature.
+   */
+  private async createSnapInvoice(
+    params: CreateInvoiceParams,
+    config: ProviderConfig,
+    baseUrl: string
+  ): Promise<InvoiceResponse> {
+    const { orderId, amount, productDetails, customer, returnUrl } = params;
+    const snap = this.buildSnap(config);
+    const integerAmount = Math.round(amount);
+    const method = String(params.paymentMethod || "").toLowerCase();
+
+    const bankMap: Record<string, string> = {
+      bca: "VIRTUAL_ACCOUNT_BCA",
+      mandiri: "VIRTUAL_ACCOUNT_BANK_MANDIRI",
+      bri: "VIRTUAL_ACCOUNT_BRI",
+      bni: "VIRTUAL_ACCOUNT_BNI",
+      permata: "VIRTUAL_ACCOUNT_BANK_PERMATA",
+      cimb: "VIRTUAL_ACCOUNT_BANK_CIMB",
+      danamon: "VIRTUAL_ACCOUNT_BANK_DANAMON",
+      bsi: "VIRTUAL_ACCOUNT_BANK_SYARIAH_MANDIRI",
+      sinarmas: "VIRTUAL_ACCOUNT_SINARMAS",
+      bjb: "VIRTUAL_ACCOUNT_BANK_BJB",
+      btn: "VIRTUAL_ACCOUNT_BTN",
+      bnc: "VIRTUAL_ACCOUNT_BNC",
+    };
+
+    const isVa = method.includes("_va");
+    const isQris = method === "qris" || method.includes("qris");
+
+    try {
+      if (isVa) {
+        return await this.snapCreateVA(params, config, snap, baseUrl, bankMap);
+      }
+      if (isQris) {
+        return await this.snapGenerateQRIS(params, config, snap, baseUrl);
+      }
+      // e-Wallet (DANA / OVO / ShopeePay)
+      return await this.snapEWalletPayment(params, config, snap, baseUrl);
+
+    } catch (e: any) {
+      return {
+        success: false,
+        provider: "doku",
+        orderId,
+        amount: integerAmount,
+        rawResponse: null,
+        error: e.message || "Failed to make SNAP request to DOKU API",
+      };
+    }
+  }
+
+  /** Create Virtual Account (SNAP) — DOKU Generate Payment Code. */
+  private async snapCreateVA(
+    params: CreateInvoiceParams,
+    config: ProviderConfig,
+    snap: SnapClient,
+    baseUrl: string,
+    bankMap: Record<string, string>
+  ): Promise<InvoiceResponse> {
+    const { orderId, amount, productDetails, customer } = params;
+    const method = String(params.paymentMethod || "").toLowerCase();
+    const bankKey = method.replace(/_va$/, "");
+    const channel = config.extra?.vaChannel || bankMap[bankKey] || `VIRTUAL_ACCOUNT_${bankKey.toUpperCase()}`;
+    const partnerServiceId = (config.extra?.partnerServiceId || "").replace(/\s/g, "");
+    const customerNo = (config.extra?.customerNo || "").slice(0, 20) || String(Date.now()).slice(-12);
+    const virtualAccountNo = (partnerServiceId + customerNo).slice(0, 28);
+    const reusable = config.extra?.reusableStatus === true;
+    const currency = params.currency || "IDR";
+
+    const body: any = {
+      partnerServiceId,
+      customerNo,
+      virtualAccountNo,
+      virtualAccountName: customer.name || "Customer",
+      virtualAccountEmail: customer.email,
+      virtualAccountPhone: customer.phone,
+      trxId: orderId,
+      totalAmount: this.snapAmount(amount, currency),
+      virtualAccountTrxType: "C",
+      additionalInfo: {
+        channel,
+        virtualAccountConfig: { reusableStatus: reusable },
+      },
+    };
+    if (params.providerParams) {
+      Object.assign(body.additionalInfo.virtualAccountConfig, params.providerParams);
+    }
+    if (config.extra?.expiredDate) body.expiredDate = config.extra.expiredDate;
+
+    const endpoint = "/virtual-accounts/bi-snap-va/v1.1/transfer-va/create-va";
+    const data = await snap.request("POST", endpoint, body);
+    const vaData = data.virtualAccountData || {};
+
+    return {
+      success: true,
+      provider: "doku",
+      orderId: vaData.trxId || orderId,
+      amount: Number(vaData.totalAmount?.value || amount) || Math.round(amount),
+      reference: vaData.virtualAccountNo || orderId,
+      vaNumber: vaData.virtualAccountNo,
+      vaBank: bankKey.toUpperCase(),
+      paymentUrl: vaData.additionalInfo?.howToPayPage,
+      expiresAt: vaData.expiredDate ? new Date(vaData.expiredDate) : undefined,
+      rawResponse: data,
+    };
+  }
+
+  /** Generate QRIS (SNAP) — dynamic QRIS MPM. */
+  private async snapGenerateQRIS(
+    params: CreateInvoiceParams,
+    config: ProviderConfig,
+    snap: SnapClient,
+    baseUrl: string
+  ): Promise<InvoiceResponse> {
+    const { orderId, amount } = params;
+    const currency = params.currency || "IDR";
+    const merchantId = config.extra?.merchantId || config.projectId || "";
+    const terminalId = config.extra?.terminalId || "0001";
+    const body: any = {
+      partnerReferenceNo: orderId,
+      amount: this.snapAmount(amount, currency),
+      merchantId,
+      terminalId,
+      validityPeriod: config.extra?.validityPeriod || new Date(Date.now() + 3600 * 1000).toISOString(),
+      additionalInfo: {
+        postalCode: config.extra?.postalCode || "10110",
+        feeType: 1,
+      },
+    };
+    if (params.providerParams) {
+      Object.assign(body.additionalInfo, params.providerParams);
+    }
+
+    const endpoint = "/snap-adapter/b2b/v1.0/qr/qr-mpm-generate";
+    const data = await snap.request("POST", endpoint, body);
+
+    return {
+      success: true,
+      provider: "doku",
+      orderId: data.partnerReferenceNo || orderId,
+      amount: Number(data.amount?.value || amount) || Math.round(amount),
+      reference: data.referenceNo || orderId,
+      qrString: data.qrContent,
+      rawResponse: data,
+    };
+  }
+
+  /** e-Wallet payment (SNAP) — DANA / OVO / ShopeePay via payment-host-to-host. */
+  private async snapEWalletPayment(
+    params: CreateInvoiceParams,
+    config: ProviderConfig,
+    snap: SnapClient,
+    baseUrl: string
+  ): Promise<InvoiceResponse> {
+    const { orderId, amount } = params;
+    const method = String(params.paymentMethod || "").toLowerCase();
+    const currency = params.currency || "IDR";
+    const returnUrl = params.returnUrl || config.returnUrl || "";
+    const channelMap: Record<string, string> = {
+      dana: "EMONEY_DANA_SNAP",
+      ovo: "EMONEY_OVO_SNAP",
+      shopeepay: "EMONEY_SHOPEEPAY_SNAP",
+    };
+    const channel = config.extra?.ewalletChannel || channelMap[method] || `EMONEY_${method.toUpperCase()}_SNAP`;
+
+    const body: any = {
+      partnerReferenceNo: orderId,
+      amount: this.snapAmount(amount, currency),
+      pointOfInitiation: "pc",
+      urlParam: {
+        url: returnUrl || "https://example.com/return",
+        type: "PAY_RETURN",
+        isDeepLink: "N",
+      },
+      additionalInfo: {
+        channel,
+        orderTitle: params.productDetails || `Pembayaran ${orderId}`,
+        supportDeepLinkCheckoutUrl: "false",
+      },
+    };
+    if (params.providerParams) {
+      Object.assign(body.additionalInfo, params.providerParams);
+    }
+
+    const endpoint = "/direct-debit/core/v1/debit/payment-host-to-host";
+    const data = await snap.request("POST", endpoint, body, {
+      deviceId: config.extra?.deviceId,
+      ipAddress: config.extra?.ipAddress,
+    });
+
+    return {
+      success: true,
+      provider: "doku",
+      orderId: data.partnerReferenceNo || orderId,
+      amount: Number(data.amount?.value || amount) || Math.round(amount),
+      reference: data.partnerReferenceNo || orderId,
+      paymentUrl: data.webRedirectUrl || data.paymentUrl,
+      rawResponse: data,
+    };
+  }
+
   async verifyCallback(body: any, config: ProviderConfig): Promise<VerifyCallbackResult> {
+    const headers = config.extra?.headers || {};
+
+    if (this.isSnap(config)) {
+      return this.verifySnapCallback(body, config, headers);
+    }
+
     const rawStatus = (body.transaction?.status || body.status || "").toUpperCase();
 
     const isPaid = rawStatus === "SUCCESS" || rawStatus === "PAID" || rawStatus === "SETTLED";
@@ -259,7 +507,6 @@ export class DokuProvider extends BasePaymentProvider {
           : "failed";
 
     const secretKey = config.secretKey || config.apiKey || "";
-    const headers = config.extra?.headers || {};
     const signature = headers["signature"] || headers["Signature"] || config.extra?.dokuSignature || config.extra?.signatureHeader;
     const clientId = config.merchantCode || config.clientKey || "";
 
@@ -282,6 +529,71 @@ export class DokuProvider extends BasePaymentProvider {
       rawPayload: body,
     };
   }
+
+  /**
+   * Verifikasi webhook / notifikasi DOKU SNAP.
+   * Signature dibangun dengan symmetric HMAC-SHA512 (AccessToken kosong).
+   */
+  private verifySnapCallback(
+    body: any,
+    config: ProviderConfig,
+    headers: Record<string, string | string[] | undefined>
+  ): VerifyCallbackResult {
+    const clientSecret = config.apiKey || config.serverKey || config.secretKey || "";
+    const endpointUrl = (
+      config.extra?.notificationPath ||
+      (headers["x-path"] as string) ||
+      config.extra?.headers?.["request-target"] ||
+      "/api/payment/webhook"
+    ) as string;
+
+    let isValid = true;
+    const incomingSig = (
+      headers["x-signature"] || headers["X-SIGNATURE"] || headers["signature"] || headers["Signature"] || ""
+    ) as string;
+    if (incomingSig && clientSecret) {
+      isValid = verifySnapWebhookSignature(headers, body, clientSecret, endpointUrl);
+    }
+
+    // Status: payment notification diterima → PAID. field status eksplisit bila ada.
+    const explicitStatus = String(body.transactionStatus || body.status || body.latestTransactionStatus || "").toUpperCase();
+    const isPaid =
+      explicitStatus === "SUCCESS" || explicitStatus === "PAID" || explicitStatus === "SETTLED" || explicitStatus === "00" ||
+      (!explicitStatus && Boolean(body.paidAmount?.value ?? body.totalAmount?.value));
+    const isPending = explicitStatus === "PENDING" || explicitStatus === "11" || explicitStatus === "ONGOING";
+    const isFailed = explicitStatus === "FAILED" || explicitStatus === "DECLINED" ||
+      (Boolean(explicitStatus) && !isPaid && !isPending && explicitStatus !== "00");
+    const isExpired = explicitStatus === "EXPIRED";
+
+    const orderId =
+      body.trxId || body.partnerReferenceNo || body.originalPartnerReferenceNo ||
+      body.order?.invoice_number || body.invoice_number || body.order_id || "";
+
+    const paidValue = body.paidAmount?.value ?? body.totalAmount?.value ?? body.amount?.value ?? body.amount ?? 0;
+
+    const status: "paid" | "pending" | "failed" | "expired" = isPaid
+      ? "paid"
+      : isPending
+        ? "pending"
+        : isExpired
+          ? "expired"
+          : "failed";
+
+    return {
+      isValid,
+      provider: "doku",
+      orderId: String(orderId),
+      amount: Number(paidValue) || 0,
+      status,
+      isPaid,
+      isPending,
+      isFailed,
+      isExpired,
+      statusCode: explicitStatus || "SUCCESS",
+      rawPayload: body,
+    };
+  }
+
 
   async getPaymentMethods(params: GetPaymentMethodsParams, config: ProviderConfig): Promise<GetPaymentMethodsResult> {
     const staticMethods: PaymentMethod[] = [
@@ -446,6 +758,10 @@ export class DokuProvider extends BasePaymentProvider {
     const secretKey = config.apiKey || config.serverKey || config.secretKey || "";
     const sandbox = !!config.sandbox;
 
+    if (this.isSnap(config)) {
+      return this.snapCheckTransaction(params, config, clientId);
+    }
+
     const endpoint = `/orders/v1/status/${merchantOrderId}`;
     const url = `${this.getBaseUrl(sandbox)}${endpoint}`;
     const headers = generateDokuHeaders(clientId, secretKey, endpoint);
@@ -530,6 +846,72 @@ export class DokuProvider extends BasePaymentProvider {
         isExpired: false,
         statusMessage: e.message || "Failed to check transaction status in DOKU",
         error: e.message || "Failed to check transaction status in DOKU",
+        rawResponse: null,
+      };
+    }
+  }
+
+  /** Cek status transaksi SNAP (menggunakan Query QRIS bila ref berasal dari QRIS). */
+  private async snapCheckTransaction(
+    params: CheckTransactionParams,
+    config: ProviderConfig,
+    clientId: string
+  ): Promise<CheckTransactionResult> {
+    const { merchantOrderId } = params;
+    const snap = this.buildSnap(config);
+    try {
+      const body: any = {
+        originalPartnerReferenceNo: merchantOrderId,
+        serviceCode: "47",
+        merchantId: config.extra?.merchantId || config.projectId || "",
+      };
+      const data = await snap.request("POST", "/snap-adapter/b2b/v1.0/qr/qr-mpm-query", body);
+
+      const txStatus = String(data.latestTransactionStatus || "").toUpperCase();
+      const isPaid = txStatus === "SUCCESS" || txStatus === "00" || txStatus === "PAID" || txStatus === "SETTLED";
+      const isPending = txStatus === "PENDING" || txStatus === "ONGOING" || txStatus === "11";
+      const isExpired = txStatus === "EXPIRED";
+      const isFailed = txStatus === "FAILED" || txStatus === "DECLINED" || (Boolean(txStatus) && !isPaid && !isPending && !isExpired);
+
+      const status: "paid" | "pending" | "failed" | "expired" = isPaid
+        ? "paid"
+        : isPending
+          ? "pending"
+          : isExpired
+            ? "expired"
+            : "failed";
+
+      return {
+        success: true,
+        provider: "doku",
+        orderId: data.originalPartnerReferenceNo || merchantOrderId,
+        reference: data.originalReferenceNo || "",
+        amount: Number(data.amount?.value || 0),
+        statusCode: txStatus || String(data.responseCode || ""),
+        status,
+        isPaid,
+        isPending,
+        isFailed,
+        isExpired,
+        statusMessage: txStatus || data.responseMessage || "",
+        paymentType: "QRIS",
+        rawResponse: data,
+      };
+    } catch (e: any) {
+      return {
+        success: false,
+        provider: "doku",
+        orderId: merchantOrderId,
+        reference: "",
+        amount: 0,
+        statusCode: "ERROR",
+        status: "failed",
+        isPaid: false,
+        isPending: false,
+        isFailed: true,
+        isExpired: false,
+        statusMessage: e.message || "Failed to check SNAP transaction status",
+        error: e.message || "Failed to check SNAP transaction status",
         rawResponse: null,
       };
     }
