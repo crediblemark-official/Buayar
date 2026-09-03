@@ -7,21 +7,30 @@ export interface TemplateFiles {
 }
 
 export const DOT_ENV_TEMPLATE = `# ── @crediblemark/buayar · Konfigurasi ─────────────────────────────
-# Provider aktif (salah satu dari 19): midtrans, duitku, ipaymu, xendit, doku,
-# prismalink, faspay, finpay, nicepay, oy, stripe, paypal, adyen, checkoutcom,
-# razorpay, square, payu, braintree, twocheckout
-PROVIDER_PG=midtrans
+# CUKUP isi blok universal di bawah. Provider aktif bisa DITENTUKAN sendiri
+# (BUAYAR_PROVIDER) atau DI-AUTODETECT dari kunci kredensial yang terisi.
+# Saat pindah provider, umumnya kode TIDAK berubah — cukup isi key-nya.
 
-# Kredensial Universal (dipetakan otomatis per provider)
-BUAYAR_API_KEY=your-server-key-atau-secret
+# (opsional) Nama provider aktif. Bila dikosongkan, otomatis dideteksi.
+# midtrans | duitku | ipaymu | xendit | doku | prismalink | faspay | finpay
+# nicepay | oy | stripe | paypal | adyen | checkoutcom | razorpay | square
+# payu | braintree | twocheckout
+# BUAYAR_PROVIDER=midtrans
+
+# Kredensial Universal — dipetakan otomatis sesuai provider aktif.
+# Isi sesuai kredensial yang diminta provider itu (umumnya: secret/key/password).
+BUAYAR_API_KEY=server-key-atau-secret
 BUAYAR_MERCHANT_CODE=merchant-id-atau-username
+BUAYAR_CLIENT_KEY=client-atau-public-key
+BUAYAR_MERCHANT_ID=merchant-id
 BUAYAR_SANDBOX=true
 
 # Callback & Return URL
 BUAYAR_CALLBACK_URL=http://localhost:3000/api/payment/webhook
 BUAYAR_RETURN_URL=http://localhost:3000/payment/success
 
-# ── Kredensial Spesifik Provider (isi sesuai yang aktif saja) ───────────────
+# ── Kredensial Spesifik Provider (opsional & lanjutan) ─────────────────────
+# Bisa diisi bila ingin eksplisit; bila kosong, nilai universal di atas dipakai.
 # MIDTRANS_SERVER_KEY=
 # MIDTRANS_CLIENT_KEY=
 # DUITKU_API_KEY=
@@ -53,6 +62,7 @@ BUAYAR_RETURN_URL=http://localhost:3000/payment/success
 # ADYEN_MERCHANT_ACCOUNT=
 # ADYEN_HMAC_KEY=
 # CHECKOUTCOM_SECRET_KEY=
+# CHECKOUTCOM_PUBLIC_KEY=
 # CHECKOUTCOM_WEBHOOK_SECRET=
 # RAZORPAY_KEY_ID=
 # RAZORPAY_KEY_SECRET=
@@ -273,7 +283,7 @@ export const README_PAYMENT_TEMPLATE = (framework: string, provider: string) => 
 
 Scaffold dibuat otomatis oleh \`buayar init\`.
 
-- **Provider aktif:** \`${provider}\` (ganti di \`.env\` → \`PROVIDER_PG\`)
+- **Provider aktif:** \`${provider}\` (ganti di \`.env\` → \`BUAYAR_PROVIDER\`)
 - **Framework route:** \`${framework}\`
 
 ## Struktur
@@ -291,7 +301,7 @@ src/payment/
 4. Notifikasi masuk ke \`POST /api/payment/webhook\` → diverifikasi otomatis.
 
 ## Ganti Provider
-Ubah \`PROVIDER_PG\` + kredensial di \`.env\`. Kode \`service.ts\`/route **tidak berubah**.
+Ubah \`BUAYAR_PROVIDER\` + kredensial di \`.env\`. Kode \`service.ts\`/route **tidak berubah**.
 
 > Dokumentasi lengkap: https://github.com/crediblemark-official/Buayar#readme
 `;

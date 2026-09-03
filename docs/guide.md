@@ -16,8 +16,10 @@ Panduan ini adalah **satu-satunya** panduan yang Anda butuhkan untuk mengintegra
 6. [Webhook Universal](#-webhook-universal)
 7. [Refund / Saldo / Payout Unified](#-refund--saldo--payout-unified)
 8. [Zero-Code PG Switch](#-zero-code-pg-switch)
-9. [Fitur Khusus Provider (`<X>Client`)](#-fitur-khusus-provider-xclient)
-10. [Kamus Variabel `.env` per Provider](#-kamus-variabel-env-per-provider)
+9. [Provider Dinamis & Autodetect](#-provider-dinamis--autodetect)
+10. [Cek Capability Provider (Portabilitas)](#-cek-capability-provider-portabilitas)
+11. [Fitur Khusus Provider (`<X>Client`)](#-fitur-khusus-provider-xclient)
+12. [Kamus Variabel `.env` per Provider](#-kamus-variabel-env-per-provider)
 
 ---
 
@@ -44,15 +46,20 @@ Semua metode pembayaran memakai **kode canonical universal** (`bca_va`, `qris`, 
 
 ### 1. Zero-Config (baca dari `.env`) — **Direkomendasikan**
 
+Cukup isi **variabel universal** yang sama untuk semua provider. SDK otomatis memetakannya ke kredensial yang dibutuhkan provider aktif.
+
 ```env
-# Pilih provider aktif: midtrans, duitku, ipaymu, xendit, doku, prismalink,
+# (opsional) Provider aktif: midtrans, duitku, ipaymu, xendit, doku, prismalink,
 # faspay, finpay, nicepay, oy, stripe, paypal, adyen, checkoutcom,
 # razorpay, square, payu, braintree, twocheckout
-PROVIDER_PG=midtrans
+# Bila dikosongkan, provider AUTO-DIDETEKSI dari kredensial yang terisi.
+BUAYAR_PROVIDER=midtrans
 
 # Kredensial Universal (dipetakan otomatis per provider)
 BUAYAR_API_KEY=your-server-key-atau-secret
 BUAYAR_MERCHANT_CODE=merchant-id-atau-username
+BUAYAR_CLIENT_KEY=client-atau-public-key   # bila provider butuh
+BUAYAR_MERCHANT_ID=merchant-id             # bila berbeda dari code
 BUAYAR_SANDBOX=true
 
 # Callback & Return URL
@@ -64,6 +71,8 @@ BUAYAR_RETURN_URL=https://myapp.com/payment/finish
 import { buayar } from "@crediblemark/buayar";
 // Konfigurasi ter-baca otomatis dari process.env. Selesai.
 ```
+
+> **🪄 Autodetect:** Jika `BUAYAR_PROVIDER` dikosongkan, Buayar menebak provider aktif dari kredensial yang terisi di `.env` (mis. `STRIPE_SECRET_KEY` → Stripe, `DUITKU_API_KEY` → Duitku). Anda bahkan bisa **tidak menyebut nama provider sama sekali**.
 
 ### 2. Inisialisasi Manual (programatik)
 
@@ -80,6 +89,23 @@ const buayar = new Buayar({
 ```
 
 > 💡 Banyak `get<X>Client()` juga bisa dipakai dengan meneruskan `provider` di `configOverride` agar menargetkan provider tertentu dari satu instance `buayar`.
+
+### Variable Environment: Universal vs Spesifik
+
+Setiap provider punya kredensial yang **berbeda-beda** (`MIDTRANS_SERVER_KEY` vs `DUITKU_API_KEY` vs `FASPAY_PASSWORD`, dst.). Itu sebabnya Buayar menyediakan **variabel universal** yang sama untuk semua provider, jadi Anda tidak perlu menghafal perbedaan tiap PG:
+
+| Variabel Universal | Dipakai sebagai |
+| :--- | :--- |
+| `BUAYAR_PROVIDER` | nama provider aktif (opsional → autodetect) |
+| `BUAYAR_API_KEY` | secret / server key / password provider |
+| `BUAYAR_MERCHANT_CODE` | merchant id / va / username / imid / client id |
+| `BUAYAR_CLIENT_KEY` | client / public / publishable key |
+| `BUAYAR_MERCHANT_ID` | merchant id (bila beda dari code) |
+| `BUAYAR_SANDBOX` | mode sandbox (`true`/`false`) |
+| `BUAYAR_CALLBACK_URL` / `BUAYAR_RETURN_URL` | URL webhook & redirect |
+| `BUAYAR_WEBHOOK_SECRET` / `BUAYAR_WEBHOOK_TOKEN` | secret webhook |
+
+> 🔧 Variabel spesifik per provider (`MIDTRANS_SERVER_KEY`, `DUITKU_API_KEY`, dll.) **tetap didukung** sebagai fallback. Prioritas konfigurasi: `config` eksplisit → `BUAYAR_*` → variabel spesifik → default.
 
 ---
 
@@ -265,14 +291,71 @@ Beralih provider **tanpa mengubah satu baris pun** di controller/service Anda �
 
 ```env
 # Sebelum: Midtrans
-PROVIDER_PG=midtrans
-MIDTRANS_SERVER_KEY=SB-Mid-server-xxxx
+BUAYAR_PROVIDER=midtrans
+BUAYAR_API_KEY=SB-Mid-server-xxxx
 
 # Sesudah: Stripe — kode aplikasi TIDAK berubah
-PROVIDER_PG=stripe
-STRIPE_SECRET_KEY=sk_test_51...
-STRIPE_WEBHOOK_SECRET=whsec_...
+BUAYAR_PROVIDER=stripe
+BUAYAR_API_KEY=sk_test_51...
+BUAYAR_WEBHOOK_SECRET=whsec_...
 ```
+
+Bahkan bisa **tanpa `BUAYAR_PROVIDER`** — cukup ganti kredensial, dan provider terdeteksi otomatis:
+
+```env
+# Auto: cukup isi key-nya, provider tertelan
+BUAYAR_API_KEY=sk_test_51...      # berubah ke Stripe
+```
+
+---
+
+## 🌐 Provider Dinamis & Autodetect
+
+Registry provider **dinamis**: Anda bisa menambah/mendaftarkan provider kustom tanpa mengedit core SDK, sekaligus memanfaatkan autodetect.
+
+### 1. Autodetect dari `.env`
+Tanpa menyebut `BUAYAR_PROVIDER`, SDK menebak provider dari kredensial yang terisi:
+```typescript
+const b = new Buayar();
+b.detectProviderFromEnv(process.env); // "stripe" | "duitku" | ... | undefined
+```
+
+### 2. Autodetect dari payload webhook
+```typescript
+b.detectProviderFromPayload({
+  signature_key: "x", transaction_status: "settlement",
+}); // "midtrans"
+```
+
+### 3. Daftar provider terdaftar & registrasi kustom
+```typescript
+b.listProviders();                       // ["midtrans","duitku",...]
+b.registerProvider(new MyCustomProvider());          // untuk eksekusi
+b.registerProviderDescriptor({
+  name: "mypg",
+  envKeys: ["MYPG_SECRET"],              // untuk autodetect
+  methods: ["qris", "bca_va"],           // untuk capability
+  operations: { refund: true, checkBalance: true, disburse: true },
+});
+```
+
+---
+
+## 🔎 Cek Capability Provider (Portabilitas)
+
+Jawab pertanyaan "provider ini dukung fitur & metode apa?" secara **runtime** — berguna untuk memutuskan migrasi atau menampilkan channel yang valid.
+
+```typescript
+b.getCapabilities("duitku");
+// { methods: ["bca_va","qris",...], operations: { refund: false, checkBalance: true, disburse: true } }
+
+b.supports("xendit", "checkBalance");   // true
+b.supports("doku", "refund");           // false
+b.supportsMethod("qris", "stripe");     // true
+b.getSupportedMethods("midtrans");      // ["bca_va","bni_va",...]
+```
+
+> 💡 Ini berguna untuk skenario **migrasi anti-lock-in**: cek dulu apakah provider target punya metode/op yang Anda butuhkan sebelum pindah. Provider yang tidak mendukung suatu operasi tetap mengembalikan `{ supported: false }` (bukan error), bukan crash.
 
 ---
 

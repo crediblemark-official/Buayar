@@ -61,17 +61,36 @@
 
 #### Universal (Recommended)
 ```env
-# Active provider: any of the 19 supported names
-PROVIDER_PG=midtrans
+# (optional) Active provider: any of the 19 supported names
+# If empty, the provider is AUTO-DETECTED from filled credentials.
+BUAYAR_PROVIDER=midtrans
 
-# Universal credentials (auto-mapped per provider)
+# Universal credentials (auto-mapped per provider — same set for ALL providers)
 BUAYAR_API_KEY=your-server-key-or-secret
 BUAYAR_MERCHANT_CODE=your-merchant-id-or-username
+BUAYAR_CLIENT_KEY=your-client-or-public-key
+BUAYAR_MERCHANT_ID=your-merchant-id
 BUAYAR_SANDBOX=true
 
 # Callback & Return URLs
 BUAYAR_CALLBACK_URL=https://myapp.com/api/payment/webhook
 BUAYAR_RETURN_URL=https://myapp.com/payment/finish
+```
+
+#### Build-time introspection (portability helpers)
+
+Check what a provider actually supports — no docs digging:
+
+```ts
+import { buayar } from "@crediblemark/buayar";
+
+buayar.listProviders();                    // all 19 registered providers
+buayar.detectProviderFromEnv(process.env); // guess active provider from .env
+buayar.detectProviderFromPayload(payload); // guess provider from webhook payload
+buayar.getCapabilities("duitku");
+// { methods: [...], operations: { refund: false, checkBalance: true, disburse: true } }
+buayar.supports("xendit", "checkBalance"); // true
+buayar.supportsMethod("qris", "stripe");   // true
 ```
 
 #### Provider-Specific Variables
@@ -174,9 +193,10 @@ app.post("/api/payment/webhook", async (req, res) => {
 #### 5. Zero-Code PG Switch
 ```env
 # Switch from Midtrans to Stripe — zero code change required
-PROVIDER_PG=stripe
-STRIPE_SECRET_KEY=sk_live_...
-STRIPE_WEBHOOK_SECRET=whsec_...
+BUAYAR_PROVIDER=stripe
+BUAYAR_API_KEY=sk_live_...
+BUAYAR_WEBHOOK_SECRET=whsec_...
+# (or omit BUAYAR_PROVIDER entirely — provider auto-detected from the credentials)
 ```
 
 ---
@@ -230,12 +250,15 @@ STRIPE_WEBHOOK_SECRET=whsec_...
 
 #### Universal (Direkomendasikan)
 ```env
-# Provider aktif (19 pilihan tersedia)
-PROVIDER_PG=midtrans
+# (opsional) Provider aktif (19 pilihan). Bila kosong, AUTO-DIDETEKSI
+# dari kredensial yang terisi. Set var ini sama untuk semua provider.
+BUAYAR_PROVIDER=midtrans
 
 # Kredensial Universal (dipetakan otomatis per provider)
 BUAYAR_API_KEY=server-key-atau-secret
 BUAYAR_MERCHANT_CODE=merchant-id-atau-username
+BUAYAR_CLIENT_KEY=client-atau-public-key
+BUAYAR_MERCHANT_ID=merchant-id
 BUAYAR_SANDBOX=true
 
 # Callback & Return URL
@@ -336,9 +359,10 @@ app.post("/api/payment/webhook", async (req, res) => {
 #### 5. Zero-Code PG Switch
 ```env
 # Ganti dari Midtrans ke Stripe — tanpa ubah satu baris kode pun
-PROVIDER_PG=stripe
-STRIPE_SECRET_KEY=sk_live_...
-STRIPE_WEBHOOK_SECRET=whsec_...
+BUAYAR_PROVIDER=stripe
+BUAYAR_API_KEY=sk_live_...
+BUAYAR_WEBHOOK_SECRET=whsec_...
+# (atau hapus BUAYAR_PROVIDER — provider auto-dideteksi dari kredensial)
 ```
 
 ### 🏷️ Daftar Canonical Payment Methods
