@@ -9,6 +9,11 @@ import {
   GetPaymentMethodsResult,
   CheckTransactionParams,
   CheckTransactionResult,
+  RefundParams,
+  RefundResult,
+  CheckBalanceResult,
+  DisburseParams,
+  DisburseResult,
 } from "../types";
 import { MidtransClient } from "../clients/midtrans";
 import { DuitkuClient } from "../clients/duitku";
@@ -246,6 +251,42 @@ export class Buayar {
     configOverride?: Partial<ProviderConfig>
   ): Promise<VerifyCallbackResult> {
     return this.verifyWebhook(payload, headers, configOverride);
+  }
+
+  /**
+   * Unified Refund — berlaku untuk semua provider yang mendukung refund.
+   * Provider tanpa fitur refund mengembalikan `{ supported: false }`, bukan error.
+   */
+  async refund(
+    params: RefundParams,
+    configOverride?: Partial<ProviderConfig>
+  ): Promise<RefundResult> {
+    const mergedConfig: ProviderConfig = { ...this.config, ...configOverride };
+    const providerName = (configOverride as any)?.provider || this.provider;
+    return this.manager.refund(providerName, params, mergedConfig);
+  }
+
+  /**
+   * Unified Check Balance — ambil saldo merchant dari provider aktif.
+   * Provider tanpa fitur balance mengembalikan `{ supported: false }`.
+   */
+  async checkBalance(configOverride?: Partial<ProviderConfig>): Promise<CheckBalanceResult> {
+    const mergedConfig: ProviderConfig = { ...this.config, ...configOverride };
+    const providerName = (configOverride as any)?.provider || this.provider;
+    return this.manager.checkBalance(providerName, mergedConfig);
+  }
+
+  /**
+   * Unified Disburse / Payout — transfer dana ke rekening bank tujuan.
+   * Provider tanpa fitur disbursement mengembalikan `{ supported: false }`.
+   */
+  async disburse(
+    params: DisburseParams,
+    configOverride?: Partial<ProviderConfig>
+  ): Promise<DisburseResult> {
+    const mergedConfig: ProviderConfig = { ...this.config, ...configOverride };
+    const providerName = (configOverride as any)?.provider || this.provider;
+    return this.manager.disburse(providerName, params, mergedConfig);
   }
 
   // ─── Indonesian Provider Client Getters ───────────────────────────────────

@@ -208,3 +208,70 @@ export interface CheckTransactionResult {
   error?: string;
   rawResponse: any;
 }
+
+// ─── Unified Refund / Balance / Disburse ────────────────────────────────────
+// Lapisan operasi "mata tertutup": panggil satu API untuk semua provider yang
+// mendukung fitur bersangkutan. Provider yang tidak mendukung akan mengembalikan
+// result dengan `supported: false` — bukan error.
+
+export interface RefundParams {
+  /** ID transaksi / capture / payment sebagai target refund (per provider) */
+  transactionId: string;
+  /** Nominal refund (opsional; default = full refund) */
+  amount?: number;
+  /** Alasan refund (opsional bila didukung provider) */
+  reason?: string;
+  /** Kode mata uang (opsional, untuk provider internasional) */
+  currency?: string;
+}
+
+export interface RefundResult {
+  success: boolean;
+  /** Provider yang menyatakan operasi ini tidak tersedia */
+  supported: boolean;
+  provider?: string;
+  /** Reference / ID refund dari provider */
+  reference?: string;
+  /** Status refund dari provider (raw) */
+  status?: string;
+  error?: string;
+  rawResponse: any;
+}
+
+export interface CheckBalanceResult {
+  success: boolean;
+  supported: boolean;
+  provider?: string;
+  /** Saldo merchant dalam satuan terkecil (minor unit) */
+  balance?: number;
+  /** Kode mata uang saldo (bila tersedia) */
+  currency?: string;
+  error?: string;
+  rawResponse: any;
+}
+
+export interface DisburseParams {
+  /** ID unik merchant untuk mengidentifikasi transfer (merchantOrderId / externalId / partnerTrxId) */
+  externalId: string;
+  /** Kode bank tujuan (mis. 'bca', '014', 'BCA' — ikuti aturan provider) */
+  bankCode: string;
+  /** Nama pemilik rekening tujuan (wajib untuk beberapa provider) */
+  accountHolderName?: string;
+  /** Nomor rekening tujuan */
+  accountNumber: string;
+  /** Nominal transfer */
+  amount: number;
+  /** Deskripsi / tujuan transfer */
+  description?: string;
+}
+
+export interface DisburseResult {
+  success: boolean;
+  supported: boolean;
+  provider?: string;
+  /** Reference / status transfer dari provider */
+  reference?: string;
+  status?: string;
+  error?: string;
+  rawResponse: any;
+}
