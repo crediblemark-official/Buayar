@@ -13,8 +13,10 @@ describe("Xendit Provider & Client Integration", () => {
 
   it("should create direct VA invoice via Xendit Payment Requests API", async () => {
     const originalFetch = globalThis.fetch;
+    let capturedBody: any = null;
     (globalThis as any).fetch = async (url: any, options: any) => {
       const body = JSON.parse(options.body);
+      capturedBody = body;
       return {
         ok: true,
         status: 200,
@@ -48,6 +50,7 @@ describe("Xendit Provider & Client Integration", () => {
         paymentMethod: "bca_va",
         productDetails: "Kursus Online",
         customer: { name: "Budi", email: "budi@mail.com" },
+        providerParams: { customer_id: "cust-12345" },
       });
 
       expect(response.success).toBe(true);
@@ -55,6 +58,12 @@ describe("Xendit Provider & Client Integration", () => {
       expect(response.vaNumber).toBe("88089912345678");
       expect(response.vaBank).toBe("bca");
       expect(response.reference).toBe("pr-12345678");
+
+      // Payment Requests API rejects the inline `customer` object; it must be
+      // omitted and any customer attribution must come via `customer_id`.
+      expect(capturedBody).toBeDefined();
+      expect(capturedBody.customer).toBeUndefined();
+      expect(capturedBody.customer_id).toBe("cust-12345");
     } finally {
       globalThis.fetch = originalFetch;
     }

@@ -68,16 +68,16 @@ export class XenditProvider extends BasePaymentProvider {
           };
         }
 
-        const payload = {
+        const payload: any = {
           currency: "IDR",
           amount: integerAmount,
           reference_id: orderId,
           description: productDetails,
-          customer: {
-            given_names: customer.name,
-            email: customer.email,
-            mobile_number: customer.phone || "",
-          },
+          // Xendit Payment Requests API rejects the inline `customer` object
+          // with API_VALIDATION_ERROR. Attribution is only supported via a
+          // pre-created `customer_id` (Customer API), so we forward that when
+          // provided through providerParams and otherwise omit customer data.
+          ...(params.providerParams?.customer_id ? { customer_id: params.providerParams.customer_id } : {}),
           payment_method: paymentMethodPayload,
           ...params.providerParams,
         };
