@@ -157,3 +157,32 @@ export function verifySnapWebhookSignature(
 
   return safeCompare(incoming, computed);
 }
+
+/**
+ * Map a DOKU SNAP error (responseMessage/responseCode) to an actionable hint
+ * for developers, so config gaps (missing BIN / merchantId / keys) are obvious.
+ */
+export function snapErrorHint(message: string, code?: string): string | undefined {
+  const m = (message || "").toLowerCase();
+  const c = (code || "").toLowerCase();
+
+  if (m.includes("unknown client") || c.includes("4017300") || c.includes("4017400")) {
+    return "Client ID tidak dikenali DOKU. Pastikan clientId benar & kanal SNAP aktif untuk akun ini.";
+  }
+  if (m.includes("signature") || c.startsWith("401")) {
+    return "Signature ditolak DOKU. Pastikan (a) Merchant Public Key yang di-upload sesuai dengan private key yang dipakai, dan (b) Get Token memakai timestamp UTC (Z).";
+  }
+  if (m.includes("bin") || (m.includes("not configured") && m.includes("identifier"))) {
+    return "Akun belum punya BIN/partnerServiceId VA yang aktif. Sediakan nilai di config.extra.partnerServiceId (atau DOKU_PARTNER_SERVICE_ID) setelah di-assign di dashboard/sales.";
+  }
+  if (m.includes("merchantid") || m.includes("merchant id")) {
+    return "QRIS/e-Wallet butuh merchantId. Isi config.extra.merchantId (atau DOKU_MERCHANT_ID) dari dashboard.";
+  }
+  if (m.includes("partner service id") || m.includes("partnerServiceId")) {
+    return "partnerServiceId tidak valid. Harus 8 karakter left-padded (BIN/company code DOKU).";
+  }
+  if (m.includes("customer no") || m.includes("customerno")) {
+    return "customerNo tidak valid (maks 20 digit unik). Cek config.extra.customerNo.";
+  }
+  return undefined;
+}

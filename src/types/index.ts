@@ -38,7 +38,7 @@ export interface MandiriBillInfo {
 
 export interface InvoiceResponse {
   success: boolean;
-  /** Provider yang memproses invoice ini ('midtrans' | 'duitku') */
+  /** Provider yang memproses invoice ini ('midtrans' | 'duitku' | 'doku' ...) */
   provider?: string;
   /** Order ID unik dari merchant */
   orderId?: string;
@@ -48,6 +48,8 @@ export interface InvoiceResponse {
   paymentUrl?: string;
   /** Reference number dari Payment Gateway */
   reference?: string;
+  /** Dimensi hasil kanal spesifik (VA / QRIS / e-Wallet / Checkout) untuk typing strict. */
+  mode?: PaymentMode;
 
   // ─── Direct API / Full Custom Native UI Fields ───────────────────────────
   /** Nomor Virtual Account (untuk metode Bank Transfer / VA) */
@@ -67,10 +69,35 @@ export interface InvoiceResponse {
   /** Waktu kedaluwarsa tagihan pembayaran */
   expiresAt?: Date | string;
 
-  /** Raw response asli dari API provider */
+  /** Raw response asli dari API provider (termasuk saat gagal) */
   rawResponse: any;
   /** Pesan error jika gagal */
   error?: string;
+}
+
+/** Kanal pembayaran hasil invoice — membantu typing strict dan rendering UI. */
+export type PaymentMode = "checkout" | "va" | "qris" | "ewallet" | "retail" | "other";
+
+/** Hasil invoice khusus Virtual Account (mode === 'va'). */
+export interface VirtualAccountResponse extends InvoiceResponse {
+  mode: "va";
+  vaNumber: string;
+  vaBank?: string;
+}
+
+/** Hasil invoice khusus QRIS (mode === 'qris'). */
+export interface QrisResponse extends InvoiceResponse {
+  mode: "qris";
+  qrString: string;
+  qrCodeUrl?: string;
+}
+
+/** Hasil invoice khusus e-Wallet (mode === 'ewallet'). */
+export interface EWalletResponse extends InvoiceResponse {
+  mode: "ewallet";
+  checkoutUrl?: string;
+  paymentUrl?: string;
+  deeplink?: string;
 }
 
 export interface VerifyCallbackResult {

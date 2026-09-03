@@ -2,6 +2,9 @@ import { BasePaymentProvider } from "../base";
 import {
   CreateInvoiceParams,
   InvoiceResponse,
+  VirtualAccountResponse,
+  QrisResponse,
+  EWalletResponse,
   VerifyCallbackResult,
   ProviderConfig,
   GetPaymentMethodsParams,
@@ -325,8 +328,8 @@ export class DokuProvider extends BasePaymentProvider {
         provider: "doku",
         orderId,
         amount: integerAmount,
-        rawResponse: null,
-        error: e.message || "Failed to make SNAP request to DOKU API",
+        rawResponse: e?.raw ?? e?.rawResponse ?? null,
+        error: e?.message || "Failed to make SNAP request to DOKU API",
       };
     }
   }
@@ -380,6 +383,7 @@ export class DokuProvider extends BasePaymentProvider {
     return {
       success: true,
       provider: "doku",
+      mode: "va",
       orderId: vaData.trxId || orderId,
       amount: Number(vaData.totalAmount?.value || amount) || Math.round(amount),
       reference: vaData.virtualAccountNo || orderId,
@@ -388,7 +392,7 @@ export class DokuProvider extends BasePaymentProvider {
       paymentUrl: vaData.additionalInfo?.howToPayPage,
       expiresAt: vaData.expiredDate ? new Date(vaData.expiredDate) : undefined,
       rawResponse: data,
-    };
+    } as VirtualAccountResponse;
   }
 
   /** Generate QRIS (SNAP) — dynamic QRIS MPM. */
@@ -423,12 +427,13 @@ export class DokuProvider extends BasePaymentProvider {
     return {
       success: true,
       provider: "doku",
+      mode: "qris",
       orderId: data.partnerReferenceNo || orderId,
       amount: Number(data.amount?.value || amount) || Math.round(amount),
       reference: data.referenceNo || orderId,
       qrString: data.qrContent,
       rawResponse: data,
-    };
+    } as QrisResponse;
   }
 
   /** e-Wallet payment (SNAP) — DANA / OVO / ShopeePay via payment-host-to-host. */
@@ -477,12 +482,14 @@ export class DokuProvider extends BasePaymentProvider {
     return {
       success: true,
       provider: "doku",
+      mode: "ewallet" as const,
       orderId: data.partnerReferenceNo || orderId,
       amount: Number(data.amount?.value || amount) || Math.round(amount),
       reference: data.partnerReferenceNo || orderId,
       paymentUrl: data.webRedirectUrl || data.paymentUrl,
+      checkoutUrl: data.webRedirectUrl || data.paymentUrl,
       rawResponse: data,
-    };
+    } as EWalletResponse;
   }
 
   async verifyCallback(body: any, config: ProviderConfig): Promise<VerifyCallbackResult> {

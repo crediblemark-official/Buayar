@@ -5,6 +5,7 @@ import {
   snapTimestamp,
   snapUtcTimestamp,
   snapExternalId,
+  snapErrorHint,
 } from "../providers/doku/snap";
 
 export interface SnapClientOptions {
@@ -84,7 +85,16 @@ export class SnapClient {
     } catch {}
 
     if (!response.ok || !data?.accessToken) {
-      throw new Error(data?.responseMessage || data?.message || `DOKU SNAP get-token failed: HTTP ${response.status} - ${text}`);
+      const baseMessage = data?.responseMessage || data?.message || `DOKU SNAP get-token failed: HTTP ${response.status}`;
+      const hint = snapErrorHint(baseMessage, data?.responseCode);
+      const err = new SnapApiError(`${baseMessage}${data?.responseCode ? ` (${data.responseCode})` : ""}${hint ? ` — ${hint}` : ""}`, {
+        status: response.status,
+        code: data?.responseCode,
+        raw: data,
+        endpoint,
+        method: "POST",
+      });
+      throw err;
     }
 
     if (!clientSecret) {
@@ -160,10 +170,42 @@ export class SnapClient {
     } catch {}
 
     if (!response.ok) {
-      const err = data?.responseMessage || data?.error?.message || data?.message || `HTTP ${response.status}`;
-      throw new Error(`${err}${data?.responseCode ? ` (${data.responseCode})` : ""}`);
+      const baseMessage =
+        data?.responseMessage || data?.error?.message || data?.message || `HTTP ${response.status}`;
+      const hint = snapErrorHint(baseMessage, data?.responseCode);
+      const message = `${baseMessage}${data?.responseCode ? ` (${data.responseCode})` : ""}${hint ? ` — ${hint}` : ""}`;
+      const err = new SnapApiError(message, {
+        status: response.status,
+        code: data?.responseCode,
+        raw: data,
+        endpoint,
+        method,
+      });
+      throw err;
     }
 
     return data;
+  }
+}
+
+/** DOKU SNAP API error with structured diagnostics (status code + raw response). */
+export class SnapApiError extends Error {
+  readonly status: number;
+  readonly responseCode?: string;
+  readonly raw: any;
+  readonly endpoint?: string;
+  readonly method?: string;
+
+  constructor(
+    message: string,
+    opts: { status: number; code?: string; raw?: any; endpoint?: string; method?: string }
+  ) {
+    super(message);
+    this.name = "SnapApiError";
+    this.status = opts.status;
+    this.responseCode = opts.code;
+    this.raw = opts.raw;
+    this.endpoint = opts.endpoint;
+    this.method = opts.method;
   }
 }
