@@ -1,4 +1,5 @@
 import { PaymentManager, paymentManager } from "./manager";
+import { buildPaymentMethodDescriptors } from "./descriptor";
 import { ProviderRegistry, providerRegistry } from "./providerRegistry";
 import type { ProviderCapability, ProviderDescriptor } from "./providerRegistry";
 import {
@@ -9,6 +10,7 @@ import {
   BuayarConfig,
   GetPaymentMethodsParams,
   GetPaymentMethodsResult,
+  GetPaymentMethodDescriptorsResult,
   CheckTransactionParams,
   CheckTransactionResult,
   RefundParams,
@@ -185,6 +187,39 @@ export class Buayar {
     const providerName = (configOverride as any)?.provider || this.provider;
 
     return this.manager.getPaymentMethods(providerName, params || { amount: 10000 }, mergedConfig);
+  }
+
+  /**
+   * Ambil daftar channel pembayaran aktif dalam bentuk deskriptor kanonikal
+   * siap-render (id, name, type, icon, badge, image, category, totalFee).
+   * Wrapper di atas {@link Buayar.getPaymentMethods} + `buildPaymentMethodDescriptors`,
+   * sehingga konsumen UI/snapshot tidak perlu melakukan mapping ulang per provider.
+   */
+  async getPaymentMethodDescriptors(
+    params?: GetPaymentMethodsParams,
+    configOverride?: Partial<ProviderConfig>
+  ): Promise<GetPaymentMethodDescriptorsResult> {
+    const mergedConfig: ProviderConfig = { ...this.config, ...configOverride };
+    const providerName = (configOverride as any)?.provider || this.provider;
+    const generatedAt = new Date().toISOString();
+
+    const res = await this.manager.getPaymentMethods(providerName, params || { amount: 10000 }, mergedConfig);
+    if (!res.success) {
+      return {
+        success: false,
+        provider: providerName,
+        descriptors: [],
+        error: res.error || "Failed to fetch payment methods",
+        generatedAt,
+      };
+    }
+
+    return {
+      success: true,
+      provider: providerName,
+      descriptors: buildPaymentMethodDescriptors(res.methods, providerName),
+      generatedAt,
+    };
   }
 
   /**

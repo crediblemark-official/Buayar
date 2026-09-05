@@ -241,6 +241,41 @@ export interface GetPaymentMethodsResult {
   rawResponse: any;
 }
 
+/**
+ * Deskriptor saluran pembayaran kanonikal siap-render untuk UI.
+ * Dibangun dari {@link PaymentMethod} via `buildPaymentMethodDescriptors()` di
+ * `core/descriptor.ts` sehingga konsumen (frontend, snapshot, CLI) selalu
+ * mendapat bentuk seragam tanpa perlu mapping ulang per provider.
+ */
+export interface PaymentMethodDescriptor {
+  /** Identifier uppercase yang dipakai sistem internal (mis. 'BCA_VA', 'QRIS', 'GOPAY') */
+  id: string;
+  /** Nama ramah pengguna */
+  name: string;
+  /** Tipe singkat untuk icon/badge rendering */
+  type: "qris" | "va" | "ewallet" | "retail" | "card" | "paylater" | "other";
+  /** Ikon emoji */
+  icon: string;
+  /** Badge teks (mis. "Instan Bebas Biaya") */
+  badge: string;
+  /** URL logo (opsional) */
+  image?: string;
+  /** Kategori resmi Buayar (Virtual Account, QRIS, E-Wallet, dll) */
+  category?: string;
+  /** Apakah channel tersedia (true) atau coming-soon (false) */
+  coming_soon?: boolean;
+  /** Fee admin (string deskriptif, mis. "0.7%" atau "IDR 4,000") */
+  totalFee?: string;
+}
+
+export interface GetPaymentMethodDescriptorsResult {
+  success: boolean;
+  provider?: string;
+  descriptors: PaymentMethodDescriptor[];
+  error?: string;
+  generatedAt: string;
+}
+
 // ─── Check Transaction ─────────────────────────────────────────────────────────
 
 export interface CheckTransactionParams {

@@ -85,6 +85,38 @@ if (result.success) {
 > atau `HealthStatus` selain `"online"` (mis. `offline`, `maintenance`) **otomatis dibuang** dari daftar.
 > Jadi metode yang muncul selalu berasal dari data real-time iPaymu, bukan asumsi.
 
+### 3a. Deskriptor Kanonikal Siap-Render (`getPaymentMethodDescriptors`)
+
+Untuk konsumen UI/snapshot yang butuh bentuk seragam tanpa mapping manual per provider, gunakan `getPaymentMethodDescriptors()`:
+
+```typescript
+const snap = await buayar.getPaymentMethodDescriptors({ amount: 100000 });
+
+if (snap.success) {
+  console.log("Provider:", snap.provider);
+  console.log("Dibuat pada:", snap.generatedAt);
+  console.log("Total:", snap.descriptors.length);
+
+  // Contoh: siap disimpan sebagai JSON flipbook oleh frontend
+  console.log(snap.descriptors[0]);
+  /*
+  {
+    id: "BCA_VA",
+    name: "Virtual Account BCA",
+    type: "va",
+    icon: "🏦",
+    badge: "Otomatis 24 Jam • Fee 0.7%",
+    image: "https://my.ipaymu.com/images/banks/bca.png",
+    category: "Virtual Account",
+    coming_soon: false,
+    totalFee: "0.7%"
+  }
+  */
+}
+```
+
+`type` adalah salah satu dari `qris | va | ewallet | retail | card | paylater | other`, siap dipakai untuk ikon/badge. Mapping kategori → tipe dilakukan sentral di `buildPaymentMethodDescriptors()` (ekspor dari `core/descriptor`), jadi semua konsumen mendapat hasil identik.
+
 ---
 
 ## 4. Pembuatan Tagihan (Invoice)
