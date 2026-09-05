@@ -162,6 +162,27 @@ describe("iPaymu Provider & Client Integration", () => {
                   Name: "VA Muamalat",
                   TransactionFee: { ActualFee: 3500, ActualFeeType: "FLAT" },
                   HealthStatus: "online",
+                  FeatureStatus: "active",
+                },
+                {
+                  Code: "bca",
+                  Name: "VA BCA (maintenance)",
+                  TransactionFee: { ActualFee: 4000, ActualFeeType: "FLAT" },
+                  HealthStatus: "offline",
+                  FeatureStatus: "active",
+                },
+                {
+                  Code: "bri",
+                  Name: "VA BRI (non aktif)",
+                  TransactionFee: { ActualFee: 4000, ActualFeeType: "FLAT" },
+                  HealthStatus: "online",
+                  FeatureStatus: "inactive",
+                },
+                {
+                  Code: "mandiri",
+                  Name: "VA Mandiri (diblokir)",
+                  TransactionFee: { ActualFee: 4000, ActualFeeType: "FLAT" },
+                  FeatureStatus: "suspended",
                 },
               ],
             },
@@ -180,9 +201,13 @@ describe("iPaymu Provider & Client Integration", () => {
 
       const res = await buayar.getPaymentMethods();
       expect(res.success).toBe(true);
+      // Only available channels are returned: offline/inactive/suspended are excluded
       expect(res.methods.length).toBe(2);
       expect(res.methods[0].code).toBe("bag_va");
       expect(res.methods[1].code).toBe("muamalat_va");
+      expect(res.methods.some((m) => m.code === "bca_va")).toBe(false);
+      expect(res.methods.some((m) => m.code === "bri_va")).toBe(false);
+      expect(res.methods.some((m) => m.code === "mandiri_va")).toBe(false);
       expect(res.categories?.["Virtual Account"]?.length).toBe(2);
     } finally {
       globalThis.fetch = originalFetch;

@@ -80,6 +80,11 @@ if (result.success) {
 }
 ```
 
+> **Automatis filter availability:** Buayar hanya mengembalikan saluran yang benar-benar
+> tersedia — saluran dengan `FeatureStatus` selain `"active"` (mis. `inactive`, `disabled`, `suspended`)
+> atau `HealthStatus` selain `"online"` (mis. `offline`, `maintenance`) **otomatis dibuang** dari daftar.
+> Jadi metode yang muncul selalu berasal dari data real-time iPaymu, bukan asumsi.
+
 ---
 
 ## 4. Pembuatan Tagihan (Invoice)

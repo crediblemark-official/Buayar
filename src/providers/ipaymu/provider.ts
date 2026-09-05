@@ -303,6 +303,16 @@ export class IpaymuProvider extends BasePaymentProvider {
               },
             };
 
+            // Availability check: iPaymu mengembalikan FeatureStatus ("active")
+            // dan HealthStatus ("online") per channel. Saluran yang dilaporkan
+            // secara eksplisit tidak aktif / tidak sehat TIDAK boleh tampil di
+            // daftar (jika field tidak ada, saluran dianggap tersedia).
+            const health = String(ch.HealthStatus || "").toLowerCase();
+            const feature = String(ch.FeatureStatus || "").toLowerCase();
+            const explicitlyUnavailable =
+              (feature !== "" && feature !== "active") || (health !== "" && health !== "online");
+            if (explicitlyUnavailable) continue;
+
             methods.push(pm);
             if (!categories[category]) categories[category] = [];
             categories[category].push(pm);
