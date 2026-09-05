@@ -64,6 +64,41 @@ describe("buildPaymentMethodDescriptor / mapCategoryToDescriptorType", () => {
     expect(d.totalFee).toBeUndefined();
     expect(d.image).toBeUndefined();
   });
+
+  it("propagates coming_soon from PaymentMethod data (S6 fix)", () => {
+    const comingSoon = buildPaymentMethodDescriptor({
+      paymentMethod: "ovo",
+      code: "ovo",
+      paymentName: "OVO",
+      paymentImage: "",
+      totalFee: "",
+      category: "E-Wallet",
+      coming_soon: true,
+    });
+    expect(comingSoon.coming_soon).toBe(true);
+
+    const available = buildPaymentMethodDescriptor({
+      paymentMethod: "dana",
+      code: "dana",
+      paymentName: "DANA",
+      paymentImage: "",
+      totalFee: "",
+      category: "E-Wallet",
+      coming_soon: false,
+    });
+    expect(available.coming_soon).toBe(false);
+
+    // Tanpa coming_soon → default false
+    const defaultVal = buildPaymentMethodDescriptor({
+      paymentMethod: "gopay",
+      code: "gopay",
+      paymentName: "GoPay",
+      paymentImage: "",
+      totalFee: "",
+      category: "E-Wallet",
+    });
+    expect(defaultVal.coming_soon).toBe(false);
+  });
 });
 
 describe("getPaymentMethodDescriptors (facade)", () => {
@@ -217,5 +252,46 @@ describe("buildPaymentMethodDescriptors batch", () => {
     expect(descs).toHaveLength(2);
     expect(descs[0].id).toBe("QRIS");
     expect(descs[1].type).toBe("ewallet");
+  });
+
+  it("supports probePaymentMethods on iPaymu (S8)", async () => {
+    const originalFetch = globalThis.fetch;
+    (globalThis as any).fetch = async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        Status: 200,
+        Success: true,
+        Data: [
+          {
+            Code: "qris",
+            Name: "QRIS",
+            Channels: [
+              { Code: "mpay", Name: "QRIS", HealthStatus: "online", FeatureStatus: "active" },
+            ],
+          },
+          {
+            Code: "va",
+            Name: "Virtual Account",
+            Channels: [
+              { Code: "bca", Name: "BCA VA", HealthStatus: "online", FeatureStatus: "active" },
+            ],
+          },
+        ],
+      }),
+    });
+
+    const client = new Buayar({
+      provider: "ipaymu",
+      apiKey: IPAYMU_KEY,
+      merchantCode: IPAYMU_VA,
+      sandbox: true,
+    });
+
+    const res = await client.probePaymentMethods();
+    expect(res.success).toBe(true);
+    expect(res.enabled).toEqual(["qris", "bca_va"]);
+
+    globalThis.fetch = originalFetch;
   });
 });

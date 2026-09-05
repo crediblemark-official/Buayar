@@ -197,4 +197,22 @@ describe("DOKU SNAP Integration", () => {
     // snapTimestamp = WIB +7 offset on the same moment
     expect(snapTimestamp(fixed)).toBe("2026-09-03T15:46:59+07:00");
   });
+
+  it("should REJECT DOKU SNAP webhook without signature (S1b security fix)", async () => {
+    const buayar = new Buayar({
+      provider: "doku",
+      merchantCode: "doku_key_9ee7004654a54375ad5a4e6c75a1d386",
+      apiKey: "SK-SC5QTRqzYE7TWL3zHS7A",
+      sandbox: true,
+      extra: { snap: true },
+    });
+
+    const res = await buayar.verifyWebhook(
+      { trxId: "ORDER-SNAP-NO-SIG", paidAmount: { value: "1000.00", currency: "IDR" } },
+      { "x-timestamp": "2026-09-03T12:00:00+07:00" }
+    );
+
+    // Tanpa x-signature → isValid harus false
+    expect(res.isValid).toBe(false);
+  });
 });

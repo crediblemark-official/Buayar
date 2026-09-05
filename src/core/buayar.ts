@@ -126,10 +126,13 @@ export class Buayar {
   }
 
   /**
-   * Deteksi nama provider dari struktur payload webhook.
+   * Deteksi nama provider dari struktur payload webhook dan opsional headers.
    */
-  detectProviderFromPayload(payload: any): string | undefined {
-    return this.registry.detectFromWebhook(payload);
+  detectProviderFromPayload(
+    payload: any,
+    headers?: Record<string, string | string[] | undefined>
+  ): string | undefined {
+    return this.registry.detectFromWebhook(payload, headers as any);
   }
 
   /**
@@ -300,11 +303,31 @@ export class Buayar {
       }
     }
 
-    let providerName = (configOverride as any)?.provider || this.provider;
+    let providerName = (configOverride as any)?.provider !== undefined
+      ? (configOverride as any).provider
+      : this.provider;
 
-    // Auto-detect provider dari struktur payload (via registry terpusat)
-    const detected = this.registry.detectFromWebhook(payload);
-    if (detected) providerName = detected;
+    // Auto-detect provider hanya sebagai fallback bila tidak ada provider eksplisit
+    if (!providerName) {
+      const detected = this.registry.detectFromWebhook(payload, headers as any);
+      if (detected) providerName = detected;
+    }
+
+    if (!providerName) {
+      return {
+        isValid: false,
+        isPaid: false,
+        isPending: false,
+        isFailed: true,
+        isExpired: false,
+        status: "failed",
+        orderId: "",
+        amount: 0,
+        provider: "unknown",
+        error: "Unable to detect payment provider for webhook. Please specify provider in configuration or override.",
+        rawPayload: payload,
+      };
+    }
 
     return this.manager.verifyCallback(providerName, payload, mergedConfig);
   }
@@ -315,6 +338,18 @@ export class Buayar {
     configOverride?: Partial<ProviderConfig>
   ): Promise<VerifyCallbackResult> {
     return this.verifyWebhook(payload, headers, configOverride);
+  }
+
+  /**
+   * Probe payment methods yang benar-benar aktif di akun merchant gateway.
+   */
+  async probePaymentMethods(
+    configOverride?: Partial<ProviderConfig>
+  ): Promise<{ success: boolean; enabled: string[]; error?: string }> {
+    const mergedConfig: ProviderConfig = { ...this.config, ...configOverride };
+    const providerName = (configOverride as any)?.provider || this.provider;
+
+    return this.manager.probePaymentMethods(providerName, mergedConfig);
   }
 
   /**

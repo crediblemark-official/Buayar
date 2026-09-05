@@ -105,7 +105,7 @@ describe("DOKU Provider & Client Integration", () => {
     }
   });
 
-  it("should verify and normalize DOKU webhook notification", async () => {
+  it("should REJECT DOKU webhook without signature headers (S1 security fix)", async () => {
     const buayar = new Buayar({
       provider: "doku",
       merchantCode: "MALL-ID-123456",
@@ -127,13 +127,11 @@ describe("DOKU Provider & Client Integration", () => {
       },
     };
 
+    // Tanpa signature header → isValid harus false (S1 fix)
     const result = await buayar.verifyWebhook(dokuCallbackPayload);
-    expect(result.isValid).toBe(true);
+    expect(result.isValid).toBe(false);
     expect(result.provider).toBe("doku");
     expect(result.orderId).toBe("ORDER-DOKU-001");
     expect(result.amount).toBe(175000);
-    expect(result.isPaid).toBe(true);
-    expect(result.isPending).toBe(false);
-    expect(result.isFailed).toBe(false);
   });
 });

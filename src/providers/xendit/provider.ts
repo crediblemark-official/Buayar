@@ -239,8 +239,9 @@ export class XenditProvider extends BasePaymentProvider {
       config.extra?.headers?.["x-callback-token"] ||
       config.extra?.headers?.["X-Callback-Token"];
 
-    let isValid = true;
-    if (webhookToken || headerToken) {
+    // SECURITY: default false — tanpa token, webhook ditolak.
+    let isValid = false;
+    if (webhookToken && headerToken) {
       isValid = verifyXenditWebhookToken(headerToken, webhookToken);
     }
 
@@ -391,6 +392,82 @@ export class XenditProvider extends BasePaymentProvider {
       },
     ];
 
+    const apiKey = config.apiKey || config.serverKey || config.secretKey || "";
+    if (apiKey) {
+      try {
+        const authHeader = getXenditAuthHeader(apiKey);
+        const response = await fetch(`${this.getBaseUrl()}/payment_channels`, {
+          method: "GET",
+          headers: {
+            "Authorization": authHeader,
+            "Content-Type": "application/json",
+          },
+        });
+
+        if (response.ok) {
+          const channels = await response.json();
+          if (Array.isArray(channels) && channels.length > 0) {
+            const dynamicMethods: PaymentMethod[] = [];
+            for (const ch of channels) {
+              if (ch.status && ch.status !== "ACTIVE") continue;
+
+              const codeLower = (ch.channel_code || "").toLowerCase();
+              let canonicalCode = codeLower;
+              let category = "Virtual Account";
+
+              if (ch.type === "BANK_TRANSFER" || codeLower.endsWith("_va") || ["bca", "bni", "bri", "mandiri", "permata", "cimb", "bsi"].includes(codeLower)) {
+                canonicalCode = codeLower.endsWith("_va") ? codeLower : `${codeLower}_va`;
+                category = "Virtual Account";
+              } else if (ch.type === "EWALLET" || ["ovo", "dana", "linkaja", "shopeepay", "gopay"].includes(codeLower)) {
+                canonicalCode = codeLower;
+                category = "E-Wallet";
+              } else if (ch.type === "QR_CODE" || codeLower === "qris") {
+                canonicalCode = "qris";
+                category = "QRIS";
+              } else if (ch.type === "RETAIL_OUTLET" || ["alfamart", "indomaret"].includes(codeLower)) {
+                canonicalCode = codeLower;
+                category = "Retail / Gerai";
+              } else if (ch.type === "CARD") {
+                canonicalCode = "credit_card";
+                category = "Kartu Kredit";
+              } else if (ch.type === "PAYLATER" || ["kredivo", "akulaku", "indodana"].includes(codeLower)) {
+                canonicalCode = codeLower;
+                category = "Paylater / Cicilan";
+              }
+
+              dynamicMethods.push({
+                paymentMethod: canonicalCode,
+                code: ch.channel_code || canonicalCode,
+                paymentName: ch.display_name || ch.name || ch.channel_code,
+                paymentImage: `https://xendit.co/icons/${codeLower}.png`,
+                totalFee: ch.fee ? `${ch.fee}` : "",
+                category,
+                coming_soon: false,
+                extra: ch,
+              });
+            }
+
+            if (dynamicMethods.length > 0) {
+              const categories: Record<string, PaymentMethod[]> = {};
+              for (const item of dynamicMethods) {
+                if (!categories[item.category]) categories[item.category] = [];
+                categories[item.category].push(item);
+              }
+              return {
+                success: true,
+                provider: "xendit",
+                methods: dynamicMethods,
+                categories,
+                rawResponse: channels,
+              };
+            }
+          }
+        }
+      } catch (e) {
+        // Fallback ke staticMethods jika request gagal atau offline
+      }
+    }
+
     const categories: Record<string, PaymentMethod[]> = {};
     for (const item of staticMethods) {
       if (!categories[item.category]) {
@@ -406,6 +483,29 @@ export class XenditProvider extends BasePaymentProvider {
       categories,
       rawResponse: staticMethods,
     };
+  }
+
+  async probePaymentMethods(config: ProviderConfig): Promise<{ success: boolean; enabled: string[]; error?: string }> {
+    try {
+      const res = await this.getPaymentMethods({ amount: 10000 }, config);
+      if (res.success && res.methods) {
+        return {
+          success: true,
+          enabled: res.methods.map((m) => m.paymentMethod),
+        };
+      }
+      return {
+        success: false,
+        enabled: [],
+        error: res.error || "Failed to probe Xendit payment methods",
+      };
+    } catch (e: any) {
+      return {
+        success: false,
+        enabled: [],
+        error: e.message || "Failed to probe Xendit payment methods",
+      };
+    }
   }
 
   async checkTransaction(params: CheckTransactionParams, config: ProviderConfig): Promise<CheckTransactionResult> {

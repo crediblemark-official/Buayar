@@ -47,7 +47,7 @@ export class IpaymuProvider extends BasePaymentProvider {
       payload = {
         name: customer.name,
         email: customer.email,
-        phone: customer.phone || "081234567890",
+        ...(customer.phone ? { phone: customer.phone } : {}),
         amount: integerAmount,
         notifyUrl,
         expired: 24,
@@ -81,7 +81,7 @@ export class IpaymuProvider extends BasePaymentProvider {
         referenceId: orderId,
         buyerName: customer.name,
         buyerEmail: customer.email,
-        buyerPhone: customer.phone || "081234567890",
+        ...(customer.phone ? { buyerPhone: customer.phone } : {}),
         ...(feeDirection ? { feeDirection } : {}),
         ...(escrow !== undefined ? { escrow } : {}),
         ...(subAccount ? { account: subAccount } : {}),
@@ -348,6 +348,29 @@ export class IpaymuProvider extends BasePaymentProvider {
     }
   }
 
+  async probePaymentMethods(config: ProviderConfig): Promise<{ success: boolean; enabled: string[]; error?: string }> {
+    try {
+      const res = await this.getPaymentMethods({ amount: 10000 }, config);
+      if (res.success && res.methods) {
+        return {
+          success: true,
+          enabled: res.methods.map((m) => m.paymentMethod),
+        };
+      }
+      return {
+        success: false,
+        enabled: [],
+        error: res.error || "Failed to probe iPaymu payment methods",
+      };
+    } catch (e: any) {
+      return {
+        success: false,
+        enabled: [],
+        error: e.message || "Failed to probe iPaymu payment methods",
+      };
+    }
+  }
+
   async checkTransaction(params: CheckTransactionParams, config: ProviderConfig): Promise<CheckTransactionResult> {
     const { merchantOrderId } = params;
     const va = config.merchantCode || config.merchantId || "";
@@ -355,6 +378,9 @@ export class IpaymuProvider extends BasePaymentProvider {
     const sandbox = !!config.sandbox;
 
     const url = `${this.getBaseUrl(sandbox)}/transaction`;
+    // PENTING: iPaymu /transaction HANYA menerima TransactionId numerik (ID dari iPaymu),
+    // bukan referenceId/orderId merchant. Pastikan consumer mengirim `invoice.reference`
+    // (TransactionId dari response createInvoice), bukan order_number.
     const payload = { transactionId: merchantOrderId };
     const { signature, timestamp } = generateIpaymuSignature("POST", va, apiKey, payload);
 

@@ -183,6 +183,18 @@ const { categories } = await buayar.getPaymentMethods({ amount: 150000 });
 // categories: { "Virtual Account": [...], "QRIS": [...], "E-Wallet": [...], ... }
 ```
 
+### Probing Saluran Aktif di Akun Gateway (`probePaymentMethods`)
+
+Untuk mendeteksi secara dinamis saluran yang benar-benar aktif / di-enable pada akun merchant Anda di gateway:
+
+```typescript
+const probe = await buayar.probePaymentMethods();
+if (probe.success) {
+  console.log("Channel aktif di akun merchant:", probe.enabled);
+  // Output: ["bca_va", "mandiri_va", "qris", "gopay", ...]
+}
+```
+
 ---
 
 ## 🔍 Cek Status Transaksi
@@ -196,6 +208,10 @@ if (result.success) {
 }
 ```
 
+> 💡 **Catatan Parameter per Provider:**
+> - **Midtrans, Duitku, Xendit, DOKU, dll:** `merchantOrderId` menerima string ID order yang Anda buat (mis. `"ORDER-1001"`).
+> - **iPaymu:** Dokumentasi resmi iPaymu v2 mewajibkan `transactionId` numerik. Masukkan nilai **`invoice.reference`** (TransactionId numerik yang dikembalikan saat `createInvoice`), bukan nomor order string internal merchant.
+
 ---
 
 ## 🪝 Webhook Universal
@@ -208,9 +224,10 @@ import { buayar } from "@crediblemark/buayar";
 // Bekerja dengan Express, Elysia, Hono, Next.js App Router, dll.
 app.post("/api/payment/webhook", async (req, res) => {
   const result = await buayar.verifyWebhook(req.body, req.headers);
-  // header signature otomatis diekstrak sesuai provider (Stripe-Signature,
-  // Cko-Signature, X-Razorpay-Signature, dll.)
+  // Header signature otomatis diekstrak sesuai provider (Stripe-Signature,
+  // X-Signature, x-callback-token, Signature DOKU, dll.)
 
+  // Keamanan Ketat: jika signature/token tidak ada atau tidak cocok, isValid bernilai false
   if (!result.isValid) return res.status(400).json({ error: "Invalid signature" });
 
   if (result.isPaid) {
@@ -222,6 +239,11 @@ app.post("/api/payment/webhook", async (req, res) => {
 });
 ```
 
+> 🔒 **Keamanan Signature Ketat:**
+> - **DOKU:** Otomatis memvalidasi signature header (`Signature`, `Request-Id`, `Request-Timestamp`) via HMAC-SHA256. Webhook tanpa signature ditolak (`isValid: false`).
+> - **Xendit:** Memvalidasi header `x-callback-token` terhadap secret token yang dikonfigurasi (`BUAYAR_WEBHOOK_SECRET` / `webhookToken`). Webhook tanpa token ditolak (`isValid: false`).
+> - **iPaymu:** Memvalidasi header `X-Signature` dengan HMAC-SHA256 atas body menggunakan VA merchant. Field `result.orderId` otomatis diisi dari `reference_id` order merchant.
+>
 > `buayar.handleWebhook(payload, headers)` adalah alias dari `verifyWebhook`.
 
 ---

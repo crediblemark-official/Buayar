@@ -294,6 +294,20 @@ export class PaymentManager {
     if (provider.probePaymentMethods) {
       return provider.probePaymentMethods(config);
     }
+    // Fallback dinamis: jika provider memiliki getPaymentMethods, manfaatkan untuk probing
+    try {
+      if (typeof (provider as any).getPaymentMethods === "function") {
+        const res = await provider.getPaymentMethods({ amount: 10000 }, config);
+        if (res && res.success && Array.isArray(res.methods) && res.methods.length > 0) {
+          return {
+            success: true,
+            enabled: res.methods.map((m: any) => m.paymentMethod),
+          };
+        }
+      }
+    } catch (e) {
+      // ignore
+    }
     return { success: false, enabled: [], error: `Provider '${providerName}' does not support payment methods probing` };
   }
 

@@ -521,7 +521,8 @@ export class DokuProvider extends BasePaymentProvider {
     const signature = headers["signature"] || headers["Signature"] || config.extra?.dokuSignature || config.extra?.signatureHeader;
     const clientId = config.merchantCode || config.clientKey || "";
 
-    let isValid = true;
+    // SECURITY: default false — tanpa signature/header, webhook ditolak.
+    let isValid = false;
     if (signature || (headers && (headers["request-id"] || headers["Request-Id"]))) {
       isValid = verifyDokuWebhookSignature(headers, body, clientId, secretKey);
     }
@@ -558,7 +559,8 @@ export class DokuProvider extends BasePaymentProvider {
       "/api/payment/webhook"
     ) as string;
 
-    let isValid = true;
+    // SECURITY: default false — tanpa signature/secret, webhook ditolak.
+    let isValid = false;
     const incomingSig = (
       headers["x-signature"] || headers["X-SIGNATURE"] || headers["signature"] || headers["Signature"] || ""
     ) as string;

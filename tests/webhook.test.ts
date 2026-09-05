@@ -250,4 +250,62 @@ describe("Universal Webhook Verification & Normalization", () => {
     });
     expect(invalidRes.isValid).toBe(false);
   });
+
+  it("[S9] explicit provider should NOT be overridden by auto-detect", async () => {
+    // Payload yang strukturnya mirip Midtrans (signature_key + transaction_status)
+    const ambiguousPayload = {
+      signature_key: "fake-signature",
+      transaction_status: "settlement",
+      order_id: "ORDER-EXPLICIT-01",
+      gross_amount: "100000.00",
+      status_code: "200",
+    };
+
+    // Buayar dikonfigurasi dengan provider "duitku" secara eksplisit
+    const buayar = new Buayar({
+      provider: "duitku",
+      merchantCode: "D1234",
+      apiKey: "duitku-secret",
+    });
+
+    const result = await buayar.verifyWebhook(ambiguousPayload);
+    // Harus tetap "duitku", bukan "midtrans" dari auto-detect
+    expect(result.provider).toBe("duitku");
+  });
+
+  it("[S9] should gracefully handle unknown webhook without throwing an error", async () => {
+    const unconfiguredBuayar = new Buayar({
+      provider: "" as any,
+    });
+
+    const unknownPayload = {
+      foo: "bar",
+      some_random_id: 12345,
+    };
+
+    const result = await unconfiguredBuayar.verifyWebhook(unknownPayload, undefined, { provider: "" as any });
+    expect(result.isValid).toBe(false);
+    expect(result.provider).toBe("unknown");
+    expect(result.error).toContain("Unable to detect payment provider");
+  });
+
+  it("[S9] should detect provider from headers with high confidence", async () => {
+    const unconfiguredBuayar = new Buayar({
+      provider: "" as any,
+    });
+
+    // Header x-callback-token mendeteksi xendit
+    const xenditDetected = unconfiguredBuayar.detectProviderFromPayload(
+      { external_id: "ORD-123" },
+      { "x-callback-token": "test-token" }
+    );
+    expect(xenditDetected).toBe("xendit");
+
+    // Header stripe-signature mendeteksi stripe
+    const stripeDetected = unconfiguredBuayar.detectProviderFromPayload(
+      { id: "evt_123" },
+      { "stripe-signature": "t=123,v1=abc" }
+    );
+    expect(stripeDetected).toBe("stripe");
+  });
 });

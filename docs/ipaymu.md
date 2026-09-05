@@ -133,7 +133,7 @@ const invoice = await buayar.createInvoice({
   customer: {
     name: "Budi Santoso",
     email: "budi@mail.com",
-    phone: "081234567890",
+    phone: "081234567890", // Opsional per dokumentasi resmi iPaymu v2 (hanya dikirim jika ada)
   },
   // Opsi Tambahan iPaymu:
   feeDirection: "BUYER", // "BUYER" (bebankan fee ke pembeli) atau "MERCHANT" (potong omset)
@@ -141,11 +141,13 @@ const invoice = await buayar.createInvoice({
 });
 
 if (invoice.success) {
-  console.log("Transaction ID (Trx ID):", invoice.reference); // Contoh: "229432"
+  console.log("Transaction ID (Trx ID):", invoice.reference); // Contoh: "229432" (simpan ini untuk checkTransaction)
   console.log("Nomor Virtual Account:", invoice.vaNumber);     // Contoh: "3811800034705407"
   console.log("Expired:", invoice.expiresAt);
 }
 ```
+
+> 💡 **Parameter `customer.phone` Opsional:** Sesuai dokumentasi resmi iPaymu v2, parameter `phone` bersifat opsional. Buayar tidak lagi menyisipkan nomor fallback buatan — field `phone` hanya disertakan jika memang diisi oleh pembeli/merchant.
 
 ### B. Redirect Payment (Hosted Payment Page)
 Cukup kosongkan `paymentMethod` untuk menggunakan halaman checkout bawaan iPaymu:
@@ -158,7 +160,7 @@ const invoice = await buayar.createInvoice({
   customer: {
     name: "Siti Rahma",
     email: "siti@mail.com",
-    phone: "081999888777",
+    phone: "081999888777", // Opsional
   },
   returnUrl: "https://toko-anda.com/checkout/success",
 });
@@ -292,6 +294,8 @@ Callback **harus** membawa header `X-Signature`; Buayar memverifikasinya dengan
 menggunakan **Merchant VA** sebagai secret key. Callback tanpa `X-Signature` yang sah
 akan selalu ditolak (`isValid === false`).
 
+Sesuai dokumentasi resmi iPaymu, payload notifikasi membawa field `reference_id` (berisi nomor order merchant yang dikirim saat `createInvoice`). Buayar otomatis memetakannya ke **`result.orderId`**.
+
 ```typescript
 // Di handler Express.js / Next.js API route + REST framework apapun (Elysia/Hono/...):
 app.post("/api/payment/webhook", (req, res) => {
@@ -299,6 +303,7 @@ app.post("/api/payment/webhook", (req, res) => {
   const result = buayar.verifyWebhook(req.body, req.headers);
 
   if (result.isValid && result.isPaid) {
+    // result.orderId otomatis diambil dari `reference_id` iPaymu (order ID merchant Anda)
     console.log("Pembayaran Berhasil untuk Order ID:", result.orderId);
     console.log("Nominal Diterima:", result.amount);
     // Jalankan logika bisnis: update database status pesanan menjadi PAID
@@ -326,12 +331,22 @@ console.log(invoice.reference); // Contoh: "229432"
 4. Klik tombol **"Kirim" / "Test"**.
 5. Server iPaymu Sandbox akan mengubah status transaksi menjadi **Berhasil** dan otomatis mengirimkan webhook notifikasi ke `notifyUrl` Anda.
 
-### Mengecek Status Transaksi via Kode
+### Mengecek Status Transaksi via Kode (`checkTransaction`)
+
+> ⚠️ **PENTING — Kontrak Resmi Endpoint `/transaction`:**
+> Dokumentasi resmi iPaymu API v2 menegaskan bahwa endpoint `/api/v2/transaction` **hanya menerima `transactionId` numerik** yang diterbitkan iPaymu (`invoice.reference`), **BUKAN** `order_number` atau string `orderId` merchant.
+>
+> Jika aplikasi Anda melakukan polling status, pastikan selalu menyimpan `invoice.reference` di database dan operasikan nilai tersebut ke parameter `merchantOrderId`:
+
 ```typescript
 const check = await buayar.checkTransaction({
-  merchantOrderId: invoice.reference, // Transaction ID iPaymu
+  // WAJIB: Gunakan invoice.reference (TransactionId numerik dari iPaymu),
+  // BUKAN nomor invoice/order_number string toko Anda!
+  merchantOrderId: invoice.reference, // misal "229432"
 });
 
-console.log("Status:", check.rawResponse.Data.StatusDesc);
-// Output: "Berhasil"
+if (check.success) {
+  console.log("Status Transaksi:", check.status); // "paid" | "pending" | "failed"
+  console.log("Status Desc:", check.rawResponse.Data.StatusDesc); // "Berhasil"
+}
 ```

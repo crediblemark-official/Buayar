@@ -152,9 +152,13 @@ export interface VerifyCallbackResult {
   transactionTime?: Date | string;
   /** Raw payload callback asli dari webhook */
   rawPayload: any;
+  /** Pesan error jika verifikasi callback gagal */
+  error?: string;
 }
 
 export interface ProviderConfig {
+  /** Nama provider target (opsional, jika ingin override per panggilan fungsi) */
+  provider?: string;
   merchantCode?: string;
   apiKey?: string;
   sandbox?: boolean;
@@ -223,6 +227,8 @@ export interface PaymentMethod {
   category: "Virtual Account" | "QRIS" | "E-Wallet" | "Retail / Gerai" | "Kartu Kredit" | "Paylater / Cicilan" | "Lainnya" | string;
   code?: string;
   extra?: any;
+  /** Tandai channel sebagai coming soon / belum tersedia */
+  coming_soon?: boolean;
   feeDetail?: {
     flat: number;
     percent: number;
@@ -279,7 +285,13 @@ export interface GetPaymentMethodDescriptorsResult {
 // ─── Check Transaction ─────────────────────────────────────────────────────────
 
 export interface CheckTransactionParams {
-  /** Merchant order ID saat pembuatan transaksi */
+  /**
+   * ID transaksi untuk pengecekan status.
+   *
+   * **iPaymu:** Harus berisi `TransactionId` numerik dari response `createInvoice`
+   * (`invoice.reference`), BUKAN `orderId`/`order_number` merchant.
+   * Endpoint iPaymu `/api/v2/transaction` hanya menerima ID numerik milik iPaymu.
+   */
   merchantOrderId: string;
 }
 

@@ -108,7 +108,7 @@ describe("Xendit Provider & Client Integration", () => {
     }
   });
 
-  it("should verify and normalize Xendit webhook notification", async () => {
+  it("should REJECT Xendit webhook without callback token (S2 security fix)", async () => {
     const buayar = new Buayar({
       provider: "xendit",
       apiKey: "xnd_development_test",
@@ -124,14 +124,12 @@ describe("Xendit Provider & Client Integration", () => {
       paid_at: "2026-09-01T12:30:00.000Z",
     };
 
+    // Tanpa x-callback-token → isValid harus false (S2 fix)
     const result = await buayar.verifyWebhook(invoiceCallbackPayload);
-    expect(result.isValid).toBe(true);
+    expect(result.isValid).toBe(false);
     expect(result.provider).toBe("xendit");
     expect(result.orderId).toBe("ORDER-XND-002");
     expect(result.amount).toBe(200000);
-    expect(result.isPaid).toBe(true);
-    expect(result.isPending).toBe(false);
-    expect(result.isFailed).toBe(false);
   });
 
   it("should check merchant balance via XenditClient", async () => {
@@ -156,6 +154,62 @@ describe("Xendit Provider & Client Integration", () => {
       const balance = await xenditClient.checkBalance();
       expect(balance.success).toBe(true);
       expect(balance.balance).toBe(35000000);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("should query dynamic payment channels via Xendit API (S7) and support probePaymentMethods (S8)", async () => {
+    const originalFetch = globalThis.fetch;
+    (globalThis as any).fetch = async (url: any) => {
+      if (url.includes("/payment_channels")) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => [
+            {
+              channel_code: "BCA",
+              display_name: "BCA Virtual Account",
+              type: "BANK_TRANSFER",
+              status: "ACTIVE",
+              fee: 4000,
+            },
+            {
+              channel_code: "OVO",
+              display_name: "OVO E-Wallet",
+              type: "EWALLET",
+              status: "ACTIVE",
+              fee: "1.5%",
+            },
+            {
+              channel_code: "BNI",
+              display_name: "BNI Virtual Account (Maintenance)",
+              type: "BANK_TRANSFER",
+              status: "INACTIVE", // Tidak boleh masuk
+            },
+          ],
+        } as any;
+      }
+      return { ok: false, status: 404 } as any;
+    };
+
+    try {
+      const buayar = new Buayar({
+        provider: "xendit",
+        apiKey: "xnd_development_test",
+      });
+
+      // S7: getPaymentMethods returns live channels from /payment_channels
+      const res = await buayar.getPaymentMethods();
+      expect(res.success).toBe(true);
+      expect(res.methods.length).toBe(2);
+      expect(res.methods[0].paymentMethod).toBe("bca_va");
+      expect(res.methods[1].paymentMethod).toBe("ovo");
+
+      // S8: probePaymentMethods returns active channels
+      const probe = await buayar.probePaymentMethods();
+      expect(probe.success).toBe(true);
+      expect(probe.enabled).toEqual(["bca_va", "ovo"]);
     } finally {
       globalThis.fetch = originalFetch;
     }

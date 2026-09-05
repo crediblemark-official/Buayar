@@ -87,7 +87,7 @@ export function buildPaymentMethodDescriptor(pm: PaymentMethod, _providerName?: 
     badge: feeDisplay ? `${badge} • Fee ${feeDisplay}` : badge,
     image: pm.paymentImage || undefined,
     category,
-    coming_soon: false,
+    coming_soon: pm.coming_soon ?? false,
     totalFee: feeDisplay || undefined,
   };
 }

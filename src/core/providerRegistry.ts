@@ -77,13 +77,33 @@ export class ProviderRegistry {
   }
 
   /**
-   * Autodetect provider dari struktur payload webhook.
+   * Autodetect provider dari struktur payload webhook dan header.
    * Mengembalikan nama provider jika dikenali, else undefined.
    */
-  detectFromWebhook(payload: any): string | undefined {
+  detectFromWebhook(payload: any, headers?: Record<string, any>): string | undefined {
+    // 1. Cek dari HTTP headers (tingkat kepastian tertinggi)
+    if (headers) {
+      const h: Record<string, any> = {};
+      for (const k of Object.keys(headers)) {
+        h[k.toLowerCase()] = headers[k];
+      }
+
+      if (h["stripe-signature"]) return "stripe";
+      if (h["x-callback-token"]) return "xendit";
+      if (h["x-razorpay-signature"]) return "razorpay";
+      if (h["cko-signature"]) return "checkoutcom";
+      if (h["openpayu-signature"]) return "payu";
+      if (h["x-square-hmacsha256-signature"] || h["x-square-signature"]) return "square";
+      if (h["bt_signature"]) return "braintree";
+      if (h["x-oy-username"]) return "oy";
+      if (h["signature"] && (h["client-id"] || h["request-id"])) return "doku";
+      if (h["x-signature"] && (payload?.trx_id || payload?.via || payload?.sid)) return "ipaymu";
+    }
+
     if (!payload) return undefined;
     const p = payload;
 
+    // 2. Cek dari pola payload khas masing-masing provider
     if (p.signature_key && p.transaction_status) return "midtrans";
     if (p.merchantCode && p.merchantOrderId && p.resultCode) return "duitku";
     if (p.trx_id && (p.sid || p.reference_id || p.via)) return "ipaymu";
@@ -95,7 +115,14 @@ export class ProviderRegistry {
     if (p.merchant_id && p.order_id && p.signature) return "prismalink";
     if (p.object === "event" || (p.type && p.data?.object && p.api_version)) return "stripe";
     if (p.event && p.payload?.payment?.entity) return "razorpay";
-    if (p.external_id || p.event?.startsWith("payment.") || p.event?.startsWith("qr.") || p.data?.reference_id) return "xendit";
+    if (
+      (p.external_id && (p.status || p.paid_amount || p.payment_method || p.payment_channel || p.id)) ||
+      p.event?.startsWith("payment.") ||
+      p.event?.startsWith("qr.") ||
+      p.data?.reference_id
+    ) {
+      return "xendit";
+    }
     if (p.event_type && p.resource && (p.event_type.startsWith("PAYMENT.") || p.event_type.startsWith("CHECKOUT.ORDER."))) return "paypal";
     if (p.notificationItems || (p.merchantAccountCode && p.pspReference && p.eventCode)) return "adyen";
     if (p.type && p.data?._links && (p.type.startsWith("payment_") || p.type.startsWith("refund_"))) return "checkoutcom";

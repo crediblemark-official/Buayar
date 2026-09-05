@@ -311,6 +311,71 @@ describe("iPaymu Provider & Client Integration", () => {
     }
   });
 
+  it("should NOT send hardcoded phone when customer.phone is empty (S3 fix)", async () => {
+    let capturedDirectBody: any = null;
+    let capturedRedirectBody: any = null;
+    const originalFetch = globalThis.fetch;
+    (globalThis as any).fetch = async (url: any, options: any) => {
+      const urlStr = String(url);
+      const body = JSON.parse(options.body);
+      if (urlStr.includes("/payment/direct")) {
+        capturedDirectBody = body;
+      } else {
+        capturedRedirectBody = body;
+      }
+      return {
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify({
+          Status: 200,
+          Success: true,
+          Data: { TransactionId: 222, PaymentNo: "381180002", Url: "https://payment.ipaymu.com" },
+        }),
+      } as any;
+    };
+
+    try {
+      const buayar = new Buayar({
+        provider: "ipaymu",
+        merchantCode: "0000001411234567",
+        apiKey: "test-api-key",
+      });
+
+      // Direct payment tanpa phone
+      await buayar.createInvoice({
+        orderId: "ORDER-NO-PHONE-1",
+        amount: 50000,
+        paymentMethod: "bca_va",
+        productDetails: "Test",
+        customer: { name: "Budi", email: "budi@mail.com" },
+      });
+      expect(capturedDirectBody.phone).toBeUndefined();
+      expect(capturedDirectBody.name).toBe("Budi");
+
+      // Redirect payment tanpa phone
+      await buayar.createInvoice({
+        orderId: "ORDER-NO-PHONE-2",
+        amount: 50000,
+        productDetails: "Test",
+        customer: { name: "Budi", email: "budi@mail.com" },
+      });
+      expect(capturedRedirectBody.buyerPhone).toBeUndefined();
+      expect(capturedRedirectBody.buyerName).toBe("Budi");
+
+      // Dengan phone → harus tetap dikirim
+      await buayar.createInvoice({
+        orderId: "ORDER-WITH-PHONE",
+        amount: 50000,
+        paymentMethod: "bca_va",
+        productDetails: "Test",
+        customer: { name: "Budi", email: "budi@mail.com", phone: "08123456789" },
+      });
+      expect(capturedDirectBody.phone).toBe("08123456789");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
   it("should return failure without static methods when credentials are missing", async () => {
     const buayar = new Buayar({
       provider: "ipaymu",
