@@ -249,12 +249,17 @@ const banks = await client.getBankList();
 
 ## 9. Webhook & Verifikasi Notifikasi Callback
 
-Saat pembeli menyelesaikan pembayaran, iPaymu mengirimkan HTTP POST request ke `notifyUrl`:
+Saat pembeli menyelesaikan pembayaran, iPaymu mengirimkan HTTP POST request ke `notifyUrl`.
+Callback **harus** membawa header `X-Signature`; Buayar memverifikasinya dengan
+**HMAC-SHA256** atas payload callback yang dinormalisasi (sort kunci A–Z + escape slash)
+menggunakan **Merchant VA** sebagai secret key. Callback tanpa `X-Signature` yang sah
+akan selalu ditolak (`isValid === false`).
 
 ```typescript
-// Di handler Express.js / Next.js API route:
+// Di handler Express.js / Next.js API route + REST framework apapun (Elysia/Hono/...):
 app.post("/api/payment/webhook", (req, res) => {
-  const result = buayar.verifyCallback(req.body);
+  // Header request (termasuk `x-signature`) WAJIB diferuskan:
+  const result = buayar.verifyWebhook(req.body, req.headers);
 
   if (result.isValid && result.isPaid) {
     console.log("Pembayaran Berhasil untuk Order ID:", result.orderId);

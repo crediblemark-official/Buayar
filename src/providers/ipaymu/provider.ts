@@ -11,7 +11,7 @@ import {
   PaymentMethod,
 } from "../../types";
 import { toIpaymuPaymentMethod } from "../../core/canonical";
-import { generateIpaymuSignature, verifyIpaymuCallback } from "./signature";
+import { generateIpaymuSignature, verifyIpaymuCallback, verifyIpaymuCallbackSignature } from "./signature";
 
 export class IpaymuProvider extends BasePaymentProvider {
   readonly name = "ipaymu";
@@ -190,15 +190,25 @@ export class IpaymuProvider extends BasePaymentProvider {
     const orderId = body.reference_id || body.referenceId || body.trx_id || "";
     const amount = body.amount || body.total || 0;
 
+    // Secret key verifikasi callback iPaymu = Merchant VA (bukan API Key)
+    const secretKey = config.merchantCode || config.merchantId || "";
+
+    const headers = (config.extra?.headers as Record<string, string | string[] | undefined> | undefined) || {};
+    const rawSig = headers["x-signature"] ?? headers["X-Signature"] ?? "";
+    const xSignature = Array.isArray(rawSig) ? rawSig[0] : rawSig;
+
+    // SECURITY: tanpa header X-Signature yang sah → callback TIDAK pernah valid.
+    const isValid = verifyIpaymuCallbackSignature(body, secretKey, xSignature);
+
     return {
-      isValid: true,
+      isValid,
       provider: "ipaymu",
       orderId: String(orderId),
       amount: Number(amount) || 0,
       status: isPaid ? "paid" : isPending ? "pending" : "failed",
-      isPaid,
-      isPending,
-      isFailed,
+      isPaid: isValid && isPaid,
+      isPending: isValid && isPending,
+      isFailed: !isValid || isFailed,
       isExpired: (body.status || "").toLowerCase() === "expired",
       statusCode: String(body.status_code || body.status || ""),
       rawPayload: body,

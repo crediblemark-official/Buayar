@@ -94,14 +94,15 @@ describe("Universal Webhook Verification & Normalization", () => {
       channel: "bca",
     };
 
+    // Without the mandatory X-Signature header the callback must be rejected
     const result = await buayar.verifyWebhook(webhookPayload);
-    expect(result.isValid).toBe(true);
+    expect(result.isValid).toBe(false);
     expect(result.provider).toBe("ipaymu");
     expect(result.orderId).toBe("ORDER-IPAYMU-001");
     expect(result.amount).toBe(100000);
-    expect(result.isPaid).toBe(true);
+    expect(result.isPaid).toBe(false);
     expect(result.isPending).toBe(false);
-    expect(result.isFailed).toBe(false);
+    expect(result.isFailed).toBe(true);
   });
 
   it("should flag invalid webhook signatures as failed", async () => {

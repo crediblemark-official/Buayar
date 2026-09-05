@@ -1,5 +1,59 @@
 import { describe, expect, it } from "bun:test";
+import crypto from "crypto";
 import { Buayar } from "../src";
+import { verifyIpaymuCallbackSignature } from "../src/providers/ipaymu/signature";
+
+const IPAYMU_VA = "0000001411234567";
+
+/**
+ * Replikasi normalisasi callback sesuai dokumentasi resmi iPaymu
+ * (dipakai untuk menghitung signature pembanding secara independen).
+ */
+function phpNormalize(rawData: any): Record<string, any> {
+  const result: Record<string, any> = {};
+  for (const key in rawData) {
+    const val = rawData[key];
+    if (key === "is_escrow") {
+      result[key] = val === "true" || val === "1" || val === 1;
+    } else if (["trx_id", "status_code", "transaction_status_code", "paid_off"].includes(key)) {
+      result[key] = parseInt(val, 10);
+    } else if (key === "additional_info") {
+      result[key] = val === "[]" ? [] : val;
+    } else {
+      result[key] = String(val);
+    }
+  }
+  if (!Object.prototype.hasOwnProperty.call(result, "additional_info")) {
+    result.additional_info = [];
+  }
+  return result;
+}
+
+function computeIpaymuSignature(payload: any, secretKey: string): string {
+  const normalized = phpNormalize(payload);
+  const sorted: Record<string, any> = {};
+  for (const key of Object.keys(normalized).sort((a, b) => a.localeCompare(b))) {
+    sorted[key] = normalized[key];
+  }
+  let json = JSON.stringify(sorted);
+  json = json.replace(/\//g, "\\/");
+  return crypto.createHmac("sha256", secretKey).update(json).digest("hex");
+}
+
+const callbackPayload = {
+  reference_id: "ORDER-IPAYMU-001",
+  status: "berhasil",
+  status_code: "1",
+  trx_id: "12345678",
+  total: "100000",
+  amount: "100000",
+  sub_total: "100000",
+  fee: "1500",
+  paid_off: "98500",
+  is_escrow: "0",
+  additional_info: "[]",
+  merchant: IPAYMU_VA,
+};
 
 describe("iPaymu Provider & Client Integration", () => {
   it("should create direct VA invoice in iPaymu", async () => {
@@ -468,12 +522,68 @@ describe("iPaymu Provider & Client Integration", () => {
         phone: "08123456789",
       });
 
-      expect(res.Success).toBe(true);
-      expect(res.Data.Va).toBe("0000001234567890");
-      expect(capturedBody.account).toBe("0000001411234567");
-      expect(capturedBody.email).toBe("reseller@example.com");
+expect(res.Success).toBe(true);
+    expect(res.Data.Va).toBe("0000001234567890");
+    expect(capturedBody.account).toBe("0000001411234567");
+    expect(capturedBody.email).toBe("reseller@example.com");
     } finally {
       globalThis.fetch = originalFetch;
     }
+  });
+
+  it("should accept iPaymu callback with valid X-Signature (HMAC-SHA256 over normalized sorted payload)", async () => {
+    const signature = computeIpaymuSignature(callbackPayload, IPAYMU_VA);
+
+    const buayar = new Buayar({
+      provider: "ipaymu",
+      merchantCode: IPAYMU_VA,
+      apiKey: "test-api-key",
+      sandbox: true,
+    });
+
+    expect(verifyIpaymuCallbackSignature(callbackPayload, IPAYMU_VA, signature)).toBe(true);
+
+    const result = await buayar.verifyWebhook(callbackPayload, {
+      "x-signature": signature,
+      "x-timestamp": "2025-11-11T10:10:52+07:00",
+    });
+
+    expect(result.isValid).toBe(true);
+    expect(result.isPaid).toBe(true);
+    expect(result.isPending).toBe(false);
+    expect(result.isFailed).toBe(false);
+    expect(result.orderId).toBe("ORDER-IPAYMU-001");
+    expect(result.amount).toBe(100000);
+    expect(result.status).toBe("paid");
+  });
+
+  it("should reject iPaymu callback with invalid/missing X-Signature (forged webhook)", async () => {
+    const buayar = new Buayar({
+      provider: "ipaymu",
+      merchantCode: IPAYMU_VA,
+      apiKey: "test-api-key",
+      sandbox: true,
+    });
+
+    // Missing signature header
+    const withoutSig = await buayar.verifyWebhook({ ...callbackPayload, status: "berhasil" });
+    expect(withoutSig.isValid).toBe(false);
+    expect(withoutSig.isPaid).toBe(false);
+    expect(withoutSig.isFailed).toBe(true);
+
+    // Wrong signature header (forged)
+    const wrongSig = await buayar.verifyWebhook({ ...callbackPayload, status: "berhasil" }, {
+      "x-signature": "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
+    });
+    expect(wrongSig.isValid).toBe(false);
+    expect(wrongSig.isPaid).toBe(false);
+
+    // Tampered amount must break signature too
+    const tampered = { ...callbackPayload, amount: "999999" };
+    const tamperedSig = computeIpaymuSignature(tampered, IPAYMU_VA);
+    const replayed = await buayar.verifyWebhook(callbackPayload, {
+      "x-signature": tamperedSig,
+    });
+    expect(replayed.isValid).toBe(false);
   });
 });
