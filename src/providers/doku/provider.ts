@@ -101,6 +101,7 @@ export class DokuProvider extends BasePaymentProvider {
               expired_time: 1440,
               reusable_status: false,
               info1: productDetails.length > 30 ? productDetails.substring(0, 27) + "..." : productDetails,
+              ...(dokuMethod.bank === "bni" ? { merchant_unique_reference: orderId.replace(/\D/g, "").slice(-10) || String(Date.now()).slice(-10) } : {}),
             },
             customer: {
               name: customer.name,
@@ -232,7 +233,7 @@ export class DokuProvider extends BasePaymentProvider {
           customer: {
             name: customer.name,
             email: customer.email,
-            phone: customer.phone || "",
+            ...(customer.phone ? { phone: customer.phone } : {}),
           },
           ...params.providerParams,
         };
