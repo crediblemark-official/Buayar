@@ -6,7 +6,7 @@
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
   "bin": {
-    "buayar": "./dist/cli/index.js"
+    "buayar": "dist/cli/index.js"
   },
   "exports": {
     ".": {
@@ -65,7 +65,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/crediblemark-official/Buayar.git"
+    "url": "git+https://github.com/crediblemark-official/Buayar.git"
   },
   "publishConfig": {
     "access": "public"
