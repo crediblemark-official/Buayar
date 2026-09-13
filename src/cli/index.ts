@@ -7,7 +7,7 @@ import { selectPrompt, confirmPrompt } from "./prompts";
 import { scaffold, printScaffoldSummary } from "./scaffold";
 import { runChannels, printChannelsHelp } from "./channels";
 
-const VERSION = "0.8.7";
+const VERSION = "0.8.8";
 
 interface RawOptions {
   flag: string;
