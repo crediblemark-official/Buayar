@@ -7,7 +7,23 @@ import { selectPrompt, confirmPrompt } from "./prompts";
 import { scaffold, printScaffoldSummary } from "./scaffold";
 import { runChannels, printChannelsHelp } from "./channels";
 
-const VERSION = "0.8.8";
+function getVersion(): string {
+  try {
+    const pkgPath = path.resolve(__dirname, "../../package.json");
+    if (fs.existsSync(pkgPath)) {
+      return JSON.parse(fs.readFileSync(pkgPath, "utf8")).version;
+    }
+  } catch {}
+  try {
+    const pkgPath = path.resolve(__dirname, "../package.json");
+    if (fs.existsSync(pkgPath)) {
+      return JSON.parse(fs.readFileSync(pkgPath, "utf8")).version;
+    }
+  } catch {}
+  return "0.8.9";
+}
+
+const VERSION = getVersion();
 
 interface RawOptions {
   flag: string;
