@@ -89,6 +89,95 @@ describe("SumoPod Provider & Client Integration", () => {
     }
   });
 
+  it("should target sandbox URL (api-pay-sandbox.sumopod.com) when sandbox: true", async () => {
+    const originalFetch = globalThis.fetch;
+    try {
+      let requestedUrl = "";
+      (globalThis as any).fetch = async (url: string, init: RequestInit) => {
+        requestedUrl = url;
+        return new Response(
+          JSON.stringify({
+            payment_id: "uuid-sandbox",
+            order_id: "INV-SBX-001",
+            amount: 50000,
+            payment_link_url: "https://pay.sumopod.com/pay/uuid-sandbox",
+            payment_code: "1308300301295957",
+            payment_code_type: "ACCOUNT_NUMBER",
+            payment_channel_used: "BRI.VA",
+            status: "pending",
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        );
+      };
+
+      const buayar = new Buayar({
+        provider: "sumopod",
+        apiKey: TEST_API_KEY,
+        sandbox: true,
+      });
+
+      const invoice = await buayar.createInvoice({
+        orderId: "INV-SBX-001",
+        amount: 50000,
+        productDetails: "Sandbox Test",
+        customer: { name: "Test User", email: "test@example.com" },
+      });
+
+      expect(requestedUrl).toBe("https://api-pay-sandbox.sumopod.com/api/v1/payments");
+      expect(invoice.success).toBe(true);
+      expect(invoice.mode).toBe("va");
+      expect(invoice.vaNumber).toBe("1308300301295957");
+      expect(invoice.vaBank).toBe("bri");
+      expect(invoice.paymentCode).toBe("1308300301295957");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("should return QRIS mode with qrString and paymentCode for Custom UI", async () => {
+    const originalFetch = globalThis.fetch;
+    try {
+      (globalThis as any).fetch = async () => {
+        return new Response(
+          JSON.stringify({
+            payment_id: "uuid-qris-custom-ui",
+            order_id: "INV-QR-001",
+            amount: 50650,
+            fee: 650,
+            net_amount: 50000,
+            payment_link_url: "https://pay-sandbox.sumopod.com/pay/uuid-qris-custom-ui",
+            payment_code: "00020101021226580016ID.CO.SUMOPOD...",
+            payment_code_type: "QR_TEXT",
+            payment_channel_used: "QRIS",
+            status: "pending",
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        );
+      };
+
+      const buayar = new Buayar({
+        provider: "sumopod",
+        apiKey: TEST_API_KEY,
+        sandbox: true,
+      });
+
+      const invoice = await buayar.createInvoice({
+        orderId: "INV-QR-001",
+        amount: 50000,
+        productDetails: "Digital Goods",
+        customer: { name: "John Doe", email: "john@example.com" },
+      });
+
+      expect(invoice.success).toBe(true);
+      expect(invoice.mode).toBe("qris");
+      expect(invoice.qrString).toBe("00020101021226580016ID.CO.SUMOPOD...");
+      expect(invoice.paymentCode).toBe("00020101021226580016ID.CO.SUMOPOD...");
+      expect(invoice.paymentUrl).toBe("https://pay-sandbox.sumopod.com/pay/uuid-qris-custom-ui");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
   it("should get payment methods with QRIS channel and fee", async () => {
     const buayar = new Buayar({
       provider: "sumopod",

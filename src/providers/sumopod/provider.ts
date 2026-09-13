@@ -68,8 +68,12 @@ export class SumopodProvider extends BasePaymentProvider {
         };
       }
 
-      const isQris = data.payment_channel_used?.toLowerCase()?.includes('qris') || data.payment_code_type === 'QRIS' || !data.payment_code_type;
-      const isVa = data.payment_code_type === 'ACCOUNT_NUMBER';
+      const isQris =
+        data.payment_channel_used?.toLowerCase()?.includes("qris") ||
+        data.payment_code_type === "QRIS" ||
+        data.payment_code_type === "QR_TEXT" ||
+        !data.payment_code_type;
+      const isVa = data.payment_code_type === "ACCOUNT_NUMBER";
 
       return {
         success: true,

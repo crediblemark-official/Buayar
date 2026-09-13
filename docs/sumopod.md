@@ -20,8 +20,11 @@ Dokumentasi lengkap mengenai integrasi payment gateway **SumoPod** pada SDK Buay
 
 ## 🚀 Fitur & Kemampuan
 
-- ⚡ **Host API**: `https://api-pay.sumopod.com`
+- ⚡ **Host API**:
+  - **Live / Production**: `https://api-pay.sumopod.com`
+  - **Sandbox / Testing**: `https://api-pay-sandbox.sumopod.com`
 - 📱 **Metode Pembayaran**: **QRIS** (Settlement 2 hari, Biaya Transaksi: `0.7% + Rp 300`)
+- 🏦 **Virtual Account / Payment Code**: Otomatis mendeteksi kode bayar/VA (misal `BRI.VA`, `ACCOUNT_NUMBER`) pada response transaksi.
 - 🔗 **Mode Pembayaran**: Hosted Payment Link / QRIS Checkout Page
 - 🪝 **Dukungan Webhook Ganda**:
   - **Svix Signature** (`svix-id`, `svix-timestamp`, `svix-signature` HMAC-SHA256) dengan proteksi replay attack (5 menit) dan toleransi rotasi secret.
@@ -37,6 +40,11 @@ Dokumentasi lengkap mengenai integrasi payment gateway **SumoPod** pada SDK Buay
 ```env
 # Aktifkan SumoPod sebagai provider
 BUAYAR_PROVIDER=sumopod
+
+# Mode Sandbox:
+# true  -> Mengarah ke https://api-pay-sandbox.sumopod.com
+# false -> Mengarah ke https://api-pay.sumopod.com (Production)
+BUAYAR_SANDBOX=true
 
 # API Key SumoPod dari dashboard Anda
 BUAYAR_API_KEY=your_sumopod_api_key_here
@@ -58,6 +66,7 @@ Jika Anda ingin menggunakan format env khusus SumoPod:
 
 ```env
 SUMOPOD_API_KEY=your_sumopod_api_key_here
+SUMOPOD_SANDBOX=true
 SUMOPOD_WEBHOOK_SECRET=whsec_xxxxxxxxxxxxxxxxxxxxxxxxxxxx
 SUMOPOD_WEBHOOK_TOKEN=whtok_xxxxxxxxxxxxxxxxxxxxxxxxxxxx
 ```
@@ -118,9 +127,12 @@ if (invoice.success) {
   console.log("Payment URL:", invoice.paymentUrl);
   // https://pay.sumopod.com/pay/uuid-xxxx
   console.log("Payment ID:", invoice.reference);
+  console.log("Kode Bayar / VA:", invoice.paymentCode || invoice.vaNumber);
+  console.log("Bank VA:", invoice.vaBank); // misal: "bri" jika mode VA
+  console.log("Mode:", invoice.mode); // "va" | "qris" | "checkout"
   console.log("Kedaluwarsa pada:", invoice.expiresAt);
 
-  // Redirect pelanggan ke invoice.paymentUrl
+  // Redirect pelanggan ke invoice.paymentUrl atau tampilkan nomor VA langsung
 } else {
   console.error("Gagal membuat invoice:", invoice.error);
 }
