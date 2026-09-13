@@ -18,6 +18,12 @@ import {
   CheckBalanceResult,
   DisburseParams,
   DisburseResult,
+  UpdateVaParams,
+  UpdateVaResult,
+  DeleteVaParams,
+  DeleteVaResult,
+  ValidateBankAccountParams,
+  ValidateBankAccountResult,
 } from "../types";
 import { MidtransClient } from "../clients/midtrans";
 import { DuitkuClient } from "../clients/duitku";
@@ -396,6 +402,70 @@ export class Buayar {
     const mergedConfig: ProviderConfig = { ...this.config, ...configOverride };
     const providerName = (configOverride as any)?.provider || this.provider;
     return this.manager.disburse(providerName, params, mergedConfig);
+  }
+
+  /**
+   * Update Virtual Account (mis. perpanjang expired time atau ubah nominal VA).
+   */
+  async updateVirtualAccount(
+    params: UpdateVaParams,
+    configOverride?: Partial<ProviderConfig>
+  ): Promise<UpdateVaResult> {
+    const mergedConfig: ProviderConfig = { ...this.config, ...configOverride };
+    const providerName = (configOverride as any)?.provider || this.provider;
+    if (providerName.toLowerCase() === "doku") {
+      return this.manager.getDokuProvider().updateVirtualAccount(params, mergedConfig);
+    }
+    return {
+      success: false,
+      provider: providerName,
+      orderId: params.orderId,
+      rawResponse: null,
+      error: `Update Virtual Account is not supported for provider '${providerName}'`,
+    };
+  }
+
+  /**
+   * Delete / Cancel Virtual Account yang belum dibayar.
+   */
+  async deleteVirtualAccount(
+    params: DeleteVaParams,
+    configOverride?: Partial<ProviderConfig>
+  ): Promise<DeleteVaResult> {
+    const mergedConfig: ProviderConfig = { ...this.config, ...configOverride };
+    const providerName = (configOverride as any)?.provider || this.provider;
+    if (providerName.toLowerCase() === "doku") {
+      return this.manager.getDokuProvider().deleteVirtualAccount(params, mergedConfig);
+    }
+    return {
+      success: false,
+      provider: providerName,
+      orderId: params.orderId,
+      rawResponse: null,
+      error: `Delete Virtual Account is not supported for provider '${providerName}'`,
+    };
+  }
+
+  /**
+   * Validasi rekening bank / e-wallet tujuan sebelum transfer (Account Inquiry).
+   */
+  async validateBankAccount(
+    params: ValidateBankAccountParams,
+    configOverride?: Partial<ProviderConfig>
+  ): Promise<ValidateBankAccountResult> {
+    const mergedConfig: ProviderConfig = { ...this.config, ...configOverride };
+    const providerName = (configOverride as any)?.provider || this.provider;
+    if (providerName.toLowerCase() === "doku") {
+      return this.manager.getDokuProvider().validateBankAccount(params, mergedConfig);
+    }
+    return {
+      success: false,
+      provider: providerName,
+      bankCode: params.bankCode,
+      accountNumber: params.accountNumber,
+      rawResponse: null,
+      error: `Bank account validation is not supported for provider '${providerName}'`,
+    };
   }
 
   // ─── Indonesian Provider Client Getters ───────────────────────────────────

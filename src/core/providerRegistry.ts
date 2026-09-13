@@ -192,7 +192,7 @@ const OPERATIONS: Record<string, { refund: boolean; checkBalance: boolean; disbu
   duitku: { refund: false, checkBalance: true, disburse: true },
   ipaymu: { refund: false, checkBalance: true, disburse: false },
   xendit: { refund: false, checkBalance: true, disburse: true },
-  doku: { refund: false, checkBalance: false, disburse: false },
+  doku: { refund: false, checkBalance: false, disburse: true },
   prismalink: { refund: false, checkBalance: false, disburse: false },
   faspay: { refund: false, checkBalance: false, disburse: false },
   finpay: { refund: false, checkBalance: false, disburse: false },

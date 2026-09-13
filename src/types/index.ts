@@ -381,3 +381,71 @@ export interface DisburseResult {
   error?: string;
   rawResponse: any;
 }
+
+export interface UpdateVaParams {
+  /** Nomor invoice / ID pesanan */
+  orderId: string;
+  /** Nomor Virtual Account yang ingin diubah */
+  vaNumber?: string;
+  /** Bank Virtual Account (mis. 'bca', 'mandiri', 'bni', dll) */
+  bank?: string;
+  /** Nominal baru (opsional) */
+  amount?: number;
+  /** Batas waktu kedaluwarsa baru dalam menit atau Date (opsional) */
+  expiredTime?: number | Date;
+  /** Parameter kustom tambahan untuk provider */
+  providerParams?: Record<string, any>;
+}
+
+export interface UpdateVaResult {
+  success: boolean;
+  provider: string;
+  orderId: string;
+  vaNumber?: string;
+  amount?: number;
+  expiresAt?: Date;
+  rawResponse: any;
+  error?: string;
+}
+
+export interface DeleteVaParams {
+  /** Nomor invoice / ID pesanan */
+  orderId: string;
+  /** Nomor Virtual Account yang ingin dihapus / dibatalkan */
+  vaNumber?: string;
+  /** Bank Virtual Account (mis. 'bca', 'mandiri', 'bni', dll) */
+  bank?: string;
+  /** Alasan pembatalan (opsional) */
+  reason?: string;
+  /** Parameter kustom tambahan untuk provider */
+  providerParams?: Record<string, any>;
+}
+
+export interface DeleteVaResult {
+  success: boolean;
+  provider: string;
+  orderId: string;
+  vaNumber?: string;
+  status?: string;
+  rawResponse: any;
+  error?: string;
+}
+
+export interface ValidateBankAccountParams {
+  /** Kode bank atau e-wallet (mis. 'BCA', 'MANDIRI', '014', dll) */
+  bankCode: string;
+  /** Nomor rekening atau nomor akun e-wallet tujuan */
+  accountNumber: string;
+}
+
+export interface ValidateBankAccountResult {
+  success: boolean;
+  provider: string;
+  bankCode: string;
+  accountNumber: string;
+  /** Nama pemilik rekening resmi yang terdaftar di bank */
+  accountHolderName?: string;
+  rawResponse: any;
+  error?: string;
+}
+

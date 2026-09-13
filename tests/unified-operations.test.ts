@@ -111,6 +111,30 @@ describe("Unified Operations — Disburse", () => {
     expect(result.success).toBe(true);
   });
 
+  it("should disburse via DOKU", async () => {
+    mockFetch(() => ({
+      status: "SUCCESS",
+      partner_reference_no: "DISB-DOKU-001",
+    }));
+    const buayar = new Buayar({
+      provider: "doku",
+      merchantCode: "MALL-ID-123",
+      apiKey: "SK-secret-123",
+    });
+    const result = await buayar.disburse({
+      externalId: "DISB-DOKU-001",
+      bankCode: "BCA",
+      accountNumber: "1234567890",
+      accountHolderName: "Budi",
+      amount: 250000,
+      description: "Payout gaji",
+    });
+    expect(result.supported).toBe(true);
+    expect(result.success).toBe(true);
+    expect(result.provider).toBe("doku");
+    expect(result.reference).toBe("DISB-DOKU-001");
+  });
+
   it("should return supported:false for provider without disburse (stripe)", async () => {
     const buayar = new Buayar({ provider: "stripe", apiKey: "sk_test_123" });
     const result = await buayar.disburse({

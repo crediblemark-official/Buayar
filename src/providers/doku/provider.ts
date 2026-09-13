@@ -12,10 +12,19 @@ import {
   CheckTransactionParams,
   CheckTransactionResult,
   PaymentMethod,
+  UpdateVaParams,
+  UpdateVaResult,
+  DeleteVaParams,
+  DeleteVaResult,
+  ValidateBankAccountParams,
+  ValidateBankAccountResult,
+  DisburseParams,
+  DisburseResult,
 } from "../../types";
 import { toDokuPaymentMethod } from "../../core/canonical";
 import { generateDokuHeaders, verifyDokuWebhookSignature } from "./signature";
 import { SnapClient } from "../../clients/snap";
+import { DokuClient } from "../../clients/doku";
 import { verifySnapWebhookSignature, snapTimestamp, snapExternalId, generateSnapSymmetricSignature, sha256Hex } from "./snap";
 
 export class DokuProvider extends BasePaymentProvider {
@@ -926,6 +935,117 @@ export class DokuProvider extends BasePaymentProvider {
         statusMessage: e.message || "Failed to check SNAP transaction status",
         error: e.message || "Failed to check SNAP transaction status",
         rawResponse: null,
+      };
+    }
+  }
+
+  /**
+   * Update Virtual Account (Jokul v2 atau BI-SNAP)
+   */
+  async updateVirtualAccount(params: UpdateVaParams, config: ProviderConfig): Promise<UpdateVaResult> {
+    try {
+      const client = new DokuClient(config);
+      const data = await client.updateVirtualAccount(params);
+      const vaData = data.virtualAccountData || data.virtual_account_info || {};
+      return {
+        success: true,
+        provider: "doku",
+        orderId: params.orderId,
+        vaNumber: vaData.virtual_account_number || vaData.virtualAccountNo || params.vaNumber,
+        amount: params.amount,
+        expiresAt: vaData.expired_date || vaData.expiredDate ? new Date(vaData.expired_date || vaData.expiredDate) : undefined,
+        rawResponse: data,
+      };
+    } catch (e: any) {
+      return {
+        success: false,
+        provider: "doku",
+        orderId: params.orderId,
+        vaNumber: params.vaNumber,
+        rawResponse: null,
+        error: e.message || "Failed to update DOKU Virtual Account",
+      };
+    }
+  }
+
+  /**
+   * Delete / Cancel Virtual Account (Jokul v2 atau BI-SNAP)
+   */
+  async deleteVirtualAccount(params: DeleteVaParams, config: ProviderConfig): Promise<DeleteVaResult> {
+    try {
+      const client = new DokuClient(config);
+      const data = await client.deleteVirtualAccount(params);
+      return {
+        success: true,
+        provider: "doku",
+        orderId: params.orderId,
+        vaNumber: params.vaNumber,
+        status: data.status || "DELETED",
+        rawResponse: data,
+      };
+    } catch (e: any) {
+      return {
+        success: false,
+        provider: "doku",
+        orderId: params.orderId,
+        vaNumber: params.vaNumber,
+        rawResponse: null,
+        error: e.message || "Failed to delete DOKU Virtual Account",
+      };
+    }
+  }
+
+  /**
+   * Validasi Rekening Bank / E-Wallet tujuan transfer (Kirim DOKU)
+   */
+  async validateBankAccount(params: ValidateBankAccountParams, config: ProviderConfig): Promise<ValidateBankAccountResult> {
+    try {
+      const client = new DokuClient(config);
+      const data = await client.validateBankAccount(params);
+      const accountHolderName = data.beneficiary_name || data.account_name || data.name || data.beneficiaryAccountName;
+      return {
+        success: true,
+        provider: "doku",
+        bankCode: params.bankCode,
+        accountNumber: params.accountNumber,
+        accountHolderName,
+        rawResponse: data,
+      };
+    } catch (e: any) {
+      return {
+        success: false,
+        provider: "doku",
+        bankCode: params.bankCode,
+        accountNumber: params.accountNumber,
+        rawResponse: null,
+        error: e.message || "Failed to validate bank account in DOKU",
+      };
+    }
+  }
+
+  /**
+   * Payout / Transfer Dana (Kirim DOKU Domestic Payouts)
+   */
+  async disburse(params: DisburseParams, config: ProviderConfig): Promise<DisburseResult> {
+    try {
+      const client = new DokuClient(config);
+      const data = await client.disburse(params);
+      const isSuccess = data?.status === "SUCCESS" || data?.responseCode === "2002500" || data?.status === "PENDING" || !data?.error;
+      return {
+        success: isSuccess,
+        supported: true,
+        provider: "doku",
+        reference: data?.partner_reference_no || data?.partnerReferenceNo || params.externalId,
+        status: data?.status || data?.transactionStatus || "PENDING",
+        rawResponse: data,
+      };
+    } catch (e: any) {
+      return {
+        success: false,
+        supported: true,
+        provider: "doku",
+        rawResponse: null,
+        error: e.message || "DOKU disbursement failed",
       };
     }
   }

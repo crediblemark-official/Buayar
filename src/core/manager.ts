@@ -507,6 +507,9 @@ export class PaymentManager {
           });
           return { success: true, supported: true, provider: "oy", reference: params.externalId, status: data?.status, rawResponse: data };
         }
+        case "doku": {
+          return await this.getDokuProvider().disburse(params, config);
+        }
         default:
           return this.unsupported(false, name, "disburse");
       }

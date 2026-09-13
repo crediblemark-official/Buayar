@@ -121,7 +121,7 @@ export class SnapClient {
    * @param opts          extra headers (X-DEVICE-ID, X-IP-ADDRESS, etc.)
    */
   async request(
-    method: "GET" | "POST",
+    method: "GET" | "POST" | "PUT" | "DELETE" | "PATCH",
     endpoint: string,
     body?: any,
     opts: { externalId?: string; deviceId?: string; ipAddress?: string; extraHeaders?: Record<string, string> } = {}
