@@ -127,11 +127,15 @@ const SPECIFIC: Record<string, FieldMap> = {
     merchantCode: ["TWOCHECKOUT_MERCHANT_CODE"],
     merchantId: ["TWOCHECKOUT_MERCHANT_CODE"],
   },
+  sumopod: {
+    apiKey: ["SUMOPOD_API_KEY", "SUMOPOD_PRODUCTION_API_KEY", "SUMOPOD_SANDBOX_API_KEY"],
+  },
 };
 
 type FieldName = keyof FieldMap;
 
-function firstDefined(env: Record<string, string | undefined>, keys: string[]): string | undefined {
+function firstDefined(env: Record<string, string | undefined>, keys?: string[]): string | undefined {
+  if (!keys) return undefined;
   for (const k of keys) {
     const v = env[k];
     if (typeof v === "string" && v.trim().length > 0) return v.trim();
@@ -162,6 +166,7 @@ function resolveSandbox(env: Record<string, string | undefined>, provider: strin
     braintree: ["BRAINTREE_SANDBOX"],
     twocheckout: ["TWOCHECKOUT_SANDBOX"],
     xendit: ["XENDIT_SANDBOX"],
+    sumopod: ["SUMOPOD_SANDBOX"],
   };
   const specific = firstDefined(env, specificMap[provider]);
   if (specific !== undefined) {
@@ -212,8 +217,8 @@ export function resolveConfigFromEnv(customConfig?: BuayarConfig): BuayarConfig 
   const privateKey = customConfig?.privateKey || firstDefined(env, ["BUAYAR_PRIVATE_KEY", "PG_PRIVATE_KEY", "PRIVATE_KEY"]) || (provider === "braintree" ? cfg.apiKey : undefined);
 
   const extra = {
-    webhookToken: env.XENDIT_WEBHOOK_TOKEN || env.BUAYAR_WEBHOOK_TOKEN,
-    webhookSecret: env.STRIPE_WEBHOOK_SECRET || env.CHECKOUTCOM_WEBHOOK_SECRET || env.RAZORPAY_WEBHOOK_SECRET || env.BUAYAR_WEBHOOK_SECRET,
+    webhookToken: (env.SUMOPOD_SANDBOX === 'true' ? env.SUMOPOD_SANDBOX_WEBHOOK_TOKEN : env.SUMOPOD_PRODUCTION_WEBHOOK_TOKEN) || env.SUMOPOD_WEBHOOK_TOKEN || env.XENDIT_WEBHOOK_TOKEN || env.BUAYAR_WEBHOOK_TOKEN,
+    webhookSecret: (env.SUMOPOD_SANDBOX === 'true' ? env.SUMOPOD_SANDBOX_WEBHOOK_SECRET : env.SUMOPOD_PRODUCTION_WEBHOOK_SECRET) || env.SUMOPOD_WEBHOOK_SECRET || env.STRIPE_WEBHOOK_SECRET || env.CHECKOUTCOM_WEBHOOK_SECRET || env.RAZORPAY_WEBHOOK_SECRET || env.BUAYAR_WEBHOOK_SECRET,
     merchantName: env.FASPAY_MERCHANT_NAME || env.BUAYAR_MERCHANT_NAME,
     userId: env.FASPAY_USER_ID,
     iMid: env.NICEPAY_IMID,

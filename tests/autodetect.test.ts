@@ -63,8 +63,22 @@ describe("Autodetect & Dynamic Provider Registry", () => {
       expect(buayar().detectProviderFromPayload({ object: "event", type: "checkout.session.completed" })).toBe("stripe");
     });
 
-    it("mendeteksi xendit dari external_id", () => {
-      expect(buayar().detectProviderFromPayload({ external_id: "x", status: "PAID" })).toBe("xendit");
+    it("mendeteksi sumopod dari svix-signature header", () => {
+      expect(
+        buayar().detectProviderFromPayload(
+          { event_type: "payment.completed", data: { payment_id: "uuid-1" } },
+          { "svix-signature": "v1,abc" }
+        )
+      ).toBe("sumopod");
+    });
+
+    it("mendeteksi sumopod dari payload khas event_type", () => {
+      expect(
+        buayar().detectProviderFromPayload({
+          event_type: "payment.completed",
+          data: { payment_id: "uuid-123" },
+        })
+      ).toBe("sumopod");
     });
 
     it("mengembalikan undefined untuk payload tak dikenal", () => {
@@ -89,11 +103,12 @@ describe("Autodetect & Dynamic Provider Registry", () => {
     it("supportsMethod() menjawab ketersediaan method kanonik", () => {
       const b = buayar();
       expect(b.supportsMethod("qris", "stripe")).toBe(true);
+      expect(b.supportsMethod("qris", "sumopod")).toBe(true);
       expect(b.supportsMethod("paypal", "midtrans")).toBe(false);
     });
 
-    it("listProviders() memuat 19 provider bawaan", () => {
-      expect(buayar().listProviders().length).toBe(19);
+    it("listProviders() memuat 20 provider bawaan", () => {
+      expect(buayar().listProviders().length).toBe(20);
     });
 
     it("registerProviderDescriptor menambahkan provider kustom", () => {

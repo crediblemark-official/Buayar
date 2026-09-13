@@ -1,6 +1,6 @@
 # 💳 Panduan Unified `@crediblemark/buayar`
 
-Panduan ini adalah **satu-satunya** panduan yang Anda butuhkan untuk mengintegrasikan **semua** payment gateway yang didukung Buayar (19 provider: 10 Indonesia + 9 Internasional). Anda **tidak perlu** membaca dokumentasi masing-masing PG — kode yang Anda tulis **identik** untuk semua provider.
+Panduan ini adalah **satu-satunya** panduan yang Anda butuhkan untuk mengintegrasikan **semua** payment gateway yang didukung Buayar (20 provider: 11 Indonesia + 9 Internasional). Anda **tidak perlu** membaca dokumentasi masing-masing PG — kode yang Anda tulis **identik** untuk semua provider.
 
 > 🎯 **Prinsip "mata tertutup":** Anda 100% tidak tahu (dan tidak perlu tahu) provider mana yang sedang aktif. Yang Anda tahu hanya: "Buaya mendukung PG A, PG B, PG C". Cukup ubah kredensial di `.env`, semuanya jalan.
 
@@ -52,7 +52,7 @@ Cukup isi **variabel universal** yang sama untuk semua provider. SDK otomatis me
 ```env
 # (opsional) Provider aktif: midtrans, duitku, ipaymu, xendit, doku, prismalink,
 # faspay, finpay, nicepay, oy, stripe, paypal, adyen, checkoutcom,
-# razorpay, square, payu, braintree, twocheckout
+# razorpay, square, payu, braintree, twocheckout, sumopod
 # Bila dikosongkan, provider AUTO-DIDETEKSI dari kredensial yang terisi.
 BUAYAR_PROVIDER=midtrans
 
@@ -414,6 +414,9 @@ Rangkuman kemampuan ekstra tiap provider:
 | PayU | - | `getPayuClient()` | cancelOrder, getOrder, refundOrder |
 | Braintree | - | `getBraintreeClient()` | getClientToken, findTransaction, refundTransaction, voidTransaction |
 | 2Checkout | - | `getTwoCheckoutClient()` | getOrder, listOrders, getSubscription, refundOrder |
+| [SumoPod](sumopod.md) | Tested | `getSumopodClient()` | createPayment, getPayment. *Lihat [panduan lengkap SumoPod](sumopod.md)* |
+
+> ℹ️ **Catatan Status:** Hanya provider yang memiliki file dokumentasi panduan khusus di folder `docs/` yang berstatus **Tested** ([iPaymu](ipaymu.md) dan [SumoPod](sumopod.md)). Provider lain bertanda `-` berstatus siap pakai sesuai spesifikasi API resmi.
 
 ---
 
@@ -444,6 +447,7 @@ Tabel berikut menunjukkan data apa dari dashboard masing-masing payment gateway 
 | **PayU** | `payu` | MD5 Key / Secret | POS ID | POS ID |
 | **Braintree** | `braintree` | Private Key | Merchant ID | Public Key |
 | **2Checkout** | `twocheckout` | Secret Key | Merchant Code | Secret Word (`BUAYAR_WEBHOOK_SECRET`) |
+| **SumoPod** | `sumopod` | API Key (`X-Api-Key`) | *(tidak perlu)* | Webhook Secret (`BUAYAR_WEBHOOK_SECRET`) / Token (`BUAYAR_WEBHOOK_TOKEN`) |
 
 > 💡 **Mode Sandbox:** Cukup tambahkan `BUAYAR_SANDBOX=true` (atau `false` saat production), SDK otomatis menyesuaikan URL endpoint API seluruh provider di atas tanpa perlu konfigurasi tambahan.
 

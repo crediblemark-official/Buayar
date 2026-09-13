@@ -314,6 +314,8 @@ export const CANONICAL_TO_OY: Record<string, { type: "va" | "qris" | "ewallet" |
 export const CANONICAL_TO_STRIPE: Record<string, string> = {
   credit_card: "card",
   qris: "qris",
+  QRIS_SUMOPOD: "qris",
+  qris_sumopod: "qris",
   gopay_qris: "qris",
   shopeepay_qris: "qris",
   bca_va: "customer_balance",
@@ -462,6 +464,37 @@ export function toStripePaymentMethod(code?: string): string | undefined {
 }
 
 /**
+ * Mapping dari Canonical Payment Method ke kode SumoPod
+ */
+export const CANONICAL_TO_SUMOPOD: Record<string, string> = {
+  qris: "QRIS",
+  gopay_qris: "QRIS",
+  shopeepay_qris: "QRIS",
+  nobu_qris: "QRIS",
+  qris_sumopod: "QRIS",
+};
+
+/**
+ * Mapping dari kode SumoPod ke Canonical Payment Method
+ */
+export const SUMOPOD_TO_CANONICAL: Record<string, string> = {
+  QRIS: "qris",
+  qris: "qris",
+};
+
+/**
+ * Ubah method code apapun ke format SumoPod
+ */
+export function toSumopodPaymentMethod(code?: string): string | undefined {
+  if (!code) return undefined;
+  const lower = code.toLowerCase().trim();
+  if (CANONICAL_TO_SUMOPOD[lower]) {
+    return CANONICAL_TO_SUMOPOD[lower];
+  }
+  return code;
+}
+
+/**
  * Ubah method code apapun ke format canonical standar Buayar
  */
 export function toCanonicalPaymentMethod(provider: string, code?: string): string {
@@ -471,6 +504,10 @@ export function toCanonicalPaymentMethod(provider: string, code?: string): strin
 
   if (provider.toLowerCase() === "duitku" && DUITKU_TO_CANONICAL[upper]) {
     return DUITKU_TO_CANONICAL[upper];
+  }
+
+  if (provider.toLowerCase() === "sumopod" && SUMOPOD_TO_CANONICAL[upper]) {
+    return SUMOPOD_TO_CANONICAL[upper];
   }
 
   if (
@@ -484,10 +521,12 @@ export function toCanonicalPaymentMethod(provider: string, code?: string): strin
     CANONICAL_TO_FINPAY[lower] ||
     CANONICAL_TO_NICEPAY[lower] ||
     CANONICAL_TO_OY[lower] ||
-    CANONICAL_TO_STRIPE[lower]
+    CANONICAL_TO_STRIPE[lower] ||
+    CANONICAL_TO_SUMOPOD[lower]
   ) {
     return lower;
   }
 
   return lower;
 }
+

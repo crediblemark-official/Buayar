@@ -14,7 +14,7 @@ export const DOT_ENV_TEMPLATE = `# ── @crediblemark/buayar · Konfigurasi �
 # (opsional) Nama provider aktif. Bila dikosongkan, otomatis dideteksi.
 # midtrans | duitku | ipaymu | xendit | doku | prismalink | faspay | finpay
 # nicepay | oy | stripe | paypal | adyen | checkoutcom | razorpay | square
-# payu | braintree | twocheckout
+# payu | braintree | twocheckout | sumopod
 # BUAYAR_PROVIDER=midtrans
 
 # Kredensial Universal — dipetakan otomatis sesuai provider aktif.
@@ -77,6 +77,9 @@ BUAYAR_RETURN_URL=http://localhost:3000/payment/success
 # TWOCHECKOUT_MERCHANT_CODE=
 # TWOCHECKOUT_SECRET_KEY=
 # TWOCHECKOUT_SECRET_WORD=
+# SUMOPOD_API_KEY=
+# SUMOPOD_WEBHOOK_SECRET=
+# SUMOPOD_WEBHOOK_TOKEN=
 `;
 
 export const CONFIG_TEMPLATE = `// src/payment/buayar.ts
@@ -334,7 +337,7 @@ export interface WebhookVerification {
 export const PROVIDERS = [
   "midtrans", "duitku", "ipaymu", "xendit", "doku", "prismalink", "faspay",
   "finpay", "nicepay", "oy", "stripe", "paypal", "adyen", "checkoutcom",
-  "razorpay", "square", "payu", "braintree", "twocheckout",
+  "razorpay", "square", "payu", "braintree", "twocheckout", "sumopod",
 ] as const;
 
 export const FRAMEWORKS = ["express", "hono", "nextjs"] as const;

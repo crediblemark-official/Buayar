@@ -49,8 +49,8 @@ describe("buildScaffold", () => {
     expect(FRAMEWORKS).toContain("nextjs");
   });
 
-  it("exposes all 19 providers", () => {
-    expect(PROVIDERS.length).toBe(19);
+  it("exposes all 20 providers", () => {
+    expect(PROVIDERS.length).toBe(20);
   });
 });
 

@@ -18,6 +18,7 @@ import { SquareProvider } from "../providers/square/provider";
 import { PayuProvider } from "../providers/payu/provider";
 import { BraintreeProvider } from "../providers/braintree/provider";
 import { TwoCheckoutProvider } from "../providers/twocheckout/provider";
+import { SumopodProvider } from "../providers/sumopod/provider";
 import { MidtransClient } from "../clients/midtrans";
 import { DuitkuClient } from "../clients/duitku";
 import { IpaymuClient } from "../clients/ipaymu";
@@ -37,6 +38,7 @@ import { SquareClient } from "../clients/square";
 import { PayuClient } from "../clients/payu";
 import { BraintreeClient } from "../clients/braintree";
 import { TwoCheckoutClient } from "../clients/twocheckout";
+import { SumopodClient } from "../clients/sumopod";
 import {
   CreateInvoiceParams,
   InvoiceResponse,
@@ -78,6 +80,7 @@ export class PaymentManager {
     this.registerProvider(new PayuProvider());
     this.registerProvider(new BraintreeProvider());
     this.registerProvider(new TwoCheckoutProvider());
+    this.registerProvider(new SumopodProvider());
   }
 
   registerProvider(provider: BasePaymentProvider) {
@@ -246,6 +249,14 @@ export class PaymentManager {
 
   getTwoCheckoutClient(config: ProviderConfig): TwoCheckoutClient {
     return new TwoCheckoutClient(config);
+  }
+
+  getSumopodProvider(): SumopodProvider {
+    return this.getProvider("sumopod") as SumopodProvider;
+  }
+
+  getSumopodClient(config: ProviderConfig): SumopodClient {
+    return new SumopodClient(config);
   }
 
   // ─── Unified Operations ──────────────────────────────────────────────────

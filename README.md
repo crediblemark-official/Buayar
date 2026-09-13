@@ -10,7 +10,7 @@
 
 ## 🇬🇧 English
 
-**`@crediblemark/buayar`** is a **Unified Payment Gateway SDK** for Node.js and TypeScript, supporting **19 payment providers** (10 Indonesian + 9 International) through a single, consistent API.
+**`@crediblemark/buayar`** is a **Unified Payment Gateway SDK** for Node.js and TypeScript, supporting **20 payment providers** (11 Indonesian + 9 International) through a single, consistent API.
 
 > 💡 **Zero-Code PG Switcher:** Switch your active payment provider — e.g. from Midtrans to Stripe — **without changing a single line in your controller or service layer**. Just update the credentials in your `.env` file.
 
@@ -28,7 +28,7 @@
 
 ### 📦 Supported Providers
 
-#### 🇮🇩 Indonesian (10)
+#### 🇮🇩 Indonesian (11)
 
 | Provider | Status | Redirect | Direct API | Webhook | Client |
 |---|:---:|:---:|:---:|:---:|:---:|
@@ -42,6 +42,7 @@
 | Finpay | - | ✅ | ✅ | HMAC-SHA512 | `FinpayClient` |
 | Nicepay | - | ✅ | ✅ | SHA-256 | `NicepayClient` |
 | OY! Bisnis | - | ✅ | ✅ | Header Auth | `OyClient` |
+| [SumoPod](docs/sumopod.md) | Tested | ✅ Payments v1 | ✅ QRIS API | Svix / Token | `SumopodClient` |
 
 #### 🌍 International (9)
 
@@ -61,7 +62,7 @@
 
 #### Universal (Recommended)
 ```env
-# (optional) Active provider: any of the 19 supported names
+# (optional) Active provider: any of the 20 supported names
 # If empty, the provider is AUTO-DETECTED from filled credentials.
 BUAYAR_PROVIDER=midtrans
 
@@ -84,7 +85,7 @@ Check what a provider actually supports — no docs digging:
 ```ts
 import { buayar } from "@crediblemark/buayar";
 
-buayar.listProviders();                    // all 19 registered providers
+buayar.listProviders();                    // all 20 registered providers
 buayar.detectProviderFromEnv(process.env); // guess active provider from .env
 buayar.detectProviderFromPayload(payload); // guess provider from webhook payload
 buayar.getCapabilities("duitku");
@@ -118,6 +119,7 @@ You don't need provider-specific variable names. Simply use unified **`BUAYAR_*`
 | **PayU** | `payu` | MD5 Key | POS ID | POS ID |
 | **Braintree** | `braintree` | Private Key | Merchant ID | Public Key |
 | **2Checkout** | `twocheckout` | Secret Key | Merchant Code | Secret Word (`BUAYAR_WEBHOOK_SECRET`) |
+| **[SumoPod](docs/sumopod.md)** | `sumopod` | API Key (`X-Api-Key`) | *(not needed)* | Webhook Secret / Token (`BUAYAR_WEBHOOK_SECRET`) |
 
 ### 📖 Usage
 
@@ -204,7 +206,7 @@ BUAYAR_WEBHOOK_SECRET=whsec_...
 
 ## 🇮🇩 Bahasa Indonesia
 
-**`@crediblemark/buayar`** adalah **Unified Payment Gateway SDK** untuk Node.js dan TypeScript yang mendukung **19 payment provider** (10 Indonesia + 9 Internasional) melalui satu arsitektur API yang seragam.
+**`@crediblemark/buayar`** adalah **Unified Payment Gateway SDK** untuk Node.js dan TypeScript yang mendukung **20 payment provider** (11 Indonesia + 9 Internasional) melalui satu arsitektur API yang seragam.
 
 > 💡 **Zero-Code PG Switcher:** Berganti provider payment gateway (misal dari Midtrans ke Duitku atau sebaliknya) **tanpa perlu merombak kode controller/service aplikasi**. Cukup ubah kredensial di file `.env`!
 
@@ -222,7 +224,7 @@ BUAYAR_WEBHOOK_SECRET=whsec_...
 
 ### 📦 Provider yang Didukung
 
-#### 🇮🇩 Lokal Indonesia (10)
+#### 🇮🇩 Lokal Indonesia (11)
 
 * **Midtrans** — Snap API (Redirect/Popup) & Core API Direct Charge. Verifikasi SHA-512. `MidtransClient`.
 * **Duitku** — Redirect Checkout & Direct Inquiry API. Verifikasi MD5. `DuitkuClient` (Disbursement, Inquiry Rekening, Saldo).
@@ -234,6 +236,7 @@ BUAYAR_WEBHOOK_SECRET=whsec_...
 * **Finpay** — Payment Initiate & Direct API. HMAC-SHA512. `FinpayClient`.
 * **Nicepay** — Order Regist & One-Step API. SHA-256 merchantToken. `NicepayClient`.
 * **OY! Bisnis** — Payment Checkout v2 & Direct VA/QRIS. Header Auth. `OyClient` (Inquiry, Saldo, Disbursement).
+* **SumoPod** `[Tested]` — Payment Link API v1 & QRIS. Verifikasi Svix HMAC-SHA256 / X-Webhook-Token. `SumopodClient`. *Lihat [panduan lengkap SumoPod](docs/sumopod.md)*.
 
 #### 🌍 Internasional (9)
 
@@ -251,7 +254,7 @@ BUAYAR_WEBHOOK_SECRET=whsec_...
 
 #### Universal (Direkomendasikan)
 ```env
-# (opsional) Provider aktif (19 pilihan). Bila kosong, AUTO-DIDETEKSI
+# (opsional) Provider aktif (20 pilihan). Bila kosong, AUTO-DIDETEKSI
 # dari kredensial yang terisi. Set var ini sama untuk semua provider.
 BUAYAR_PROVIDER=midtrans
 
@@ -292,6 +295,7 @@ Anda **tidak perlu** membuat nama variabel khusus per provider. Cukup gunakan se
 | **PayU** | `payu` | MD5 Key | POS ID | POS ID |
 | **Braintree** | `braintree` | Private Key | Merchant ID | Public Key |
 | **2Checkout** | `twocheckout` | Secret Key | Merchant Code | Secret Word (`BUAYAR_WEBHOOK_SECRET`) |
+| **[SumoPod](docs/sumopod.md)** | `sumopod` | API Key (`X-Api-Key`) | *(tidak perlu)* | Webhook Secret (`BUAYAR_WEBHOOK_SECRET`) / Token (`BUAYAR_WEBHOOK_TOKEN`) |
 
 ### 📖 Panduan Penggunaan
 

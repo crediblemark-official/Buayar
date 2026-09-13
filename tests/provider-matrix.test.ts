@@ -2,11 +2,11 @@ import { describe, expect, it } from "bun:test";
 import { paymentManager } from "../src/core/manager";
 import { Buayar } from "../src";
 
-// Daftar 19 provider yang didukung.
+// Daftar 20 provider yang didukung.
 const PROVIDERS = [
   "midtrans", "duitku", "ipaymu", "xendit", "doku", "prismalink", "faspay",
   "finpay", "nicepay", "oy", "stripe", "paypal", "adyen", "checkoutcom",
-  "razorpay", "square", "payu", "braintree", "twocheckout",
+  "razorpay", "square", "payu", "braintree", "twocheckout", "sumopod",
 ] as const;
 
 // Matriks dukungan fitur unggulan (sesuai switch di PaymentManager).
@@ -35,6 +35,7 @@ const CAPABILITIES: Record<
   payu:          { refund: true,  checkBalance: false, disburse: false },
   braintree:     { refund: true,  checkBalance: false, disburse: false },
   twocheckout:   { refund: true,  checkBalance: false, disburse: false },
+  sumopod:       { refund: false, checkBalance: false, disburse: false },
 };
 
 const baseConfig: Record<string, any> = {
@@ -57,15 +58,16 @@ const baseConfig: Record<string, any> = {
   payu:        { apiKey: "x", merchantCode: "POS" },
   braintree:   { apiKey: "x", merchantCode: "M", extra: { publicKey: "p", privateKey: "pk" } },
   twocheckout: { apiKey: "x", merchantCode: "M", extra: { secretWord: "w" } },
+  sumopod:     { apiKey: "sumo_k" },
 };
 
 describe("Provider Matrix — semua PG terdaftar", () => {
-  it("harus mendaftarkan seluruh 19 provider", () => {
+  it("harus mendaftarkan seluruh 20 provider", () => {
     for (const name of PROVIDERS) {
       const provider = paymentManager.getProvider(name);
       expect(provider.name.toLowerCase()).toBe(name);
     }
-    expect(PROVIDERS.length).toBe(19);
+    expect(PROVIDERS.length).toBe(20);
   });
 
   it("harus menyediakan getter client di facade untuk semua provider", () => {
@@ -75,14 +77,15 @@ describe("Provider Matrix — semua PG terdaftar", () => {
       "getDokuClient", "getPrismalinkClient", "getFaspayClient", "getFinpayClient",
       "getNicepayClient", "getOyClient", "getStripeClient", "getPaypalClient",
       "getAdyenClient", "getCheckoutComClient", "getRazorpayClient", "getSquareClient",
-      "getPayuClient", "getBraintreeClient", "getTwoCheckoutClient",
+      "getPayuClient", "getBraintreeClient", "getTwoCheckoutClient", "getSumopodClient",
     ] as const;
-    expect(getters.length).toBe(19);
+    expect(getters.length).toBe(20);
     for (const g of getters) {
       expect(typeof (buayar as any)[g]).toBe("function");
     }
   });
 });
+
 
 describe("Provider Matrix — matriks fitur unggulan", () => {
   function buildBuayar(name: string): Buayar {

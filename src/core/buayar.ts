@@ -38,6 +38,7 @@ import { SquareClient } from "../clients/square";
 import { PayuClient } from "../clients/payu";
 import { BraintreeClient } from "../clients/braintree";
 import { TwoCheckoutClient } from "../clients/twocheckout";
+import { SumopodClient } from "../clients/sumopod";
 import { BasePaymentProvider } from "../providers/base";
 import { resolveConfigFromEnv } from "./config";
 
@@ -49,9 +50,9 @@ export { resolveConfigFromEnv };
  * Antarmuka tingkat tinggi untuk membuat transaksi, query channel pembayaran,
  * pengecekan status, dan verifikasi webhook universal tanpa perlu rombak kode.
  * 
- * Mendukung 19 Payment Gateway: Midtrans, Duitku, iPaymu, Xendit, DOKU, PrismaLink,
+ * Mendukung 20 Payment Gateway: Midtrans, Duitku, iPaymu, Xendit, DOKU, PrismaLink,
  * Faspay, Finpay, Nicepay, OY! Bisnis, Stripe, PayPal, Adyen, Checkout.com,
- * Razorpay, Square, PayU, Braintree, 2Checkout/Verifone.
+ * Razorpay, Square, PayU, Braintree, 2Checkout/Verifone, SumoPod.
  */
 export class Buayar {
   private manager: PaymentManager;
@@ -301,6 +302,15 @@ export class Buayar {
       if (oyUser) {
         mergedConfig.extra.oyUsername = Array.isArray(oyUser) ? oyUser[0] : oyUser;
       }
+      // SumoPod
+      const svixId = headers["svix-id"] || headers["Svix-Id"];
+      const svixTimestamp = headers["svix-timestamp"] || headers["Svix-Timestamp"];
+      const svixSignature = headers["svix-signature"] || headers["Svix-Signature"];
+      const sumopodToken = headers["x-webhook-token"] || headers["X-Webhook-Token"];
+      if (svixId) mergedConfig.extra.svixId = Array.isArray(svixId) ? svixId[0] : svixId;
+      if (svixTimestamp) mergedConfig.extra.svixTimestamp = Array.isArray(svixTimestamp) ? svixTimestamp[0] : svixTimestamp;
+      if (svixSignature) mergedConfig.extra.svixSignature = Array.isArray(svixSignature) ? svixSignature[0] : svixSignature;
+      if (sumopodToken) mergedConfig.extra.webhookTokenHeader = Array.isArray(sumopodToken) ? sumopodToken[0] : sumopodToken;
     }
 
     let providerName = (configOverride as any)?.provider !== undefined
@@ -466,6 +476,10 @@ export class Buayar {
 
   getTwoCheckoutClient(configOverride?: Partial<ProviderConfig>): TwoCheckoutClient {
     return new TwoCheckoutClient({ ...this.config, ...configOverride });
+  }
+
+  getSumopodClient(configOverride?: Partial<ProviderConfig>): SumopodClient {
+    return new SumopodClient({ ...this.config, ...configOverride });
   }
 }
 

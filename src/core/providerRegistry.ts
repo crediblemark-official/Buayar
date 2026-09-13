@@ -2,7 +2,7 @@ import {
   CANONICAL_TO_DUITKU, CANONICAL_TO_MIDTRANS, CANONICAL_TO_IPAYMU,
   CANONICAL_TO_XENDIT, CANONICAL_TO_DOKU, CANONICAL_TO_PRISMALINK,
   CANONICAL_TO_FASPAY, CANONICAL_TO_FINPAY, CANONICAL_TO_NICEPAY,
-  CANONICAL_TO_OY, CANONICAL_TO_STRIPE,
+  CANONICAL_TO_OY, CANONICAL_TO_STRIPE, CANONICAL_TO_SUMOPOD,
 } from "./canonical";
 
 export interface ProviderCapability {
@@ -98,6 +98,8 @@ export class ProviderRegistry {
       if (h["x-oy-username"]) return "oy";
       if (h["signature"] && (h["client-id"] || h["request-id"])) return "doku";
       if (h["x-signature"] && (payload?.trx_id || payload?.via || payload?.sid)) return "ipaymu";
+      if (h["svix-signature"] || h["svix-id"]) return "sumopod";
+      if (h["x-webhook-token"]) return "sumopod";
     }
 
     if (!payload) return undefined;
@@ -115,6 +117,7 @@ export class ProviderRegistry {
     if (p.merchant_id && p.order_id && p.signature) return "prismalink";
     if (p.object === "event" || (p.type && p.data?.object && p.api_version)) return "stripe";
     if (p.event && p.payload?.payment?.entity) return "razorpay";
+    if (p.event_type && p.data?.payment_id) return "sumopod";
     if (
       (p.external_id && (p.status || p.paid_amount || p.payment_method || p.payment_channel || p.id)) ||
       p.event?.startsWith("payment.") ||
@@ -156,6 +159,7 @@ const ENV_KEYS: Record<string, string[]> = {
   payu:         ["PAYU_POS_ID", "PAYU_MD5_KEY"],
   braintree:    ["BRAINTREE_MERCHANT_ID", "BRAINTREE_PUBLIC_KEY", "BRAINTREE_PRIVATE_KEY"],
   twocheckout:  ["TWOCHECKOUT_MERCHANT_CODE", "TWOCHECKOUT_SECRET_KEY", "TWOCHECKOUT_SECRET_WORD"],
+  sumopod:      ["SUMOPOD_API_KEY", "SUMOPOD_WEBHOOK_SECRET"],
 };
 
 // Metode kanonik per provider (layout dari core/canonical + static internasional).
@@ -171,6 +175,7 @@ const WORKING_METHODS: Record<string, string[]> = {
   nicepay: Object.keys(CANONICAL_TO_NICEPAY),
   oy: Object.keys(CANONICAL_TO_OY),
   stripe: Object.keys(CANONICAL_TO_STRIPE),
+  sumopod: Object.keys(CANONICAL_TO_SUMOPOD),
   paypal: ["credit_card", "paylater", "paypal", "bank_transfer"],
   adyen: ["credit_card", "paypal", "qris", "apple_pay", "google_pay", "klarna", "sepa"],
   checkoutcom: ["credit_card", "paypal", "apple_pay", "google_pay", "klarna", "sofort", "bank_transfer"],
@@ -202,6 +207,7 @@ const OPERATIONS: Record<string, { refund: boolean; checkBalance: boolean; disbu
   payu: { refund: true, checkBalance: false, disburse: false },
   braintree: { refund: true, checkBalance: false, disburse: false },
   twocheckout: { refund: true, checkBalance: false, disburse: false },
+  sumopod: { refund: false, checkBalance: false, disburse: false },
 };
 
 export function buildDefaultDescriptors(): ProviderDescriptor[] {
