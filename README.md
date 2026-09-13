@@ -221,6 +221,7 @@ BUAYAR_WEBHOOK_SECRET=whsec_...
 - 🪝 **Universal Webhook Verifier** — Satu endpoint untuk verifikasi dan normalisasi callback dari provider manapun. Provider terdeteksi otomatis dari struktur payload.
 - 🛡️ **TypeScript Strong-Typed** — Interface request & response terdeklarasi penuh untuk mencegah runtime error.
 - 🌍 **Multi-Currency** — Field `currency` untuk provider internasional (USD, EUR, GBP, dll).
+- 🛠️ **CLI Tools** — Scaffold boilerplate (`buayar init`) & auto-generate `payment-channels.json` (`buayar channels`).
 
 ### 📦 Provider yang Didukung
 

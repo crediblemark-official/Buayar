@@ -92,4 +92,42 @@ describe("CLI end-to-end (non-interactive)", () => {
     expect(code).toBe(0);
     expect(fs.existsSync(path.join(out, ".env.example"))).toBe(true);
   });
+
+  it("prints channels help via channels --help", async () => {
+    const { code, stdout } = await runCli(["channels", "--help"], tmpDir);
+    expect(code).toBe(0);
+    expect(stdout).toContain("buayar channels [options]");
+    expect(stdout).toContain("--format");
+  });
+
+  it("auto-generates payment-channels.json via channels command", async () => {
+    const outPath = path.join(tmpDir, "payment-channels.json");
+    const { code } = await runCli(
+      ["channels", "--yes", "--provider", "sumopod", "--out", outPath],
+      tmpDir
+    );
+    expect(code).toBe(0);
+    expect(fs.existsSync(outPath)).toBe(true);
+    const content = JSON.parse(fs.readFileSync(outPath, "utf8"));
+    expect(Array.isArray(content)).toBe(true);
+    expect(content.length).toBeGreaterThan(0);
+    expect(content[0].id).toBe("QRIS");
+    expect(content[0].category).toBe("QRIS");
+    expect(content[0].totalFee).toBe("0.7% + Rp 300");
+  });
+
+  it("supports --wrap in channels command", async () => {
+    const outPath = path.join(tmpDir, "channels-wrapped.json");
+    const { code } = await runCli(
+      ["channels", "--yes", "--provider", "sumopod", "--out", outPath, "--wrap"],
+      tmpDir
+    );
+    expect(code).toBe(0);
+    expect(fs.existsSync(outPath)).toBe(true);
+    const content = JSON.parse(fs.readFileSync(outPath, "utf8"));
+    expect(content.provider).toBe("sumopod");
+    expect(content.totalChannels).toBe(1);
+    expect(Array.isArray(content.channels)).toBe(true);
+  });
 });
+

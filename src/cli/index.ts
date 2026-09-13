@@ -5,6 +5,7 @@ import * as p from "@clack/prompts";
 import { FRAMEWORKS, PROVIDERS, Framework } from "./templates";
 import { selectPrompt, confirmPrompt } from "./prompts";
 import { scaffold, printScaffoldSummary } from "./scaffold";
+import { runChannels, printChannelsHelp } from "./channels";
 
 const VERSION = "0.8.7";
 
@@ -71,11 +72,20 @@ Usage:
   buayar init --provider <id>    Paksa provider (default: midtrans)
   buayar init --framework <fw>   express | hono | nextjs (default: express)
   buayar init --force            Timpa file yang sudah ada
+
+  buayar channels                Auto-generate payment-channels.json dari provider aktif
+  buayar channels --out <file>   Lokasi file output (default: ./payment-channels.json)
+  buayar channels --provider <p> Override provider (default: dari .env)
+  buayar channels --amount <rp>  Nominal transaksi untuk kalkulasi fee (default: 10000)
+  buayar channels --format <fmt> canonical | raw | categories (default: canonical)
+  buayar channels --wrap         Bungkus metadata di luar array channel
+
   buayar --version | -v          Tampilkan versi
   buayar --help | -h             Tampilkan bantuan
 
 Contoh:
   buayar init --yes --framework hono --provider xendit
+  buayar channels --provider sumopod --out ./payment-channels.json
 `);
 }
 
@@ -109,15 +119,11 @@ async function runInit(argv: string[]): Promise<number> {
 
   let framework: Framework = (getFlag(flags, "framework") as Framework) || undefined;
   if (!framework && !yes) {
-    framework = (await selectPrompt(
-      "Pilih framework route",
-      [
-        { value: "express", hint: "Node.js REST API" },
-        { value: "hono", hint: "Ringan, edge-ready" },
-        { value: "nextjs", hint: "App Router" },
-      ],
-      "express"
-    )) as Framework;
+    framework = (await selectPrompt("Pilih framework HTTP", [
+      { value: "express", hint: "paling populer di Node.js" },
+      { value: "hono", hint: "cepat, edge-ready & modern" },
+      { value: "nextjs", hint: "Next.js App Router route handler" },
+    ])) as Framework;
   }
   framework = framework || "express";
   if (!FRAMEWORKS.includes(framework)) {
@@ -125,25 +131,17 @@ async function runInit(argv: string[]): Promise<number> {
     return 1;
   }
 
-  if (!yes && !fs.existsSync(path.join(resolvedDir, "package.json"))) {
-    const cont = await confirmPrompt(
-      `"${resolvedDir}" bukan proyek Node yang terlihat. Lanjutkan?`,
-      true
-    );
-    if (!cont) {
-      p.outro("Dibatalkan.");
-      return 0;
-    }
-  }
-
-  if (!yes) {
-    const ok = await confirmPrompt(
-      `Scaffold ${framework} (provider ${provider}) ke "${resolvedDir}"?`,
-      true
-    );
-    if (!ok) {
-      p.outro("Dibatalkan.");
-      return 0;
+  if (!yes && !force && fs.existsSync(resolvedDir)) {
+    const entries = fs.readdirSync(resolvedDir);
+    if (entries.length > 0) {
+      const ok = await confirmPrompt(
+        `Direktori "${targetDir}" tidak kosong. Lanjutkan menimpa file?`,
+        false
+      );
+      if (!ok) {
+        p.cancel("Inisialisasi dibatalkan.");
+        return 0;
+      }
     }
   }
 
@@ -162,6 +160,14 @@ Selesai! Langkah berikutnya:
 async function main(): Promise<number> {
   const argv = process.argv.slice(2);
   const { command, flags } = parseArgs(argv);
+
+  if (command === "channels" || command === "generate-channels" || command === "payment-channels") {
+    if (hasFlag(flags, "help") || hasFlag(flags, "h")) {
+      printChannelsHelp();
+      return 0;
+    }
+    return runChannels(argv);
+  }
 
   if (argv.length === 0 || command === "init") {
     if (hasFlag(flags, "version") || hasFlag(flags, "v")) {

@@ -195,6 +195,34 @@ if (probe.success) {
 }
 ```
 
+### ⚡ Auto-Generate File `payment-channels.json` (CLI & SDK)
+
+Buayar menyediakan generator otomatis untuk membuat file `payment-channels.json` siap render di UI frontend:
+
+#### 1. Lewat CLI Terminal:
+```bash
+# Otomatis baca .env dan buat payment-channels.json
+npx @crediblemark/buayar channels
+
+# Atau jika terpasang secara global / script npm:
+buayar channels --out ./public/payment-channels.json --amount 50000
+
+# Override provider tertentu:
+buayar channels --provider sumopod --format canonical
+```
+
+#### 2. Lewat Kode TypeScript / Node.js:
+```typescript
+import { buayar } from "@crediblemark/buayar";
+import fs from "node:fs";
+
+// Ambil deskriptor kanonikal siap-render
+const { descriptors } = await buayar.getPaymentMethodDescriptors({ amount: 50000 });
+
+// Simpan sebagai JSON
+fs.writeFileSync("payment-channels.json", JSON.stringify(descriptors, null, 2));
+```
+
 ---
 
 ## 🔍 Cek Status Transaksi
