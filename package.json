@@ -76,11 +76,13 @@
     "dev": "tsup src/index.ts src/cli/index.ts --format cjs,esm --dts --out-dir dist --watch",
     "init": "node ./dist/cli/index.js init",
     "postinstall": "echo \"🐊 Buayar terpasang! Jalankan \\\"npx buayar init\\\" untuk membuat boilerplate payment yang siap pakai.\"",
-    "test": "bun test"
+    "test": "bun test",
+    "prepare": "husky"
   },
   "devDependencies": {
     "@types/bun": "^1.4.0",
     "@types/node": "^24.12.2",
+    "husky": "^9.1.7",
     "tsup": "^8.5.1",
     "typescript": "^5.9.3"
   },
