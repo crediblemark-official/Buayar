@@ -27,10 +27,23 @@ const SECRET_KEY = (process.env.DOKU_SECRET_KEY || process.env.DOKU_API_KEY || "
 const LOG_FILE = process.env.NOTIF_LOG_FILE || "doku-notifications.log";
 const SELFTEST = process.argv.includes("--selftest");
 
+// TIDAK ada fallback kredensial di sini. Nilai sandbox asli pernah tertanam
+// sebagai literal default dan ikut ter-commit ke repo publik. Sekarang seluruh
+// kredensial wajib datang dari environment — kalau kosong, berhenti dengan pesan
+// yang jelas, jangan diam-diam memakai nilai fake yang hanya menambah kebingungan.
+if (!CLIENT_ID || !SECRET_KEY) {
+  console.error(
+    "\n[!] Kredensial DOKU belum diisi.\n" +
+      "    Isi dari env lalu jalankan ulang:\n" +
+      "      DOKU_CLIENT_ID=... DOKU_SECRET_KEY=... bun run scripts/probe/doku/notification-receiver.ts\n",
+  );
+  process.exit(1);
+}
+
 const buayar = new Buayar({
   provider: "doku",
-  merchantCode: CLIENT_ID || "BRN-0268-1789326133127",
-  apiKey: SECRET_KEY || "SK-secret",
+  merchantCode: CLIENT_ID,
+  apiKey: SECRET_KEY,
   sandbox: true,
   extra: { snap: true, notificationPath: "/payments/notifications" },
 });
@@ -113,7 +126,7 @@ async function selftest() {
     paidAmount: { value: "10000.00", currency: "IDR" },
   });
   const sigValid = generateSnapSymmetricSignature(
-    SECRET_KEY || "SK-secret",
+    SECRET_KEY,
     "POST",
     "/payments/notifications",
     "",

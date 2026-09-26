@@ -1,4 +1,10 @@
 import { describe, expect, it } from "bun:test";
+
+/**
+ * Client ID SNAP dummy untuk test — BUKAN kredensial asli (lihat catatan di
+ * tests/pg-fidelity.test.ts). Pernah berupa literal sandbox asli di repo publik.
+ */
+const DOKU_TEST_SNAP_CLIENT_ID = "doku_key_00000000000000000000000000000000";
 import {
   Buayar,
   generateSnapSymmetricSignature,
@@ -58,7 +64,7 @@ describe("DOKU SNAP Integration", () => {
       }
       if (u.includes("/virtual-accounts/bi-snap-va/v1.1/transfer-va/create-va")) {
         expect(options.headers["Authorization"]).toBe("Bearer SNAP-ACCESS-TOKEN");
-        expect(options.headers["X-PARTNER-ID"]).toBe("doku_key_9ee7004654a54375ad5a4e6c75a1d386");
+        expect(options.headers["X-PARTNER-ID"]).toBe(DOKU_TEST_SNAP_CLIENT_ID);
         expect(options.headers["X-SIGNATURE"]).toBeTruthy();
         expect(options.headers["X-TIMESTAMP"]).toBeTruthy();
         const body = JSON.parse(options.body);
@@ -88,7 +94,7 @@ describe("DOKU SNAP Integration", () => {
     try {
       const buayar = new Buayar({
         provider: "doku",
-        merchantCode: "doku_key_9ee7004654a54375ad5a4e6c75a1d386",
+        merchantCode: DOKU_TEST_SNAP_CLIENT_ID,
         apiKey: "SK-SC5QTRqzYE7TWL3zHS7A",
         secretKey: "SK-SC5QTRqzYE7TWL3zHS7A",
         privateKey: TEST_RSA_PRIVATE_KEY,
@@ -131,7 +137,7 @@ describe("DOKU SNAP Integration", () => {
 
     const buayar = new Buayar({
       provider: "doku",
-      merchantCode: "doku_key_9ee7004654a54375ad5a4e6c75a1d386",
+      merchantCode: DOKU_TEST_SNAP_CLIENT_ID,
       apiKey: secretKey,
       sandbox: true,
       extra: { snap: true, notificationPath: endpointUrl },
@@ -154,7 +160,7 @@ describe("DOKU SNAP Integration", () => {
     const secretKey = "SK-SC5QTRqzYE7TWL3zHS7A";
     const buayar = new Buayar({
       provider: "doku",
-      merchantCode: "doku_key_9ee7004654a54375ad5a4e6c75a1d386",
+      merchantCode: DOKU_TEST_SNAP_CLIENT_ID,
       apiKey: secretKey,
       sandbox: true,
       extra: { snap: true },
@@ -203,7 +209,7 @@ describe("DOKU SNAP Integration", () => {
   it("should REJECT DOKU SNAP webhook without signature (S1b security fix)", async () => {
     const buayar = new Buayar({
       provider: "doku",
-      merchantCode: "doku_key_9ee7004654a54375ad5a4e6c75a1d386",
+      merchantCode: DOKU_TEST_SNAP_CLIENT_ID,
       apiKey: "SK-SC5QTRqzYE7TWL3zHS7A",
       sandbox: true,
       extra: { snap: true },

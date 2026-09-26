@@ -1,4 +1,13 @@
 import { describe, expect, it } from "bun:test";
+
+/**
+ * Client ID dummy untuk test — BUKAN kredensial asli.
+ *
+ * Nilai ini sebelumnya tertanam langsung sebagai literal dan ikut ter-commit ke
+ * repo publik. Sekarang diganti placeholder yang jelas jelas bukan kredensial,
+ * sehingga tidak mungkin tertukar dengan nilai sandbox sungguhan.
+ */
+const DOKU_TEST_MERCHANT_CODE = "BRN-0000-0000000000000";
 import crypto from "crypto";
 import { Buayar } from "../src";
 import { MIDTRANS_PROBE_PAYLOADS, hintMidtransProbeError } from "../src/providers/midtrans/methods";
@@ -704,7 +713,7 @@ describe("DOKU — verifikasi live per-channel (2026-09-26)", () => {
     try {
       const b = new Buayar({
         provider: "doku",
-        merchantCode: "BRN-0268-1789326133127",
+        merchantCode: DOKU_TEST_MERCHANT_CODE,
         apiKey: "SK-secret-key",
         sandbox: true,
         extra: { mcpApiKey: "doku_key_sandbox_test" },
@@ -739,7 +748,7 @@ describe("DOKU — verifikasi live per-channel (2026-09-26)", () => {
   it("jatuh ke katalog statis (source 'static') bila MCP tidak dikonfigurasi", async () => {
     const b = new Buayar({
       provider: "doku",
-      merchantCode: "BRN-0268-1789326133127",
+      merchantCode: DOKU_TEST_MERCHANT_CODE,
       apiKey: "SK-secret-key",
       sandbox: true,
       // Paksa tanpa kredensial MCP (mengalahkan env DOKU_API_KEY bila ada).
@@ -764,7 +773,7 @@ describe("DOKU — verifikasi live per-channel (2026-09-26)", () => {
     try {
       const b = new Buayar({
         provider: "doku",
-        merchantCode: "BRN-0268-1789326133127",
+        merchantCode: DOKU_TEST_MERCHANT_CODE,
         apiKey: "SK-secret-key",
         sandbox: true,
         extra: { mcpApiKey: "doku_key_sandbox_test" },
@@ -859,7 +868,7 @@ describe("DOKU — verifikasi live per-channel (2026-09-26)", () => {
     try {
       const res = await new Buayar({
         provider: "doku",
-        merchantCode: "BRN-0268-1789326133127",
+        merchantCode: DOKU_TEST_MERCHANT_CODE,
         apiKey: "SK-secret-key",
         sandbox: true,
         extra: { mcpApiKey: "doku_key_sandbox_test" },
@@ -919,7 +928,7 @@ describe("DOKU — verifikasi live per-channel (2026-09-26)", () => {
     try {
       const b = new Buayar({
         provider: "doku",
-        merchantCode: "BRN-0268-1789326133127",
+        merchantCode: DOKU_TEST_MERCHANT_CODE,
         apiKey: "SK-secret-key",
         sandbox: true,
         extra: { mcpApiKey: "doku_key_sandbox_test" },
@@ -955,7 +964,7 @@ describe("DOKU — verifikasi live per-channel (2026-09-26)", () => {
   it("menerima notifikasi SNAP VA dengan signature HMAC valid & status PAID (D-17)", async () => {
     const b = new Buayar({
       provider: "doku",
-      merchantCode: "BRN-0268-1789326133127",
+      merchantCode: DOKU_TEST_MERCHANT_CODE,
       apiKey: "SK-secret-key-789",
       sandbox: true,
       extra: { snap: true, notificationPath: "/payments/notifications" },
@@ -997,7 +1006,7 @@ describe("DOKU — verifikasi live per-channel (2026-09-26)", () => {
   it("menolak notifikasi SNAP VA dengan signature palsu (D-17)", async () => {
     const b = new Buayar({
       provider: "doku",
-      merchantCode: "BRN-0268-1789326133127",
+      merchantCode: DOKU_TEST_MERCHANT_CODE,
       apiKey: "SK-secret-key-789",
       sandbox: true,
       extra: { snap: true },
