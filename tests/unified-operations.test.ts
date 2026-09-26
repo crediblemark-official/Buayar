@@ -135,6 +135,68 @@ describe("Unified Operations — Disburse", () => {
     expect(result.reference).toBe("DISB-DOKU-001");
   });
 
+  describe("DOKU payout (Kirim DOKU) — responseCode-based, fail-closed", () => {
+    const payout = (response: any) => {
+      mockFetch(() => response);
+      return new Buayar({
+        provider: "doku",
+        merchantCode: "MALL-ID-123",
+        apiKey: "SK-secret-123",
+      }).disburse({
+        externalId: "DISB-DOKU-CODE",
+        bankCode: "BCA",
+        accountNumber: "1234567890",
+        accountHolderName: "Budi",
+        amount: 250000,
+        description: "Payout gaji",
+      });
+    };
+
+    it("2004300 (Successful) → sukses", async () => {
+      const r = await payout({ responseCode: "2004300", responseMessage: "Successful", referenceNo: "REF-1" });
+      expect(r.success).toBe(true);
+      expect(r.status).toBe("SUCCESS");
+      expect(r.reference).toBe("REF-1");
+    });
+
+    it("2024300 (masih diproses) → tetap sukses agar tidak di-retry, tapi status PENDING", async () => {
+      const r = await payout({ responseCode: "2024300", responseMessage: "Transaction still on process" });
+      expect(r.success).toBe(true);
+      expect(r.status).toBe("PENDING");
+    });
+
+    it("4034314 (Insufficient Funds) → GAGAL, bukan sukses", async () => {
+      const r = await payout({ responseCode: "4034314", responseMessage: "Insufficient Funds" });
+      expect(r.success).toBe(false);
+      expect(r.status).toBe("FAILED");
+      expect(r.error).toContain("Insufficient Funds");
+    });
+
+    it("4044311 (rekening penerima tidak valid) → GAGAL", async () => {
+      const r = await payout({ responseCode: "4044311", responseMessage: "Invalid Card/Account/Customer" });
+      expect(r.success).toBe(false);
+    });
+
+    it("4004302 (field wajib kurang) → GAGAL", async () => {
+      const r = await payout({ responseCode: "4004302", responseMessage: "Invalid Mandatory Field" });
+      expect(r.success).toBe(false);
+    });
+
+    // REGRESI: respons apa pun tanpa field `error` pernah boleh dianggap sukses.
+    // DOKU tidak pernah mengirim field `error` di respons payout sama sekali,
+    // jadi logika lama `|| !data?.error` selalu bernilai true.
+    it("respons kosong tanpa responseCode → GAGAL (bukan sukses diam-diam)", async () => {
+      const r = await payout({});
+      expect(r.success).toBe(false);
+      expect(r.error).toBeTruthy();
+    });
+
+    it("2002500 (kode create VA, bukan payout) tidak boleh dihitung sukses", async () => {
+      const r = await payout({ responseCode: "2002500" });
+      expect(r.success).toBe(false);
+    });
+  });
+
   it("should return supported:false for provider without disburse (stripe)", async () => {
     const buayar = new Buayar({ provider: "stripe", apiKey: "sk_test_123" });
     const result = await buayar.disburse({

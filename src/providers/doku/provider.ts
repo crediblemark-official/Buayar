@@ -1461,13 +1461,37 @@ export class DokuProvider extends BasePaymentProvider {
     try {
       const client = new DokuClient(config);
       const data = await client.disburse(params);
-      const isSuccess = data?.status === "SUCCESS" || data?.responseCode === "2002500" || data?.status === "PENDING" || !data?.error;
+
+      // Kirim DOKU (Transfer Bank) tidak punya field `status` maupun `error` di
+      // respons — hanya `responseCode` + `responseMessage`. Karena itu respons sukses
+      // harus dibaca dari responseCode, bukan dari ketiadaan field error.
+      //
+      // Whitelist resmi (developers.doku.com → Response Code → Kirim DOKU →
+      // Transfer Bank):
+      //   2004300 = Successful, "Treat transactions with this status as success."
+      //   2024300 = Transaction still on process
+      // Selain itu DOKU menolak: 400/401/403/404/409/429/5xx — termasuk
+      // 4034314 (Insufficient Funds) dan 4044311 (rekening penerima tidak valid).
+      const responseCode = String(data?.responseCode ?? data?.response_code ?? "");
+      const rawStatus = String(data?.status || "").toUpperCase();
+
+      // `success` di sini berarti "permintaan diterima DOKU" — BUKAN "uang sudah
+      // sampai". 2024300 tetap dianggap success supaya pemanggil tidak mengulang
+      // payout yang sedang berjalan (risiko pengiriman ganda); yang menandai
+      // masih proses adalah `status`.
+      const isAccepted =
+        responseCode === "2004300" || responseCode === "2024300" || rawStatus === "SUCCESS";
+      const isPending = responseCode === "2024300" || rawStatus === "PENDING";
+
       return {
-        success: isSuccess,
+        success: isAccepted,
         supported: true,
         provider: "doku",
-        reference: data?.partner_reference_no || data?.partnerReferenceNo || params.externalId,
-        status: data?.status || data?.transactionStatus || "PENDING",
+        reference: data?.referenceNo || data?.reference_no || data?.partnerReferenceNo || data?.partner_reference_no || params.externalId,
+        status: isPending ? "PENDING" : rawStatus || (responseCode === "2004300" ? "SUCCESS" : "FAILED"),
+        error: isAccepted
+          ? undefined
+          : data?.responseMessage || data?.response_message || `DOKU menolak payout (responseCode ${responseCode || "tidak ada"}).`,
         rawResponse: data,
       };
     } catch (e: any) {
