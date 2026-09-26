@@ -2,7 +2,11 @@
 
 > Status dokumen: **usulan kerja** (bukan spesifikasi final).
 > Repo saat audit: `0.8.10` · 20 provider · 2 berstatus `Tested` (iPaymu, SumoPod).
-> Audit ini read-only; tidak ada kode yang diubah selain dokumen ini.
+>
+> ⚠️ Catatan: audit awal bersifat read-only, tapi **temuan K3 sudah turun menjadi
+> perbaikan kode** — lihat [§3c. Pass Perbaikan Keamanan](#3c-pass-perbaikan-keamanan).
+> Klaim "✅ Terpenuhi" di bawah merujuk pada kondisi **setelah** pass tersebut, dan
+> angka test sudah diperbarui ke **434/434**.
 
 ---
 
@@ -45,7 +49,7 @@ adalah pengukuran objektif apakah optionality itu benar-benar ada di dalam kode.
 | K6 | Autodetect tanpa fallback senyap | ✅ Terpenuhi | **P0** | M |
 | K7 | Scaffold CLI menghasilkan kode yang bisa diverifikasi | ✅ Terpenuhi | **P0** | **S** |
 
-**Ringkasan: 7 dari 7 kriteria terpenuhi (339/339 tests passing).**
+**Ringkasan: 7 dari 7 kriteria terpenuhi (434/434 tests passing).**
 
 Tiga P0: **K7, K3, K6.** K4 adalah gap terbesar dan sekaligus pembeda produk yang paling
 sulit ditiru pesaing.
@@ -398,20 +402,137 @@ diverifikasi lokal (fail-open, raw-body, normalisasi), klaim "fixed" bisa diuji 
 
 ---
 
+## 3c. Pass Perbaikan Keamanan
+
+Audit K3 di atas menemukan pola yang lebih luas daripada yang tertulis di dokumen: **webhook
+yang gagal diverifikasi tetap dilaporkan `isPaid: true`**. Karena itu dokumen ini lalu
+diperbaiki — bukan hanya dokumen, tapi kodenya. Lima bug, semuanya ditemukan lewat probe
+dengan **kredensial sandbox asli** (Midtrans, DOKU, iPaymu, Xendit) dan diverifikasi ulang
+setelah tiap perbaikan.
+
+### S-1 · 🔴 `rawBody` / `body` desync — 8 provider
+
+Signature dihitung atas `rawBody`, tapi data bisnis (`orderId`, `amount`, `status`) dibaca
+dari `body` yang terpisah. Penyerang bisa mengirim `rawBody` asli yang sah — signature lolos —
+sambil menyodorkan `body` pilihan sendiri berisi nominal dan status palsu.
+
+Invarian yang kini berlaku di `braintree`, `checkoutcom`, `doku` (Jokul + SNAP), `payu`,
+`razorpay`, `square`, `stripe`, `sumopod`:
+
+> **tandatangani(byte) → parse(byte) → pakai untuk bisnis**
+
+Helper: `signedPayload()` di `src/utils/rawBody.ts`. Bukti live: webhook DOKU dengan body
+dipalsukan kini melaporkan `amount=10000` (dari `rawBody`), bukan `1` (dari body palsu).
+
+### S-2 · 🔴 DOKU menerima webhook tanpa raw body
+
+`doku/signature.ts` masih jatuh ke `JSON.stringify(body)`. Penyerang bisa menyusun payload
+yang re-serialisasinya justru cocok kembali. Sekarang fail-closed, sama seperti 7 provider
+lain, dengan pesan `RAW_BODY_REQUIRED_MESSAGE`.
+
+### S-3 · 🔴 State autentikasi bocor antar-request — 8 dari 20 provider
+
+`verifyWebhook()` melakukan merge dangkal `{ ...this.config, ...override }`. Spread hanya
+menyalin **reference** ke `extra`, sehingga semua penulisan header
+(`extra.headers`, `extra.signatureHeader`, `extra.callbackToken`, `extra.btSignature`, …)
+menulis ke state instance secara permanen.
+
+Diamondikan di 20 provider: kirim **satu** webhook sah, lalu kirim payload yang sama
+**tanpa token/signature sama sekali**.
+
+| | Kode lama | Kode baru |
+|---|---|---|
+| Provider yang menerima webhook tanpa autentikasi | **8 / 20** | **0 / 20** |
+| Daftar | xendit, stripe, checkoutcom, razorpay, square, payu, braintree, sumopod | — |
+
+Serangannya sepele: satu webhook sah sudah cukup untuk membuat instance `Buayar` itu
+menerima webhook apa pun tanpa autentikasi. Di server multi-merchant dampaknya lebih luas —
+header milik tenant A bisa dipakai memverifikasi request tenant B.
+
+Yang justru aman: OY!, Midtrans, DOKU Jokul, Duitku, Prismalink, FasPay, Finpay, Nicepay,
+Adyen, 2Checkout, iPaymu, PayPal — bukan karena merge-nya benar, tapi karena mereka membaca
+signature langsung dari header/body yang diberikan, tanpa fallback ke state yang bisa bocor.
+
+### S-4 · 🔴 Payout DOKU (Kirim DOKU) fail-open di jalur uang keluar
+
+`disburse()` menentukan sukses dengan `... || !data?.error`. Respons Transfer Bank DOKU
+**tidak punya field `status` maupun `error`** — hanya `responseCode` + `responseMessage`
+(OpenAPI resmi). Jadi `!data?.error` selalu `true`, termasuk saat DOKU menolak payout karena
+saldo kurang atau rekening tujuan tidak valid. Payout yang ditolak dilaporkan sukses.
+
+Sekalian, `2002500` yang sebelumnya di-whitelist adalah responseCode **create Virtual
+Account**, bukan payout. Diganti whitelist resmi Kirim DOKU Transfer Bank:
+
+| responseCode | Arti | `success` | `status` |
+|---|---|---|---|
+| `2004300` | Successful | `true` | `SUCCESS` |
+| `2024300` | Transaction still on process | `true` | `PENDING` |
+| `4034314` | Insufficient Funds | `false` | `FAILED` |
+| `4044311` | Invalid Card/Account/Customer | `false` | `FAILED` |
+| *(lainnya)* | — | `false` | `FAILED` |
+
+`success` di sini berarti **"permintaan diterima DOKU"**, bukan "uang sudah sampai".
+`2024300` tetap `success` dengan sengaja — kalau dikembalikan `false`, pemanggil akan
+mengulang payout yang sedang berjalan, dan itu berarti pengiriman ganda.
+
+### S-5 · 🟠 Xendit webhook token dibaca dari sumber yang salah
+
+`BUAYAR_WEBHOOK_SECRET` (nama yang dipakai README/`sandbox.md`) mengisi `extra.webhookSecret`,
+sedangkan Xendit membaca `extra.webhookToken`. Akibatnya `webhookToken` jatuh ke fallback API
+key → **100% webhook ditolak**, dengan pesan "tidak cocok" padahal penyebab sebenarnya
+"belum dikonfigurasi".
+
+Fallback `secretKey || apiKey` dihapus: secara kriptografis nilai itu memang tidak akan
+pernah cocok dengan verification token, jadi ia hanya menutupi penyebab sebenarnya.
+`webhookToken`/`webhookSecret` kini bertipe di `ProviderConfig` (sebelumnya hanya bisa lewat
+`as any`). Simulator Xendit juga diubah memakai verification token terpisah dari secret key,
+supaya bug ini tidak tertutupi.
+
+### Verifikasi
+
+- **Probe live** `scripts/probe/webhook-signature-live.ts` — 14 skenario signature atas 4
+  provider dengan kredensial sandbox asli: **14/14 lolos**, termasuk kasus body dipalsukan
+  dan token/signature salah.
+- **Regresi offline** `tests/webhook-integrity.test.ts` + `tests/webhook-security.test.ts` —
+  setiap test di dalamnya diverifikasi **gagal pada kode lama** dan hijau pada kode baru,
+  supaya tidak ada yang mengunci perilaku tidak aman tanpa terdeteksi.
+- Suite penuh **434/434**, `tsc --noEmit` bersih.
+
+### Yang BELUM dikerjakan
+
+| Item | Status |
+|---|---|
+| Rotasi kredensial DOKU + purge Git history | 🔴 **blokir di sisi Anda** — lihat §4a |
+| K2 `paymentMethod?: … \| string` → hapus `\| string` | ⏸️ breaking change, menunggu konfirmasi |
+| Timeout/abort di semua `fetch` (2 timeout iPaymu 20s saat probe) | ⏳ belum |
+| A-1 heuristik nominal Faspay, A-3 nonce contoh, A-4 PayU lewati canonical | ⏳ belum |
+
+---
+
 ## 4. Blocking di Luar 7 Kriteria Ini
 
 Dua hal ini harus masuk backlog/security response, terpisah dari acceptance criteria:
 
 **a) Kredensial DOKU suspected hardcoded + sudah di Git history**
 
-`scripts/test-doku-live.ts` dan `scripts/test-doku-secretkey.ts` suspected memuat kredensial
-DOKU sandbox/secret yang sudah tercatat dalam Git history. Nilai sengaja tidak ditampilkan
-di dokumen ini.
+Repo ini **publik** di `github.com/crediblemark-official/Buayar` (~61 commit), jadi ini
+bukan hypothetical. Nilai kredensial sengaja tidak ditampilkan di dokumen ini.
 
-- [ ] Rotasi kredensial tersebut di dashboard DOKU
-- [ ] Rewrite/purge Git history (filter-repo / BFG)
-- [ ] `.gitignore` untuk `scripts/*.local.ts`, dan pindahkan kredensial ke env
-- [ ] Ganti test live DOKU dengan yang membaca dari env + jelas ditandai manual/opt-in
+Ditemukan saat pass verifikasi kredensial sandbox (2026-09-26):
+
+| Kredensial | Lokasi saat itu | Status |
+|---|---|---|
+| DOKU Secret Key | `scripts/test-doku-secretkey.ts` — commit `b1c6917` | sudah keluar dari HEAD, **masih di history** |
+| DOKU API Key | `scripts/test-doku-live.ts` — 4 commit | sudah keluar dari HEAD, **masih di history** |
+| DOKU Client ID | 13 call site di `tests/` + `scripts/probe/doku/` | ✅ sudah dibersihkan dari HEAD |
+| Midtrans / iPaymu / Xendit | — | ✅ bersih dari history |
+
+- [x] Client ID DOKU dibersihkan dari HEAD (literal diganti konstanta dummy yang jelas,
+      probe tidak lagi punya fallback — berhenti dengan pesan bila env kosong)
+- [ ] **Rotasi kredensial DOKU di dashboard** — ini yang sebenarnya menutup risiko;
+     Membersihkan source code tidak gripped apa pun
+- [ ] **Rewrite/purge Git history** (`git filter-repo` / BGF) untuk Secret Key + API Key
+- [ ] `.gitignore` untuk `scripts/*.local.ts`
 
 **b) `docs/AUDIT-BUG-DAN-PREMATURE.md` sudah usang**
 
@@ -434,7 +555,8 @@ yang pertama disetujui"* bila **ketujuh** ini terpenuhi:
 - [x] **K7** — proyek `buayar init` mengenali webhook sah untuk 8 provider raw-body-dependent
 
 Plus, di luar kriteria:
-- [x] Kredensial DOKU di scripts sudah dibersihkan murni ke `process.env`
+- [x] Kredensial DOKU di scripts + tests sudah dibersihkan dari HEAD
+      — ⚠️ **rotasi & purge history masih WAJIB**, lihat §4a
 - [x] `docs/AUDIT-BUG-DAN-PREMATURE.md` di-update / di-supersede oleh dokumen ini
 - [x] README mencantumkan status per provider yang jujur (semua 20 provider simulated/contract tested)
 - [x] Heuristik nominal Faspay (A-1) dihapus — kelas bug nominal 100x
