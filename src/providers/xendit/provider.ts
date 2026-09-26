@@ -13,6 +13,20 @@ import {
 import { toXenditPaymentMethod } from "../../core/canonical";
 import { getXenditAuthHeader, verifyXenditWebhookToken } from "./signature";
 
+/**
+ * Normalisasi nomor telepon ke E.164 (Xendit mewajibkan format ini).
+ * Nomor lokal Indonesia (`0812...`) → `+62812...`. Nomor yang tidak dikenali
+ * dikembalikan sebagai `undefined` agar tidak mengirim nilai tidak valid.
+ */
+function toE164(phone?: string): string | undefined {
+  if (!phone) return undefined;
+  const trimmed = phone.replace(/[\s()-]/g, "");
+  if (trimmed.startsWith("+")) return trimmed;
+  if (trimmed.startsWith("0")) return `+62${trimmed.slice(1)}`;
+  if (trimmed.startsWith("62")) return `+${trimmed}`;
+  return trimmed.length >= 8 ? `+${trimmed}` : undefined;
+}
+
 export class XenditProvider extends BasePaymentProvider {
   readonly name = "xendit";
 
@@ -32,61 +46,109 @@ export class XenditProvider extends BasePaymentProvider {
 
     try {
       if (isDirect) {
-        // Direct API (Payment Requests API v3)
-        const url = `${this.getBaseUrl()}/payment_requests`;
-        const paymentMethodPayload: any = {
-          type: xenditMethod.type,
-          reusability: "ONE_TIME_USE",
-        };
+        // Direct API — Payments API v3 (`POST /v3/payment_requests`).
+        // Set `config.extra.xenditApiVersion = "v2"` untuk kembali ke skema generik v2.
+        const useV2 = String(config.extra?.xenditApiVersion || "").toLowerCase() === "v2";
+        const apiVersion = String(config.extra?.apiVersion || "2024-11-11");
+        const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+        const redirectUrl = returnUrl || config.returnUrl || "";
+        const isVa = xenditMethod.type === "VIRTUAL_ACCOUNT";
+        const isOtc = xenditMethod.type === "OVER_THE_COUNTER";
+        const isEwallet = xenditMethod.type === "EWALLET";
+        const isOvo = String(xenditMethod.channel_code || "").toUpperCase() === "OVO";
+        const mobile = toE164(customer.phone);
+        // Kode kanal v2 memakai kode polos (mis. "BCA"); v3 memakai sufiks khusus
+        // untuk VA (mis. "BCA_VIRTUAL_ACCOUNT") dan "CARDS" untuk kartu.
+        const channelCode = xenditMethod.type === "CARD" ? "CARDS" : xenditMethod.channel_code;
 
-        if (xenditMethod.type === "VIRTUAL_ACCOUNT") {
-          paymentMethodPayload.virtual_account = {
-            channel_code: xenditMethod.channel_code,
-            channel_properties: {
-              customer_name: customer.name,
-              expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
-            },
-          };
-        } else if (xenditMethod.type === "QR_CODE") {
-          paymentMethodPayload.qr_code = {
-            channel_code: "QRIS",
-          };
-        } else if (xenditMethod.type === "EWALLET") {
-          paymentMethodPayload.ewallet = {
-            channel_code: xenditMethod.channel_code,
-            channel_properties: {
-              success_return_url: returnUrl || config.returnUrl || "",
-            },
-          };
-        } else if (xenditMethod.type === "OVER_THE_COUNTER") {
-          paymentMethodPayload.over_the_counter = {
-            channel_code: xenditMethod.channel_code,
-            channel_properties: {
-              customer_name: customer.name,
-              expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
-            },
-          };
+        // ── channel_properties v2 (penamaan legacy) ───────────────────────────
+        const channelProperties: Record<string, any> = {};
+        if (isVa || isOtc) {
+          channelProperties.customer_name = customer.name;
+          channelProperties.expires_at = expiresAt;
+        } else if (isEwallet) {
+          // OVO (v2) mewajibkan `mobile_number`; tanpa itu gateway menolak.
+          if (isOvo && mobile) channelProperties.mobile_number = mobile;
+          // Xendit mewajibkan success_return_url; failure_return_url disarankan.
+          // Jangan kirim string kosong (ditolak validasi URL).
+          if (redirectUrl) {
+            channelProperties.success_return_url = redirectUrl;
+            channelProperties.failure_return_url = redirectUrl;
+          }
         }
 
-        const payload: any = {
-          currency: "IDR",
-          amount: integerAmount,
-          reference_id: orderId,
-          description: productDetails,
-          // Xendit Payment Requests API rejects the inline `customer` object
-          // with API_VALIDATION_ERROR. Attribution is only supported via a
-          // pre-created `customer_id` (Customer API), so we forward that when
-          // provided through providerParams and otherwise omit customer data.
-          ...(params.providerParams?.customer_id ? { customer_id: params.providerParams.customer_id } : {}),
-          payment_method: paymentMethodPayload,
-          ...params.providerParams,
-        };
+        // ── channel_code/type/channel_properties v3 ──────────────────────────
+        // Diverifikasi live (2026-09-26) terhadap sandbox Xendit:
+        //   • VA  : channel_code `<BANK>_VIRTUAL_ACCOUNT` + channel_properties.display_name
+        //           (mengirim "BCA"/`customer_name` → API_VALIDATION_ERROR)
+        //   • OTC : type `REUSABLE_PAYMENT_CODE` + channel_properties.payer_name
+        //   • OVO : channel_properties.account_mobile_number wajib
+        const v3ChannelCode = isVa ? `${xenditMethod.channel_code}_VIRTUAL_ACCOUNT` : channelCode;
+        const v3Type = isOtc ? "REUSABLE_PAYMENT_CODE" : "PAY";
+        const v3ChannelProperties: Record<string, any> = {};
+        if (isVa) {
+          v3ChannelProperties.display_name = customer.name;
+          v3ChannelProperties.expires_at = expiresAt;
+        } else if (isOtc) {
+          v3ChannelProperties.payer_name = customer.name;
+        } else if (isEwallet) {
+          if (isOvo && mobile) v3ChannelProperties.account_mobile_number = mobile;
+          if (redirectUrl) {
+            v3ChannelProperties.success_return_url = redirectUrl;
+            v3ChannelProperties.failure_return_url = redirectUrl;
+          }
+        }
+
+        const url = useV2
+          ? `${this.getBaseUrl()}/payment_requests`
+          : `${this.getBaseUrl()}/v3/payment_requests`;
+
+        const customerId = params.providerParams?.customer_id;
+        const payload: any = useV2
+          ? {
+              currency: params.currency || "IDR",
+              amount: integerAmount,
+              reference_id: orderId,
+              description: productDetails,
+              ...(customerId ? { customer_id: customerId } : {}),
+              payment_method: {
+                type: xenditMethod.type,
+                reusability: "ONE_TIME_USE",
+                ...(xenditMethod.type === "VIRTUAL_ACCOUNT"
+                  ? { virtual_account: { channel_code: channelCode, channel_properties: channelProperties } }
+                  : xenditMethod.type === "QR_CODE"
+                    ? { qr_code: { channel_code: "QRIS" } }
+                    : xenditMethod.type === "EWALLET"
+                      ? { ewallet: { channel_code: channelCode, channel_properties: channelProperties } }
+                      : xenditMethod.type === "OVER_THE_COUNTER"
+                        ? { over_the_counter: { channel_code: channelCode, channel_properties: channelProperties } }
+                        : {}),
+              },
+              ...params.providerParams,
+            }
+          : {
+              reference_id: orderId,
+              type: v3Type,
+              country: config.extra?.country || "ID",
+              currency: params.currency || "IDR",
+              request_amount: integerAmount,
+              description: productDetails,
+              channel_code: v3ChannelCode,
+              ...(Object.keys(v3ChannelProperties).length ? { channel_properties: v3ChannelProperties } : {}),
+              // CATATAN: v3 MEMANG mendukung objek `customer` terstruktur (type INDIVIDUAL
+              // + reference_id + individual_detail). Kami sengaja tidak mengisinya karena
+              // `customer.reference_id` WAJIB alfanumerik (orderId umumnya mengandung `-`),
+              // sehingga berisiko INVALID_CUSTOMER. Atribusi opsional lewat `customer_id`.
+              ...(customerId ? { customer_id: customerId } : {}),
+              ...params.providerParams,
+            };
 
         const response = await fetch(url, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
             "Authorization": authHeader,
+            ...(useV2 ? {} : { "api-version": apiVersion }),
           },
           body: JSON.stringify(payload),
         });
@@ -112,56 +174,158 @@ export class XenditProvider extends BasePaymentProvider {
           success: true,
           provider: "xendit",
           orderId: data.reference_id || orderId,
-          amount: data.amount || integerAmount,
+          // v3: request_amount; v2: amount
+          amount: data.request_amount ?? data.amount ?? integerAmount,
           reference: data.id,
           rawResponse: data,
         };
 
-        // Extract direct properties from payment_method or actions
+        // Parser respons kompatibel dua versi:
+        // - v2: properti kanal ada di `payment_method.{type}.channel_properties`
+        // - v3: properti kanal ada di `channel_properties` / `actions[]`
+        //       (type: REDIRECT_CUSTOMER | PRESENT_TO_CUSTOMER)
         const pm = data.payment_method || {};
-        const actions = data.actions || [];
+        const topProps = data.channel_properties || {};
+        const actions: any[] = Array.isArray(data.actions) ? data.actions : [];
+        const presentAction = actions.find((a: any) => a.type === "PRESENT_TO_CUSTOMER");
+        const redirectAction = actions.find((a: any) => a.type === "REDIRECT_CUSTOMER");
+        const legacyAction = (name: string) => actions.find((a: any) => a.action === name)?.value;
 
-        if (pm.virtual_account || pm.type === "VIRTUAL_ACCOUNT") {
+        const resolvedType = pm.type || (data.channel_code ? xenditMethod.type : undefined);
+
+        if (resolvedType === "VIRTUAL_ACCOUNT" || xenditMethod.type === "VIRTUAL_ACCOUNT") {
           res.vaNumber =
             pm.virtual_account?.channel_properties?.virtual_account_number ||
             pm.channel_properties?.virtual_account_number ||
-            actions.find((a: any) => a.action === "AUTH")?.value;
-          res.vaBank = (pm.virtual_account?.channel_code || pm.channel_code || xenditMethod?.channel_code || "").toLowerCase();
-          const exp = pm.virtual_account?.channel_properties?.expires_at || pm.channel_properties?.expires_at;
+            topProps.virtual_account_number ||
+            presentAction?.value ||
+            legacyAction("AUTH");
+          res.vaBank = String(
+            pm.virtual_account?.channel_code ||
+              pm.channel_code ||
+              data.channel_code ||
+              xenditMethod.channel_code ||
+              ""
+          )
+            .toLowerCase()
+            // v3 mengembalikan `bca_virtual_account`; normalisasi ke `bca` agar seragam v2.
+            .replace(/_virtual_account$/, "");
+          const exp = pm.virtual_account?.channel_properties?.expires_at || pm.channel_properties?.expires_at || topProps.expires_at;
           if (exp) {
             res.expiresAt = new Date(exp);
           }
-        } else if (pm.qr_code || pm.type === "QR_CODE") {
+        } else if (resolvedType === "QR_CODE" || xenditMethod.type === "QR_CODE") {
           res.qrString =
             pm.qr_code?.channel_properties?.qr_string ||
             pm.channel_properties?.qr_string ||
-            actions.find((a: any) => a.qr_string)?.qr_string;
-          res.qrCodeUrl = actions.find((a: any) => a.url)?.url;
-        } else if (pm.over_the_counter || pm.type === "OVER_THE_COUNTER") {
+            topProps.qr_string ||
+            actions.find((a: any) => a.qr_string)?.qr_string ||
+            presentAction?.value;
+          res.qrCodeUrl = actions.find((a: any) => a.url)?.url || redirectAction?.value;
+        } else if (resolvedType === "OVER_THE_COUNTER" || xenditMethod.type === "OVER_THE_COUNTER") {
           res.paymentCode =
             pm.over_the_counter?.channel_properties?.payment_code ||
-            pm.channel_properties?.payment_code;
-        } else if (pm.ewallet || pm.type === "EWALLET") {
-          res.deeplink = actions.find((a: any) => a.url_type === "DEEPLINK")?.url || actions[0]?.url;
+            pm.channel_properties?.payment_code ||
+            topProps.payment_code ||
+            presentAction?.value;
+        } else if (resolvedType === "EWALLET" || xenditMethod.type === "EWALLET") {
+          res.deeplink =
+            actions.find((a: any) => a.url_type === "DEEPLINK")?.url ||
+            actions.find((a: any) => a.descriptor === "DEEPLINK")?.value ||
+            redirectAction?.value ||
+            actions[0]?.url;
           res.paymentUrl = actions.find((a: any) => a.url_type === "WEB")?.url || res.deeplink;
         }
 
         return res;
       } else {
-        // Semi Integrasi (Invoice API v2)
-        const url = `${this.getBaseUrl()}/v2/invoices`;
-        const payload = {
-          external_id: orderId,
+        // Semi Integrasi. Default: **Payment Sessions** (`POST /sessions`, mode PAYMENT_LINK) —
+        // ini pengganti resmi Invoice v2 yang kini berstatus legacy. Set
+        // `config.extra.xenditRedirect = "invoice"` untuk fallback ke `/v2/invoices`.
+        const redirectTarget = String(config.extra?.xenditRedirect || "sessions").toLowerCase();
+        const returnUrlResolved = returnUrl || config.returnUrl || "";
+
+        if (redirectTarget === "invoice") {
+          const url = `${this.getBaseUrl()}/v2/invoices`;
+          const payload = {
+            external_id: orderId,
+            amount: integerAmount,
+            description: productDetails,
+            payer_email: customer.email,
+            customer: {
+              given_names: customer.name,
+              email: customer.email,
+              mobile_number: toE164(customer.phone) || "",
+            },
+            success_redirect_url: returnUrlResolved,
+            failure_redirect_url: returnUrlResolved,
+            ...params.providerParams,
+          };
+
+          const response = await fetch(url, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": authHeader,
+            },
+            body: JSON.stringify(payload),
+          });
+
+          const text = await response.text();
+          let data: any = null;
+          try {
+            data = JSON.parse(text);
+          } catch (e) {}
+
+          if (!response.ok || !data) {
+            return {
+              success: false,
+              provider: "xendit",
+              orderId,
+              amount: integerAmount,
+              rawResponse: data,
+              error: data?.message || data?.error_code || `HTTP error! Status: ${response.status} - ${text}`,
+            };
+          }
+
+          return {
+            success: true,
+            provider: "xendit",
+            orderId: data.external_id || orderId,
+            amount: data.amount || integerAmount,
+            reference: data.id,
+            paymentUrl: data.invoice_url,
+            expiresAt: data.expiry_date ? new Date(data.expiry_date) : undefined,
+            rawResponse: data,
+          };
+        }
+
+        // Payment Sessions — hosted checkout.
+        const url = `${this.getBaseUrl()}/sessions`;
+        const mobile = toE164(customer.phone);
+        const customerRef = orderId.replace(/[^a-zA-Z0-9]/g, "") || `cust${Date.now()}`;
+        const payload: any = {
+          reference_id: orderId,
+          session_type: "PAY",
+          mode: "PAYMENT_LINK",
           amount: integerAmount,
+          currency: params.currency || "IDR",
+          country: config.extra?.country || "ID",
           description: productDetails,
-          payer_email: customer.email,
+          ...(returnUrlResolved
+            ? { success_return_url: returnUrlResolved, cancel_return_url: returnUrlResolved }
+            : {}),
           customer: {
-            given_names: customer.name,
+            reference_id: customerRef,
+            type: "INDIVIDUAL",
             email: customer.email,
-            mobile_number: customer.phone || "",
+            ...(mobile ? { mobile_number: mobile } : {}),
+            individual_detail: {
+              // Xendit: alfanumerik, tanpa karakter khusus.
+              given_names:
+                (customer.name.split(" ")[0] || customer.name).replace(/[^a-zA-Z0-9]/g, "") || "Customer",
+            },
           },
-          success_redirect_url: returnUrl || config.returnUrl || "",
-          failure_redirect_url: returnUrl || config.returnUrl || "",
           ...params.providerParams,
         };
 
@@ -194,11 +358,11 @@ export class XenditProvider extends BasePaymentProvider {
         return {
           success: true,
           provider: "xendit",
-          orderId: data.external_id || orderId,
+          orderId: data.reference_id || orderId,
           amount: data.amount || integerAmount,
-          reference: data.id,
-          paymentUrl: data.invoice_url,
-          expiresAt: data.expiry_date ? new Date(data.expiry_date) : undefined,
+          reference: data.payment_session_id || data.id,
+          paymentUrl: data.payment_link_url || data.checkout_url,
+          expiresAt: data.expires_at ? new Date(data.expires_at) : undefined,
           rawResponse: data,
         };
       }
@@ -218,21 +382,6 @@ export class XenditProvider extends BasePaymentProvider {
     const rawStatus = (body.status || body.data?.status || "").toUpperCase();
     const event = body.event || "";
 
-    const isPaid = rawStatus === "PAID" || rawStatus === "SETTLED" || rawStatus === "SUCCEEDED" || event === "payment.succeeded";
-    const isPending = rawStatus === "PENDING";
-    const isExpired = rawStatus === "EXPIRED";
-    const isFailed = rawStatus === "FAILED" || (!isPaid && !isPending && !isExpired);
-
-    const orderId = body.external_id || body.reference_id || body.data?.reference_id || body.id || "";
-    const amount = body.paid_amount || body.amount || body.data?.amount || 0;
-
-    const status: "paid" | "pending" | "failed" | "expired" = isPaid
-      ? "paid"
-      : isPending
-        ? "pending"
-        : isExpired
-          ? "expired"
-          : "failed";
     const webhookToken = config.extra?.webhookToken;
     const headerToken =
       config.extra?.callbackToken ||
@@ -241,9 +390,36 @@ export class XenditProvider extends BasePaymentProvider {
 
     // SECURITY: default false — tanpa token, webhook ditolak.
     let isValid = false;
-    if (webhookToken && headerToken) {
+    let error: string | undefined;
+    if (!webhookToken) {
+      error =
+        "Xendit webhook token not configured. Set BUAYAR_WEBHOOK_TOKEN (or config.extra.webhookToken) so the x-callback-token header can be verified.";
+    } else if (!headerToken) {
+      error = "Missing x-callback-token header; Xendit webhook cannot be authenticated.";
+    } else {
       isValid = verifyXenditWebhookToken(headerToken, webhookToken);
+      if (!isValid) error = "x-callback-token header does not match configured Xendit webhook token.";
     }
+
+    const orderId = body.external_id || body.reference_id || body.data?.reference_id || body.id || "";
+    const amount = body.paid_amount || body.amount || body.data?.amount || 0;
+
+    // Status hanya dipercaya bila token cocok (cegah `isPaid: true` + `isValid: false`).
+    const isPaid =
+      isValid && (rawStatus === "PAID" || rawStatus === "SETTLED" || rawStatus === "SUCCEEDED" || event === "payment.succeeded");
+    const isPending = isValid && rawStatus === "PENDING";
+    const isExpired = isValid && rawStatus === "EXPIRED";
+    const isFailed = !isValid || rawStatus === "FAILED" || (!isPaid && !isPending && !isExpired);
+
+    const status: "paid" | "pending" | "failed" | "expired" = !isValid
+      ? "failed"
+      : isPaid
+        ? "paid"
+        : isPending
+          ? "pending"
+          : isExpired
+            ? "expired"
+            : "failed";
 
     return {
       isValid,
@@ -257,6 +433,7 @@ export class XenditProvider extends BasePaymentProvider {
       isExpired,
       statusCode: rawStatus,
       rawPayload: body,
+      error,
     };
   }
 
@@ -413,7 +590,7 @@ export class XenditProvider extends BasePaymentProvider {
 
               const codeLower = (ch.channel_code || "").toLowerCase();
               let canonicalCode = codeLower;
-              let category = "Virtual Account";
+              let category: "Virtual Account" | "QRIS" | "E-Wallet" | "Retail / Gerai" | "Kartu Kredit" | "Paylater / Cicilan" | "Lainnya" = "Virtual Account";
 
               if (ch.type === "BANK_TRANSFER" || codeLower.endsWith("_va") || ["bca", "bni", "bri", "mandiri", "permata", "cimb", "bsi"].includes(codeLower)) {
                 canonicalCode = codeLower.endsWith("_va") ? codeLower : `${codeLower}_va`;
@@ -485,24 +662,45 @@ export class XenditProvider extends BasePaymentProvider {
     };
   }
 
-  async probePaymentMethods(config: ProviderConfig): Promise<{ success: boolean; enabled: string[]; error?: string }> {
+  async probePaymentMethods(config: ProviderConfig): Promise<{
+    success: boolean;
+    enabled: string[];
+    source?: "live" | "static";
+    error?: string;
+  }> {
     try {
+      // Xendit mengekspos `GET /payment_channels` — daftar channel yang terdaftar/
+      // aktif untuk akun merchant. Bila endpoint ini berhasil, hasilnya **LIVE**;
+      // bila gagal (mis. tanpa izin/offline) kita jatuh ke katalog statis SDK dan
+      // WAJIB menandainya `source: "static"` agar tidak disalahartikan sebagai
+      // "channel yang benar-benar aktif di akun ini".
       const res = await this.getPaymentMethods({ amount: 10000 }, config);
+      const raw = res.rawResponse;
+      const isLive =
+        Array.isArray(raw) &&
+        raw.length > 0 &&
+        typeof raw[0] === "object" &&
+        raw[0] !== null &&
+        "channel_code" in raw[0];
+      const source: "live" | "static" = isLive ? "live" : "static";
       if (res.success && res.methods) {
         return {
           success: true,
           enabled: res.methods.map((m) => m.paymentMethod),
+          source,
         };
       }
       return {
         success: false,
         enabled: [],
+        source,
         error: res.error || "Failed to probe Xendit payment methods",
       };
     } catch (e: any) {
       return {
         success: false,
         enabled: [],
+        source: "static",
         error: e.message || "Failed to probe Xendit payment methods",
       };
     }
@@ -514,7 +712,37 @@ export class XenditProvider extends BasePaymentProvider {
     const authHeader = getXenditAuthHeader(apiKey);
 
     try {
-      // Coba query via external_id terlebih dahulu
+      // Payment Sessions (`ps-...`) adalah jalur semi-integrasi saat ini.
+      if (merchantOrderId.startsWith("ps-")) {
+        const sessionRes = await fetch(`${this.getBaseUrl()}/sessions/${merchantOrderId}`, {
+          method: "GET",
+          headers: { "Authorization": authHeader },
+        });
+        const session: any = await sessionRes.json().catch(() => null);
+        if (sessionRes.ok && session) {
+          const sessionStatus = String(session.status || "").toUpperCase();
+          const paid = sessionStatus === "COMPLETED";
+          const expired = sessionStatus === "EXPIRED";
+          return {
+            success: true,
+            provider: "xendit",
+            orderId: session.reference_id || merchantOrderId,
+            reference: session.payment_session_id || merchantOrderId,
+            amount: Number(session.amount || 0),
+            statusCode: sessionStatus,
+            status: paid ? "paid" : expired ? "expired" : "pending",
+            isPaid: paid,
+            isPending: !paid && !expired,
+            isFailed: false,
+            isExpired: expired,
+            statusMessage: sessionStatus,
+            paymentType: session.payment_request_id,
+            rawResponse: session,
+          };
+        }
+      }
+
+      // Fallback legacy: query Invoice v2 via external_id.
       let url = `${this.getBaseUrl()}/v2/invoices?external_id=${merchantOrderId}`;
       let response = await fetch(url, {
         method: "GET",

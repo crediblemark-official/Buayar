@@ -1,5 +1,41 @@
 import { CreateInvoiceParams, InvoiceResponse, ProviderConfig } from "../../types";
 
+/**
+ * Mapping kode kanonikal Buayar → nilai `enabled_payments` Snap API yang SAH.
+ *
+ * Dokumen resmi hanya menerima nilai berikut (lihat Request Body → enabled_payments).
+ * Yang berbeda dari kode kanonikal: mandiri_va → echannel, qris/gopay_qris/shopeepay_qris.
+ */
+export const CANONICAL_TO_MIDTRANS_SNAP: Record<string, string> = {
+  credit_card: "credit_card",
+  mandiri_va: "echannel",
+  permata_va: "permata_va",
+  bca_va: "bca_va",
+  bni_va: "bni_va",
+  bri_va: "bri_va",
+  cimb_va: "cimb_va",
+  danamon_va: "danamon_va",
+  bsi_va: "bsi_va",
+  seabank_va: "seabank_va",
+  gopay: "gopay",
+  gopay_qris: "gopay",
+  ovo: "ovo",
+  dana: "dana",
+  shopeepay: "shopeepay",
+  shopeepay_qris: "shopeepay",
+  qris: "other_qris",
+  alfamart: "alfamart",
+  indomaret: "indomaret",
+  akulaku: "akulaku",
+  kredivo: "kredivo",
+};
+
+/** Ubah kode kanonikal → nilai `enabled_payments` Snap, atau undefined bila tak dikenal. */
+export function toMidtransSnapEnabledPayment(code?: string): string | undefined {
+  if (!code) return undefined;
+  return CANONICAL_TO_MIDTRANS_SNAP[code.toLowerCase().trim()];
+}
+
 export const CORE_API_METHODS = [
   "bca_va",
   "bni_va",
@@ -42,7 +78,8 @@ export function buildCoreChargePayload(
     customer_details: {
       first_name: customer.name,
       email: customer.email,
-      phone: customer.phone || "",
+      // Jangan kirim phone kosong — Midtrans menolak/validasi ketat bila ada nilai blank.
+      ...(customer.phone ? { phone: customer.phone } : {}),
     },
     item_details: [
       {
@@ -67,7 +104,8 @@ export function buildCoreChargePayload(
     };
   } else if (method === "qris" || method === "gopay_qris" || method === "shopeepay_qris") {
     payload.payment_type = "qris";
-    payload.qris = { acquirer: method === "shopeepay_qris" ? "shopeepay" : "gopay" };
+    // Nilai acquirer resmi hanya "gopay" dan "airpay shopee" (bukan "shopeepay").
+    payload.qris = { acquirer: method === "shopeepay_qris" ? "airpay shopee" : "gopay" };
   } else if (method === "gopay") {
     payload.payment_type = "gopay";
     payload.gopay = {
@@ -160,8 +198,13 @@ export function parseCoreChargeResponse(
     res.vaBank = "mandiri";
     res.billInfo = { billerCode: data.biller_code, billKey: data.bill_key };
   } else if (method === "qris" || method === "gopay_qris" || method === "shopeepay_qris") {
+    // PENTING: Core API QRIS Midtrans TIDAK mengembalikan `qr_string`. Yang tersedia
+    // hanya actions[] berisi URL PNG (generate-qr-code / generate-qr-code-v2).
+    // `qr_string` tetap dibaca bila ada (jalur BI-SNAP), tetapi sumber andalan adalah QR URL.
     res.qrString = data.qr_string;
-    res.qrCodeUrl = data.actions?.find((a: any) => a.name === "generate-qr-code")?.url;
+    res.qrCodeUrl =
+      data.actions?.find((a: any) => a.name === "generate-qr-code-v2")?.url ||
+      data.actions?.find((a: any) => a.name === "generate-qr-code")?.url;
   } else if (["gopay", "shopeepay", "dana", "linkaja", "kredivo", "akulaku", "googlepay"].includes(method)) {
     res.deeplink = data.actions?.find((a: any) => a.name === "deeplink-redirect")?.url;
     res.paymentUrl = res.deeplink ||

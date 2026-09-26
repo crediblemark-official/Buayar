@@ -11,6 +11,7 @@ import {
   PaymentMethod,
 } from "../../types";
 import { verifySquareWebhook } from "./signature";
+import { resolveRawBody, RAW_BODY_REQUIRED_MESSAGE } from "../../utils/rawBody";
 
 export class SquareProvider extends BasePaymentProvider {
   readonly name = "square";
@@ -41,7 +42,10 @@ export class SquareProvider extends BasePaymentProvider {
     try {
       if (isDirect) {
         // Create Payment (requires sourceId/nonce from frontend Square Web Payments SDK)
-        const sourceId = params.providerParams?.sourceId || params.providerParams?.nonce || "cnon:card-nonce-ok";
+        const sourceId = params.providerParams?.sourceId || params.providerParams?.nonce || (config.sandbox ? "cnon:card-nonce-ok" : undefined);
+        if (!sourceId) {
+          throw new Error("Square direct payment requires providerParams.sourceId or providerParams.nonce in production.");
+        }
         const body: any = {
           idempotency_key: orderId,
           source_id: sourceId,
@@ -121,12 +125,17 @@ export class SquareProvider extends BasePaymentProvider {
     const signatureKey = config.extra?.webhookSignatureKey || config.secretKey || "";
     const signatureHeader = config.extra?.signatureHeader || "";
     const notificationUrl = config.callbackUrl || config.extra?.notificationUrl || "";
-    const rawBody = typeof body === "string" ? body : JSON.stringify(body);
+    const rawBody = resolveRawBody(config, body);
     const parsedBody = typeof body === "string" ? JSON.parse(body) : body;
 
     const isValid = signatureHeader
-      ? verifySquareWebhook(rawBody, signatureHeader, signatureKey, notificationUrl)
+      ? verifySquareWebhook(rawBody as string, signatureHeader, signatureKey, notificationUrl)
       : false;
+    const error = isValid
+      ? undefined
+      : rawBody === undefined
+        ? RAW_BODY_REQUIRED_MESSAGE
+        : "Invalid or missing Square webhook signature.";
 
     const eventType = parsedBody?.type || "";
     const data = parsedBody?.data?.object || parsedBody?.data || parsedBody;
@@ -136,16 +145,19 @@ export class SquareProvider extends BasePaymentProvider {
     const amount = Number(payment?.amount_money?.amount || 0);
     const statusRaw = (payment?.status || "").toUpperCase();
 
-    const isPaid = statusRaw === "COMPLETED" || eventType === "payment.completed";
-    const isPending = statusRaw === "PENDING" || statusRaw === "APPROVED";
-    const isFailed = statusRaw === "FAILED" || statusRaw === "CANCELED";
-    const isExpired = eventType === "payment.expired";
+    // Status hanya dipercaya bila signature valid (cegah `isPaid: true` + `isValid: false`).
+    const isPaid = isValid && (statusRaw === "COMPLETED" || eventType === "payment.completed");
+    const isPending = isValid && (statusRaw === "PENDING" || statusRaw === "APPROVED");
+    const isFailed = !isValid || statusRaw === "FAILED" || statusRaw === "CANCELED";
+    const isExpired = isValid && eventType === "payment.expired";
 
-    const status: "paid" | "pending" | "failed" | "expired" = isPaid ? "paid" : isPending ? "pending" : isExpired ? "expired" : "failed";
+    const status: "paid" | "pending" | "failed" | "expired" = !isValid
+      ? "failed"
+      : isPaid ? "paid" : isPending ? "pending" : isExpired ? "expired" : "failed";
 
     return {
       isValid, provider: "square", orderId: String(orderId), amount, status, isPaid, isPending, isFailed, isExpired,
-      statusCode: eventType || statusRaw, rawPayload: parsedBody,
+      statusCode: eventType || statusRaw, rawPayload: parsedBody, error,
     };
   }
 

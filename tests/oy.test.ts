@@ -118,7 +118,9 @@ describe("OY! Bisnis Provider & Client Integration", () => {
       payment_method: "VA",
     };
 
-    const result = await buayar.verifyWebhook(callbackPayload);
+    const result = await buayar.verifyWebhook(callbackPayload, {
+      "x-oy-username": "myoybusiness",
+    });
     expect(result.isValid).toBe(true);
     expect(result.provider).toBe("oy");
     expect(result.orderId).toBe("ORDER-OY-001");
@@ -126,5 +128,44 @@ describe("OY! Bisnis Provider & Client Integration", () => {
     expect(result.isPaid).toBe(true);
     expect(result.isPending).toBe(false);
     expect(result.isFailed).toBe(false);
+  });
+
+  // SECURITY: tanpa header x-oy-username tidak ada bukti autentikasi sama sekali.
+  // Webhook forging harus selalu ditolak, meski payload terlihat "COMPLETED".
+  it("should REJECT an OY! webhook with no x-oy-username header (fail-closed)", async () => {
+    const buayar = new Buayar({
+      provider: "oy",
+      merchantCode: "myoybusiness",
+      apiKey: "oy-secret-key-12345",
+      sandbox: true,
+    });
+
+    const forged = {
+      partner_tx_id: "ORDER-FORGED",
+      tx_id: "OY-FORGED-001",
+      amount: 320000,
+      status: "SUCCESS",
+    };
+
+    const result = await buayar.verifyWebhook(forged);
+    expect(result.isValid).toBe(false);
+    expect(result.isPaid).toBe(false);
+    expect(result.status).toBe("failed");
+  });
+
+  it("should REJECT an OY! webhook whose x-oy-username does not match (fail-closed)", async () => {
+    const buayar = new Buayar({
+      provider: "oy",
+      merchantCode: "myoybusiness",
+      apiKey: "oy-secret-key-12345",
+      sandbox: true,
+    });
+
+    const result = await buayar.verifyWebhook(
+      { partner_tx_id: "ORDER-FORGED-2", amount: 1000, status: "SUCCESS" },
+      { "x-oy-username": "attacker-oy" }
+    );
+    expect(result.isValid).toBe(false);
+    expect(result.isPaid).toBe(false);
   });
 });

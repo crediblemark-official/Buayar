@@ -52,6 +52,21 @@ describe("buildScaffold", () => {
   it("exposes all 20 providers", () => {
     expect(PROVIDERS.length).toBe(20);
   });
+
+  it("ensures express, hono, and nextjs templates capture raw body for signature verification", () => {
+    const expressTpl = getRouteTemplate("express");
+    expect(expressTpl).toContain("express.raw({ type: \"application/json\" })");
+    expect(expressTpl).toContain("handleWebhook(payload, req.headers as any, rawBody)");
+
+    const honoTpl = getRouteTemplate("hono");
+    expect(honoTpl).toContain("await c.req.text()");
+    expect(honoTpl).toContain("handleWebhook(");
+
+    const nextFiles = buildScaffold("stripe", "nextjs");
+    const nextTpl = nextFiles["src/app/api/payment/webhook/route.ts"];
+    expect(nextTpl).toContain("await request.text()");
+    expect(nextTpl).toContain("handleWebhook(payload, headers, rawBody)");
+  });
 });
 
 describe("scaffold", () => {

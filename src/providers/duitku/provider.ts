@@ -14,6 +14,7 @@ import { getPaymentMethodCategory } from "../../utils/category";
 import { toDuitkuPaymentMethod, toCanonicalPaymentMethod } from "../../core/canonical";
 import {
   getDuitkuInquirySignatures,
+  getDuitkuPopSignature,
   verifyDuitkuCallbackSignature,
   getDuitkuPaymentMethodsSignature,
   getDuitkuStatusSignatures,
@@ -44,21 +45,19 @@ export class DuitkuProvider extends BasePaymentProvider {
       : `${this.getBaseUrl(sandbox)}/api/merchant/createInvoice`;
 
     const integerAmount = Math.round(amount);
-    const { payloadSignature, timestamp, headerSignature } = getDuitkuInquirySignatures(
-      merchantCode,
-      orderId,
-      integerAmount,
-      apiKey
-    );
+    // Jalur legacy webapi (direct inquiry) memakai signature MD5 di body.
+    // Jalur Duitku POP (createInvoice) memakai signature HMAC-SHA256 di HEADER.
+    const { payloadSignature } = getDuitkuInquirySignatures(merchantCode, orderId, integerAmount, apiKey);
+    const popSignature = isDirectInquiry ? undefined : getDuitkuPopSignature(merchantCode, apiKey);
 
     const payload = {
-      merchantCode,
+      ...(isDirectInquiry ? { merchantCode } : {}),
       paymentAmount: integerAmount,
       merchantOrderId: orderId,
       productDetails,
       email: customer.email,
       phoneNumber: customer.phone || "",
-      signature: payloadSignature,
+      ...(isDirectInquiry ? { signature: payloadSignature } : {}),
       callbackUrl: callbackUrl || config.callbackUrl || "",
       returnUrl: returnUrl || config.returnUrl || "",
       expiryPeriod: 1440,
@@ -72,9 +71,9 @@ export class DuitkuProvider extends BasePaymentProvider {
         "Accept": "application/json",
       };
 
-      if (!isDirectInquiry) {
-        headers["x-duitku-signature"] = headerSignature;
-        headers["x-duitku-timestamp"] = timestamp;
+      if (popSignature) {
+        headers["x-duitku-signature"] = popSignature.signature;
+        headers["x-duitku-timestamp"] = popSignature.timestamp;
         headers["x-duitku-merchantcode"] = merchantCode;
       }
 

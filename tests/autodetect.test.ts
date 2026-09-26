@@ -52,6 +52,26 @@ describe("Autodetect & Dynamic Provider Registry", () => {
       const cfg = resolveConfigFromEnv({ provider: "duitku", apiKey: "k", merchantCode: "M" });
       expect(cfg.provider).toBe("duitku");
     });
+
+    it("K6: resolveConfigFromEnv TIDAK boleh fallback senyap ke midtrans jika tidak ada provider / env", () => {
+      withEnv({});
+      const cfg = resolveConfigFromEnv({});
+      expect(cfg.provider).toBe("");
+    });
+
+    it("K6: Buayar tanpa provider melempar error eksplisit bila memanggil operasi unified", async () => {
+      withEnv({});
+      const unconfigured = new Buayar({ provider: "" });
+      expect(() => unconfigured.getProvider()).toThrow("No payment provider configured");
+      expect(
+        unconfigured.createInvoice({
+          orderId: "1",
+          amount: 1000,
+          productDetails: "Test",
+          customer: { name: "User", email: "user@example.com" },
+        })
+      ).rejects.toThrow("No payment provider configured");
+    });
   });
 
   describe("detectFromWebhook", () => {

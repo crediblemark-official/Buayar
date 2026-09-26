@@ -43,7 +43,10 @@ export class BraintreeProvider extends BasePaymentProvider {
     try {
       if (isDirect) {
         // Direct transaction using payment method nonce from frontend Drop-in UI
-        const paymentMethodNonce = params.providerParams?.nonce || params.providerParams?.paymentMethodNonce || "fake-valid-nonce";
+        const paymentMethodNonce = params.providerParams?.nonce || params.providerParams?.paymentMethodNonce || (config.sandbox ? "fake-valid-nonce" : undefined);
+        if (!paymentMethodNonce) {
+          throw new Error("Braintree direct transaction requires providerParams.nonce or providerParams.paymentMethodNonce in production.");
+        }
         const body = {
           transaction: {
             amount: (amount / 100).toFixed(2),
@@ -122,12 +125,15 @@ export class BraintreeProvider extends BasePaymentProvider {
     const amount = Math.round(Number(transaction?.amount || 0) * 100);
     const statusRaw = (transaction?.status || "").toLowerCase();
 
-    const isPaid = kind === "transaction_settled" || kind === "transaction_disbursed" || statusRaw === "settled";
-    const isPending = kind === "transaction_settlement_declined" || statusRaw === "submitted_for_settlement" || statusRaw === "settling";
-    const isFailed = kind === "transaction_failed" || statusRaw === "failed" || statusRaw === "voided";
-    const isExpired = statusRaw === "expired";
+    // Status hanya dipercaya bila signature valid (cegah `isPaid: true` + `isValid: false`).
+    const isPaid = isValid && (kind === "transaction_settled" || kind === "transaction_disbursed" || statusRaw === "settled");
+    const isPending = isValid && (kind === "transaction_settlement_declined" || statusRaw === "submitted_for_settlement" || statusRaw === "settling");
+    const isFailed = !isValid || kind === "transaction_failed" || statusRaw === "failed" || statusRaw === "voided";
+    const isExpired = isValid && statusRaw === "expired";
 
-    const status: "paid" | "pending" | "failed" | "expired" = isPaid ? "paid" : isPending ? "pending" : isExpired ? "expired" : "failed";
+    const status: "paid" | "pending" | "failed" | "expired" = !isValid
+      ? "failed"
+      : isPaid ? "paid" : isPending ? "pending" : isExpired ? "expired" : "failed";
 
     return {
       isValid, provider: "braintree", orderId: String(orderId), amount, status, isPaid, isPending, isFailed, isExpired,

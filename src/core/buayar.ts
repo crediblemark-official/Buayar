@@ -47,6 +47,7 @@ import { TwoCheckoutClient } from "../clients/twocheckout";
 import { SumopodClient } from "../clients/sumopod";
 import { BasePaymentProvider } from "../providers/base";
 import { resolveConfigFromEnv } from "./config";
+import { simulator, BuayarSimulator } from "../simulator";
 
 export { resolveConfigFromEnv };
 
@@ -64,6 +65,7 @@ export class Buayar {
   private manager: PaymentManager;
   private config: BuayarConfig;
   private registry: ProviderRegistry;
+  readonly simulator: BuayarSimulator = simulator;
 
   constructor(config?: BuayarConfig, manager?: PaymentManager, registry?: ProviderRegistry) {
     this.manager = manager || paymentManager;
@@ -89,7 +91,7 @@ export class Buayar {
    * Dapatkan nama provider aktif
    */
   get provider(): string {
-    return this.config.provider || "midtrans";
+    return this.config.provider || "";
   }
 
   /**
@@ -287,8 +289,8 @@ export class Buayar {
         mergedConfig.extra.signatureHeader = Array.isArray(payuSig) ? payuSig[0] : payuSig;
       }
       // Braintree
-      const btSig = headers["bt_signature"];
-      const btPayload = headers["bt_payload"];
+      const btSig = headers["bt_signature"] || (payload && typeof payload === "object" ? payload.bt_signature : undefined);
+      const btPayload = headers["bt_payload"] || (payload && typeof payload === "object" ? payload.bt_payload : undefined);
       if (btSig && btPayload) {
         mergedConfig.extra.btSignature = Array.isArray(btSig) ? btSig[0] : btSig;
         mergedConfig.extra.btPayload = Array.isArray(btPayload) ? btPayload[0] : btPayload;
@@ -302,6 +304,13 @@ export class Buayar {
       const dokuSig = headers["signature"] || headers["Signature"];
       if (dokuSig) {
         mergedConfig.extra.dokuSignature = Array.isArray(dokuSig) ? dokuSig[0] : dokuSig;
+      }
+      // Midtrans BI-SNAP (signature asimetris: X-SIGNATURE + X-TIMESTAMP)
+      const mtSnapSig = headers["x-signature"] || headers["X-SIGNATURE"];
+      const mtSnapTs = headers["x-timestamp"] || headers["X-TIMESTAMP"];
+      if (mtSnapSig && mtSnapTs) {
+        mergedConfig.extra.snapSignature = Array.isArray(mtSnapSig) ? mtSnapSig[0] : mtSnapSig;
+        mergedConfig.extra.snapTimestamp = Array.isArray(mtSnapTs) ? mtSnapTs[0] : mtSnapTs;
       }
       // OY!
       const oyUser = headers["x-oy-username"] || headers["X-Oy-Username"];
@@ -319,11 +328,12 @@ export class Buayar {
       if (sumopodToken) mergedConfig.extra.webhookTokenHeader = Array.isArray(sumopodToken) ? sumopodToken[0] : sumopodToken;
     }
 
-    let providerName = (configOverride as any)?.provider !== undefined
-      ? (configOverride as any).provider
+    const overrideProvider = (configOverride as any)?.provider;
+    let providerName = overrideProvider !== undefined && overrideProvider !== ""
+      ? overrideProvider
       : this.provider;
 
-    // Auto-detect provider hanya sebagai fallback bila tidak ada provider eksplisit
+    // Auto-detect provider dari payload / headers bila tidak ada provider eksplisit
     if (!providerName) {
       const detected = this.registry.detectFromWebhook(payload, headers as any);
       if (detected) providerName = detected;
@@ -361,7 +371,7 @@ export class Buayar {
    */
   async probePaymentMethods(
     configOverride?: Partial<ProviderConfig>
-  ): Promise<{ success: boolean; enabled: string[]; error?: string }> {
+  ): Promise<{ success: boolean; enabled: string[]; source?: "live" | "static"; error?: string }> {
     const mergedConfig: ProviderConfig = { ...this.config, ...configOverride };
     const providerName = (configOverride as any)?.provider || this.provider;
 
@@ -468,20 +478,40 @@ export class Buayar {
     };
   }
 
-  // ─── Indonesian Provider Client Getters ───────────────────────────────────
+  // ─── Direct Provider Client Escape Hatches (Advanced / Non-Portable) ───────
+  // PERINGATAN: Memanggil client gateway spesifik di bawah ini mengunci kode aplikasi
+  // Anda ke satu payment gateway dan menghilangkan portabilitas zero-code switching.
+  // Gunakan metode unified Buayar (createInvoice, verifyWebhook, dll) agar aplikasi
+  // dapat berganti provider hanya dengan memperbarui konfigurasi environment.
 
+  /**
+   * Escape hatch MidtransClient spesifik (Non-Portable).
+   * @deprecated Disarankan memakai API unified `createInvoice` / `verifyWebhook` agar kode portabel saat switching provider.
+   */
   getMidtransClient(configOverride?: Partial<ProviderConfig>): MidtransClient {
     return new MidtransClient({ ...this.config, ...configOverride });
   }
 
+  /**
+   * Escape hatch DuitkuClient spesifik (Non-Portable).
+   * @deprecated Disarankan memakai API unified `createInvoice` / `verifyWebhook`.
+   */
   getDuitkuClient(configOverride?: Partial<ProviderConfig>): DuitkuClient {
     return new DuitkuClient({ ...this.config, ...configOverride });
   }
 
+  /**
+   * Escape hatch IpaymuClient spesifik (Non-Portable).
+   * @deprecated Disarankan memakai API unified `createInvoice` / `verifyWebhook`.
+   */
   getIpaymuClient(configOverride?: Partial<ProviderConfig>): IpaymuClient {
     return new IpaymuClient({ ...this.config, ...configOverride });
   }
 
+  /**
+   * Escape hatch XenditClient spesifik (Non-Portable).
+   * @deprecated Disarankan memakai API unified `createInvoice` / `verifyWebhook`.
+   */
   getXenditClient(configOverride?: Partial<ProviderConfig>): XenditClient {
     return new XenditClient({ ...this.config, ...configOverride });
   }
@@ -553,4 +583,45 @@ export class Buayar {
   }
 }
 
-export const buayar = new Buayar();
+// ─── Default Instance (lazy) ────────────────────────────────────────────────
+
+let defaultBuayarInstance: Buayar | undefined;
+
+function getDefaultBuayar(): Buayar {
+  if (!defaultBuayarInstance) {
+    defaultBuayarInstance = new Buayar();
+  }
+  return defaultBuayarInstance;
+}
+
+/**
+ * Instance default untuk pemakaian cepat: `buayar.createInvoice(...)`.
+ *
+ * Dibuat **lazy** melalui Proxy: instance `Buayar` sebenarnya baru di-construct saat
+ * properti pertama diakses. Sebelumnya instance dibuat di module scope, sehingga
+ * sekadar `import ... from "@crediblemark/buayar"` sudah membaca environment,
+ * mendeteksi provider, dan mencetak peringatan autodetect — efek samping yang tidak
+ * diinginkan saat import. Peringatan itu tetap muncul untuk pemakaian nyata
+ * (mis. `new Buayar()` tanpa provider eksplisit saat environment sudah terisi).
+ *
+ * Catatan: karena target Proxy adalah objek kosong, `Object.keys(buayar)` tidak
+ * mengembalikan anggota instance. Gunakan `new Buayar()` bila perlu enumerasi.
+ */
+export const buayar: Buayar = new Proxy({} as Buayar, {
+  get(_target, property) {
+    const instance = getDefaultBuayar();
+    const value = Reflect.get(instance, property, instance);
+    // Method dibind ke instance nyata agar aman dipakai setelah di-destructure.
+    return typeof value === "function" ? value.bind(instance) : value;
+  },
+  set(_target, property, value) {
+    return Reflect.set(getDefaultBuayar(), property, value);
+  },
+  has(_target, property) {
+    return property in getDefaultBuayar();
+  },
+  getPrototypeOf() {
+    // Menjaga `buayar instanceof Buayar` tetap benar.
+    return Buayar.prototype;
+  },
+});

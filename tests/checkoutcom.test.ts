@@ -69,10 +69,33 @@ describe("Checkout.com Provider & Client Integration", () => {
       extra: { webhookSecret: secret },
     });
 
-    const result = await buayar.verifyWebhook(payload, { "cko-signature": `sha256=${signature}` });
+    // rawBody WAJIB diteruskan: Checkout.com menandatangani byte persis yang dikirimnya.
+    const result = await buayar.verifyWebhook(
+      payload,
+      { "cko-signature": `sha256=${signature}` },
+      { rawBody }
+    );
     expect(result.provider).toBe("checkoutcom");
     expect(result.isValid).toBe(true);
     expect(result.isPaid).toBe(true);
     expect(result.status).toBe("paid");
+  });
+
+  // SECURITY: tanpa rawBody → fail-closed dengan pesan yang bisa ditindaklanjuti.
+  it("should REJECT a Checkout.com webhook when rawBody is not provided (fail-closed)", async () => {
+    const secret = "mockWebhookSecret123";
+    const payload = { type: "payment_captured", data: { reference: "ORDER-CKO-FORGED", amount: 5000, approved: true } };
+    const signature = createHmac("sha256", secret).update(JSON.stringify(payload)).digest("hex");
+
+    const buayar = new Buayar({
+      provider: "checkoutcom",
+      apiKey: "sk_test_mock",
+      extra: { webhookSecret: secret },
+    });
+
+    const result = await buayar.verifyWebhook(payload, { "cko-signature": `sha256=${signature}` });
+    expect(result.isValid).toBe(false);
+    expect(result.isPaid).toBe(false);
+    expect(result.error).toContain("raw request body");
   });
 });

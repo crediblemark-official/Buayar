@@ -22,10 +22,45 @@ import {
   DisburseResult,
 } from "../../types";
 import { toDokuPaymentMethod } from "../../core/canonical";
+import { CANONICAL_TO_DOKU } from "../../core/canonical";
 import { generateDokuHeaders, verifyDokuWebhookSignature } from "./signature";
+import { sha256 } from "../../utils/crypto";
 import { SnapClient } from "../../clients/snap";
 import { DokuClient } from "../../clients/doku";
 import { verifySnapWebhookSignature, snapTimestamp, snapExternalId, generateSnapSymmetricSignature, sha256Hex } from "./snap";
+import {
+  buildDokuMcpMethods,
+  callDokuMcpTool,
+  createDokuMcpVirtualAccount,
+  DOKU_MCP_DELETE_VA_TOOL,
+  DOKU_MCP_ONLY_VA_CHANNELS,
+  DOKU_MCP_UPDATE_VA_TOOL,
+  fetchDokuMerchantPaymentMethods,
+  resolveDokuMcpCredentials,
+} from "./mcp";
+
+/** D-16: resolusi kanonikal VA mcpOnly dari input bank (mis. "btn" → "btn_va"). */
+function resolveMcpOnlyVaMethod(bank?: string): string | undefined {
+  const b = String(bank || "").toLowerCase().replace(/\s+/g, "_");
+  if (!b) return undefined;
+  const candidate = b.endsWith("_va") ? b : `${b}_va`;
+  return CANONICAL_TO_DOKU[candidate]?.mcpOnly ? candidate : undefined;
+}
+
+/**
+ * DOKU mengirim beberapa tanggal dalam format ringkas `yyyyMMddHHmmss` (zona WIB/UTC+7).
+ * Helper ini mengubahnya menjadi `Date` yang benar-benar merepresentasikan instan WIB.
+ */
+function parseDokuCompactDate(compact: string): Date | undefined {
+  if (!/^\d{14}$/.test(compact)) return undefined;
+  const year = Number(compact.slice(0, 4));
+  const month = Number(compact.slice(4, 6)) - 1;
+  const day = Number(compact.slice(6, 8));
+  const hour = Number(compact.slice(8, 10));
+  const minute = Number(compact.slice(10, 12));
+  const second = Number(compact.slice(12, 14));
+  return new Date(Date.UTC(year, month, day, hour - 7, minute, second));
+}
 
 export class DokuProvider extends BasePaymentProvider {
   readonly name = "doku";
@@ -79,11 +114,38 @@ export class DokuProvider extends BasePaymentProvider {
     const dokuMethod = toDokuPaymentMethod(params.paymentMethod);
     const isDirect = !!dokuMethod;
 
+    // DANA & ShopeePay tidak punya endpoint non-SNAP di DOKU — hanya lewat SNAP.
+    if (dokuMethod?.snapOnly && !this.isSnap(config)) {
+      const requested =
+        typeof params.paymentMethod === "string"
+          ? params.paymentMethod
+          : (params.paymentMethod as any)?.raw || "";
+      return {
+        success: false,
+        provider: "doku",
+        orderId,
+        amount: integerAmount,
+        rawResponse: null,
+        error:
+          `Metode '${requested}' pada DOKU hanya tersedia lewat jalur SNAP ` +
+          "(DOKU tidak menyediakan endpoint non-SNAP untuk kanal ini — QRIS, DANA, dan " +
+          "ShopeePay hanya via SNAP). Aktifkan dengan config.extra.snap = true + " +
+          "Client ID `doku_...` dan Secret Key `SK-...`.",
+      };
+    }
+
     const baseUrl = this.getBaseUrl(sandbox);
 
     try {
       if (this.isSnap(config)) {
         return await this.createSnapInvoice(params, config, baseUrl);
+      }
+      // D-16: kanal VA tanpa endpoint REST non-SNAP (BTN, BJB, BPD Bali, Sinarmas,
+      // OCBC, BNC, BSS) diterbitkan via layanan VA terpadu DOKU — tool MCP
+      // `create_virtual_account_payment` (respons BI-SNAP VA, BIN aggregator merchant).
+      // Butuh kredensial MCP (DOKU_MCP_API_KEY / DOKU_API_KEY → extra.mcpApiKey).
+      if (dokuMethod?.mcpOnly) {
+        return await this.createMcpVaInvoice(params, config, dokuMethod);
       }
       if (isDirect) {
         // Direct Payment API (Jokul v2)
@@ -92,6 +154,8 @@ export class DokuProvider extends BasePaymentProvider {
 
         let payload: any;
         if (dokuMethod.type === "va") {
+          const trimmedInfo =
+            productDetails.length > 30 ? productDetails.substring(0, 27) + "..." : productDetails;
           payload = {
             order: {
               invoice_number: orderId,
@@ -100,8 +164,21 @@ export class DokuProvider extends BasePaymentProvider {
             virtual_account_info: {
               expired_time: 1440,
               reusable_status: false,
-              info1: productDetails.length > 30 ? productDetails.substring(0, 27) + "..." : productDetails,
-              ...(dokuMethod.bank === "bni" ? { merchant_unique_reference: orderId.replace(/\D/g, "").slice(-10) || String(Date.now()).slice(-10) } : {}),
+              // Permata menolak field `info1` (payload → "Invalid JSON Format"); kanal itu
+              // memakai `ref_info` untuk info tambahan (diverifikasi live).
+              ...(dokuMethod.bank === "permata"
+                ? { ref_info: [{ ref_name: "Info", ref_value: trimmedInfo }] }
+                : { info1: trimmedInfo }),
+              // BNI mewajibkan `merchant_unique_reference` (alfanumerik, maks 13, UNIK per
+              // request). Sebelumnya diturunkan dari digit orderId sehingga sering kolaps
+              // jadi 1 karakter dan bentrok ("different request data"). Diambil dari
+              // orderId yang disanitasi (alfanumerik, 13 karakter terakhir).
+              ...(dokuMethod.bank === "bni"
+                ? {
+                    merchant_unique_reference:
+                      orderId.replace(/[^a-zA-Z0-9]/g, "").slice(-13) || `REF${String(Date.now()).slice(-10)}`,
+                  }
+                : {}),
             },
             customer: {
               name: customer.name,
@@ -121,15 +198,17 @@ export class DokuProvider extends BasePaymentProvider {
             ...params.providerParams,
           };
         } else if (dokuMethod.type === "cstore") {
+          // Nama field resmi DOKU non-SNAP adalah `online_to_offline_info` (bukan `online_info`).
+          // `reusable_status` bersifat Mandatory.
           payload = {
             order: {
               invoice_number: orderId,
               amount: integerAmount,
             },
-            online_info: {
+            online_to_offline_info: {
               expired_time: 1440,
               reusable_status: false,
-              info1: productDetails.length > 30 ? productDetails.substring(0, 27) + "..." : productDetails,
+              info: productDetails.length > 30 ? productDetails.substring(0, 27) + "..." : productDetails,
             },
             customer: {
               name: customer.name,
@@ -138,16 +217,33 @@ export class DokuProvider extends BasePaymentProvider {
             ...params.providerParams,
           };
         } else {
-          // E-Wallet
+          // E-Wallet non-SNAP: DOKU hanya menyediakan OVO Push Payment di jalur ini.
+          // Endpoint resmi: POST /ovo-emoney/v1/payment
+          // Payload: client.id + order + ovo_info.ovo_id + security.check_sum
+          // check_sum = sha256(order.amount + client.id + order.invoice_number + ovo_id + secretKey)
+          if (!customer.phone) {
+            return {
+              success: false,
+              provider: "doku",
+              orderId,
+              amount: integerAmount,
+              rawResponse: null,
+              error:
+                "DOKU OVO Push Payment membutuhkan customer.phone (ovo_info.ovo_id). DANA & ShopeePay hanya tersedia via SNAP (config.extra.snap).",
+            };
+          }
+          const checkSum = sha256(`${integerAmount}${clientId}${orderId}${customer.phone}${secretKey}`);
           payload = {
+            client: { id: clientId },
             order: {
               invoice_number: orderId,
               amount: integerAmount,
             },
-            customer: {
-              name: customer.name,
-              email: customer.email,
-              phone: customer.phone,
+            ovo_info: {
+              ovo_id: customer.phone,
+            },
+            security: {
+              check_sum: checkSum,
             },
             ...params.providerParams,
           };
@@ -194,15 +290,27 @@ export class DokuProvider extends BasePaymentProvider {
           res.vaNumber = data.virtual_account_info.virtual_account_number;
           res.vaBank = dokuMethod.bank;
           res.paymentUrl = data.virtual_account_info.how_to_pay_page;
-          if (data.virtual_account_info.expired_date) {
-            res.expiresAt = new Date(data.virtual_account_info.expired_date);
+          // Sebagian bank mengembalikan `expired_date` format compact `yyyyMMddHHmmss`
+          // (bukan ISO) → `new Date()` langsung menghasilkan Invalid Date. Utamakan
+          // `expired_date_utc` (ISO) bila ada, lalu parse compact dengan helper.
+          const vaExp = data.virtual_account_info.expired_date_utc || data.virtual_account_info.expired_date;
+          if (vaExp) {
+            res.expiresAt = String(vaExp).length === 14 ? parseDokuCompactDate(String(vaExp)) : new Date(vaExp);
           }
         } else if (data.qris_info) {
           res.qrString = data.qris_info.qr_content;
           res.qrCodeUrl = data.qris_info.qr_image_url;
-        } else if (data.online_info) {
-          res.paymentCode = data.online_info.payment_code;
-          res.paymentUrl = data.online_info.how_to_pay_page;
+        } else if (data.online_to_offline_info) {
+          res.paymentCode = data.online_to_offline_info.payment_code;
+          res.paymentUrl = data.online_to_offline_info.how_to_pay_page;
+          const exp = data.online_to_offline_info.expired_date || data.online_to_offline_info.expired_date_utc;
+          if (exp) res.expiresAt = exp.length === 14 ? parseDokuCompactDate(exp) : new Date(exp);
+        } else if (data.ovo_payment) {
+          // OVO Push Payment: sukses bila `ovo_payment.status === "SUCCESS"`.
+          res.mode = "ewallet";
+          if (String(data.ovo_payment.status || "").toUpperCase() === "SUCCESS") {
+            res.reference = String(data.ovo_payment.reference_number || data.order?.invoice_number || orderId);
+          }
         } else if (data.payment_instruction) {
           res.deeplink = data.payment_instruction.url || data.payment_instruction.deeplink;
           res.paymentUrl = res.deeplink;
@@ -286,6 +394,83 @@ export class DokuProvider extends BasePaymentProvider {
         amount: integerAmount,
         rawResponse: null,
         error: e.message || "Failed to make request to DOKU API",
+      };
+    }
+  }
+
+  /**
+   * D-16: buat transaksi VA untuk kanal **mcpOnly** (BTN, BJB, BPD Bali, Sinarmas, OCBC,
+   * BNC, BSS) lewat tool MCP `create_virtual_account_payment`. Respons berbentuk BI-SNAP
+   * VA (`virtualAccountData`) — dinormalkan ke `InvoiceResponse`.
+   */
+  private async createMcpVaInvoice(
+    params: CreateInvoiceParams,
+    config: ProviderConfig,
+    dokuMethod: { endpoint: string; type: "va" | "qris" | "cstore" | "ewallet"; bank?: string; snapOnly?: boolean; mcpOnly?: boolean }
+  ): Promise<InvoiceResponse> {
+    const { orderId, amount, customer } = params;
+    const integerAmount = Math.round(amount);
+    const creds = resolveDokuMcpCredentials(config);
+    const bank = String(dokuMethod.bank || "").replace(/\s+/g, "_");
+    const method = `${bank}_va`;
+    const channel = DOKU_MCP_ONLY_VA_CHANNELS[method];
+
+    if (!creds || !channel) {
+      return {
+        success: false,
+        provider: "doku",
+        orderId,
+        amount: integerAmount,
+        rawResponse: null,
+        error:
+          `Kanal '${method}' tidak punya endpoint REST non-SNAP di DOKU. Terbitkan via ` +
+          "DOKU MCP Server: isi DOKU_MCP_API_KEY (API Key General, bukan Secret Key SK-...) " +
+          "di config.extra.mcpApiKey, atau aktifkan jalur SNAP (config.extra.snap = true).",
+      };
+    }
+
+    try {
+      const data = await createDokuMcpVirtualAccount(creds, {
+        channel,
+        amount: integerAmount,
+        trxId: orderId,
+        customerName: customer.name,
+        customerEmail: customer.email,
+        customerPhone: customer.phone,
+      });
+      const va = data?.virtualAccountData;
+      if (!va) {
+        return {
+          success: false,
+          provider: "doku",
+          orderId,
+          amount: integerAmount,
+          rawResponse: data,
+          error:
+            data?.responseMessage || data?.error?.message || "DOKU MCP VA gagal dibuat (tanpa virtualAccountData)",
+        };
+      }
+      return {
+        success: true,
+        provider: "doku",
+        mode: "va",
+        orderId: va.trxId || orderId,
+        amount: Number(va.totalAmount?.value || integerAmount) || integerAmount,
+        reference: va.virtualAccountNo || orderId,
+        vaNumber: String(va.virtualAccountNo || "").trim(),
+        vaBank: bank.replace(/_/g, " "),
+        paymentUrl: va.additionalInfo?.howToPayPage,
+        expiresAt: va.expiredDate ? new Date(va.expiredDate) : undefined,
+        rawResponse: data,
+      } as VirtualAccountResponse;
+    } catch (e: any) {
+      return {
+        success: false,
+        provider: "doku",
+        orderId,
+        amount: integerAmount,
+        rawResponse: null,
+        error: e?.message || "Failed to create DOKU MCP Virtual Account",
       };
     }
   }
@@ -424,7 +609,8 @@ export class DokuProvider extends BasePaymentProvider {
       validityPeriod: config.extra?.validityPeriod || new Date(Date.now() + 3600 * 1000).toISOString(),
       additionalInfo: {
         postalCode: config.extra?.postalCode || "10110",
-        feeType: 1,
+        // Contoh resmi SNAP memakai string, bukan number.
+        feeType: "1",
       },
     };
     if (params.providerParams) {
@@ -509,24 +695,6 @@ export class DokuProvider extends BasePaymentProvider {
       return this.verifySnapCallback(body, config, headers);
     }
 
-    const rawStatus = (body.transaction?.status || body.status || "").toUpperCase();
-
-    const isPaid = rawStatus === "SUCCESS" || rawStatus === "PAID" || rawStatus === "SETTLED";
-    const isPending = rawStatus === "PENDING";
-    const isExpired = rawStatus === "EXPIRED";
-    const isFailed = rawStatus === "FAILED" || (!isPaid && !isPending && !isExpired);
-
-    const orderId = body.order?.invoice_number || body.invoice_number || body.order_id || "";
-    const amount = body.order?.amount || body.amount || 0;
-
-    const status: "paid" | "pending" | "failed" | "expired" = isPaid
-      ? "paid"
-      : isPending
-        ? "pending"
-        : isExpired
-          ? "expired"
-          : "failed";
-
     const secretKey = config.secretKey || config.apiKey || "";
     const signature = headers["signature"] || headers["Signature"] || config.extra?.dokuSignature || config.extra?.signatureHeader;
     const clientId = config.merchantCode || config.clientKey || "";
@@ -534,8 +702,30 @@ export class DokuProvider extends BasePaymentProvider {
     // SECURITY: default false — tanpa signature/header, webhook ditolak.
     let isValid = false;
     if (signature || (headers && (headers["request-id"] || headers["Request-Id"]))) {
-      isValid = verifyDokuWebhookSignature(headers, body, clientId, secretKey);
+      // Sertakan rawBody bila tersedia agar Digest dihitung dari byte asli
+      // (JSON.stringify atas objek hasil parse tidak akurat).
+      isValid = verifyDokuWebhookSignature(headers, body, clientId, secretKey, undefined, config.rawBody);
     }
+
+    const rawStatus = (body.transaction?.status || body.status || "").toUpperCase();
+
+    const isPaid = isValid && (rawStatus === "SUCCESS" || rawStatus === "PAID" || rawStatus === "SETTLED");
+    const isPending = isValid && rawStatus === "PENDING";
+    const isExpired = isValid && rawStatus === "EXPIRED";
+    const isFailed = !isValid || rawStatus === "FAILED" || (!isPaid && !isPending && !isExpired);
+
+    const orderId = body.order?.invoice_number || body.invoice_number || body.order_id || "";
+    const amount = body.order?.amount || body.amount || 0;
+
+    const status: "paid" | "pending" | "failed" | "expired" = !isValid
+      ? "failed"
+      : isPaid
+        ? "paid"
+        : isPending
+          ? "pending"
+          : isExpired
+            ? "expired"
+            : "failed";
 
     return {
       isValid,
@@ -581,12 +771,14 @@ export class DokuProvider extends BasePaymentProvider {
     // Status: payment notification diterima → PAID. field status eksplisit bila ada.
     const explicitStatus = String(body.transactionStatus || body.status || body.latestTransactionStatus || "").toUpperCase();
     const isPaid =
-      explicitStatus === "SUCCESS" || explicitStatus === "PAID" || explicitStatus === "SETTLED" || explicitStatus === "00" ||
-      (!explicitStatus && Boolean(body.paidAmount?.value ?? body.totalAmount?.value));
-    const isPending = explicitStatus === "PENDING" || explicitStatus === "11" || explicitStatus === "ONGOING";
-    const isFailed = explicitStatus === "FAILED" || explicitStatus === "DECLINED" ||
+      isValid && (
+        explicitStatus === "SUCCESS" || explicitStatus === "PAID" || explicitStatus === "SETTLED" || explicitStatus === "00" ||
+        (!explicitStatus && Boolean(body.paidAmount?.value ?? body.totalAmount?.value))
+      );
+    const isPending = isValid && (explicitStatus === "PENDING" || explicitStatus === "11" || explicitStatus === "ONGOING");
+    const isExpired = isValid && explicitStatus === "EXPIRED";
+    const isFailed = !isValid || explicitStatus === "FAILED" || explicitStatus === "DECLINED" ||
       (Boolean(explicitStatus) && !isPaid && !isPending && explicitStatus !== "00");
-    const isExpired = explicitStatus === "EXPIRED";
 
     const orderId =
       body.trxId || body.partnerReferenceNo || body.originalPartnerReferenceNo ||
@@ -594,13 +786,15 @@ export class DokuProvider extends BasePaymentProvider {
 
     const paidValue = body.paidAmount?.value ?? body.totalAmount?.value ?? body.amount?.value ?? body.amount ?? 0;
 
-    const status: "paid" | "pending" | "failed" | "expired" = isPaid
-      ? "paid"
-      : isPending
-        ? "pending"
-        : isExpired
-          ? "expired"
-          : "failed";
+    const status: "paid" | "pending" | "failed" | "expired" = !isValid
+      ? "failed"
+      : isPaid
+        ? "paid"
+        : isPending
+          ? "pending"
+          : isExpired
+            ? "expired"
+            : "failed";
 
     return {
       isValid,
@@ -619,6 +813,31 @@ export class DokuProvider extends BasePaymentProvider {
 
 
   async getPaymentMethods(params: GetPaymentMethodsParams, config: ProviderConfig): Promise<GetPaymentMethodsResult> {
+    // 1. LIVE: DOKU MCP Server `get_merchant_payment_methods` — channel yang benar-benar
+    //    terdaftar/aktif untuk akun merchant ini. Aktif bila kredensial MCP tersedia
+    //    (`DOKU_MCP_API_KEY`/`DOKU_API_KEY` → `extra.mcpApiKey`).
+    const mcpCreds = resolveDokuMcpCredentials(config);
+    if (mcpCreds) {
+      const payload = await fetchDokuMerchantPaymentMethods(mcpCreds);
+      const mcpMethods = payload ? buildDokuMcpMethods(payload) : [];
+      if (mcpMethods.length > 0) {
+        const mcpCategories: Record<string, PaymentMethod[]> = {};
+        for (const item of mcpMethods) {
+          (mcpCategories[item.category] ||= []).push(item);
+        }
+        return {
+          success: true,
+          provider: "doku",
+          methods: mcpMethods,
+          categories: mcpCategories,
+          // `source: "mcp"` menandai bahwa daftar ini LIVE (dibaca dari MCP),
+          // bukan katalog statis SDK.
+          rawResponse: { source: "mcp", url: mcpCreds.url, ...payload },
+        };
+      }
+    }
+
+    // 2. Fallback: katalog statis SDK.
     const staticMethods: PaymentMethod[] = [
       {
         paymentMethod: "bca_va",
@@ -775,6 +994,34 @@ export class DokuProvider extends BasePaymentProvider {
     };
   }
 
+  async probePaymentMethods(config: ProviderConfig): Promise<{
+    success: boolean;
+    enabled: string[];
+    source?: "live" | "static";
+    error?: string;
+  }> {
+    // LIVE bila daftar berasal dari DOKU MCP (`rawResponse.source === "mcp"`);
+    // `"static"` bila jatuh ke katalog SDK (tanpa kredensial MCP / MCP gagal).
+    try {
+      const res = await this.getPaymentMethods({ amount: 10000 }, config);
+      const raw: any = res.rawResponse;
+      const live = !!raw && !Array.isArray(raw) && raw.source === "mcp";
+      return {
+        success: res.success,
+        enabled: res.success ? res.methods.map((m) => m.paymentMethod) : [],
+        source: live ? "live" : "static",
+        ...(res.error ? { error: res.error } : {}),
+      };
+    } catch (e: any) {
+      return {
+        success: false,
+        enabled: [],
+        source: "static",
+        error: e?.message || "Failed to probe DOKU payment methods",
+      };
+    }
+  }
+
   async checkTransaction(params: CheckTransactionParams, config: ProviderConfig): Promise<CheckTransactionResult> {
     const { merchantOrderId } = params;
     const clientId = config.merchantCode || config.merchantId || config.clientKey || "";
@@ -882,18 +1129,43 @@ export class DokuProvider extends BasePaymentProvider {
   ): Promise<CheckTransactionResult> {
     const { merchantOrderId } = params;
     const snap = this.buildSnap(config);
+    // Query QRIS dan Query VA memakai endpoint + service code berbeda. Pilih lewat
+    // `config.extra.snapQueryType` ("qr" default, "va" untuk Virtual Account).
+    const queryType = String(config.extra?.snapQueryType || "qr").toLowerCase();
     try {
-      const body: any = {
-        originalPartnerReferenceNo: merchantOrderId,
-        serviceCode: "47",
-        merchantId: config.extra?.merchantId || config.projectId || "",
-      };
-      const data = await snap.request("POST", "/snap-adapter/b2b/v1.0/qr/qr-mpm-query", body);
+      let data: any;
+      let paymentType: string;
 
-      const txStatus = String(data.latestTransactionStatus || "").toUpperCase();
-      const isPaid = txStatus === "SUCCESS" || txStatus === "00" || txStatus === "PAID" || txStatus === "SETTLED";
-      const isPending = txStatus === "PENDING" || txStatus === "ONGOING" || txStatus === "11";
-      const isExpired = txStatus === "EXPIRED";
+      if (queryType === "va") {
+        // SNAP VA — inquiry/status. Wajib menyertakan partnerServiceId + customerNo
+        // (dari dashboard DOKU) agar bisa ditelusuri oleh issuer.
+        const body: any = {
+          partnerServiceId: String(config.extra?.partnerServiceId || "").padStart(8, " ").slice(0, 8),
+          customerNo: String(config.extra?.customerNo || "").slice(0, 20),
+          virtualAccountNo: config.extra?.virtualAccountNo || merchantOrderId,
+          trxId: merchantOrderId,
+          additionalInfo: {},
+        };
+        data = await snap.request("POST", "/virtual-accounts/bi-snap-va/v1.1/transfer-va/status", body);
+        paymentType = "VIRTUAL_ACCOUNT";
+      } else {
+        const body: any = {
+          // Field ini wajib pada Query QRIS SNAP.
+          originalReferenceNo: config.extra?.originalReferenceNo || merchantOrderId,
+          originalPartnerReferenceNo: merchantOrderId,
+          serviceCode: "47",
+          merchantId: config.extra?.merchantId || config.projectId || "",
+        };
+        data = await snap.request("POST", "/snap-adapter/b2b/v1.0/qr/qr-mpm-query", body);
+        paymentType = "QRIS";
+      }
+
+      const vaStatus = data.virtualAccountData?.paymentFlagStatus ?? data.paymentFlagStatus;
+      const txStatus = String(data.latestTransactionStatus ?? vaStatus ?? "").toUpperCase();
+      const isPaid =
+        txStatus === "SUCCESS" || txStatus === "00" || txStatus === "PAID" || txStatus === "SETTLED" || txStatus === "PAID";
+      const isPending = txStatus === "PENDING" || txStatus === "ONGOING" || txStatus === "11" || txStatus === "03";
+      const isExpired = txStatus === "EXPIRED" || txStatus === "04";
       const isFailed = txStatus === "FAILED" || txStatus === "DECLINED" || (Boolean(txStatus) && !isPaid && !isPending && !isExpired);
 
       const status: "paid" | "pending" | "failed" | "expired" = isPaid
@@ -904,12 +1176,13 @@ export class DokuProvider extends BasePaymentProvider {
             ? "expired"
             : "failed";
 
+      const va = data.virtualAccountData || {};
       return {
         success: true,
         provider: "doku",
-        orderId: data.originalPartnerReferenceNo || merchantOrderId,
-        reference: data.originalReferenceNo || "",
-        amount: Number(data.amount?.value || 0),
+        orderId: data.originalPartnerReferenceNo || va.trxId || merchantOrderId,
+        reference: data.originalReferenceNo || va.virtualAccountNo || "",
+        amount: Number(data.amount?.value ?? va.totalAmount?.value ?? 0),
         statusCode: txStatus || String(data.responseCode || ""),
         status,
         isPaid,
@@ -917,7 +1190,7 @@ export class DokuProvider extends BasePaymentProvider {
         isFailed,
         isExpired,
         statusMessage: txStatus || data.responseMessage || "",
-        paymentType: "QRIS",
+        paymentType,
         rawResponse: data,
       };
     } catch (e: any) {
@@ -940,10 +1213,134 @@ export class DokuProvider extends BasePaymentProvider {
     }
   }
 
+  /** D-16: update VA kanal mcpOnly via tool MCP `update_virtual_account_payment`. */
+  private async updateMcpVirtualAccount(
+    params: UpdateVaParams,
+    config: ProviderConfig,
+    method: string
+  ): Promise<UpdateVaResult> {
+    const creds = resolveDokuMcpCredentials(config);
+    const channel = DOKU_MCP_ONLY_VA_CHANNELS[method];
+    if (!creds || !channel || !params.vaNumber) {
+      return {
+        success: false,
+        provider: "doku",
+        orderId: params.orderId,
+        vaNumber: params.vaNumber,
+        rawResponse: null,
+        error: !creds
+          ? "Kanal ini tidak punya endpoint REST non-SNAP; update VA via DOKU MCP butuh DOKU_MCP_API_KEY (extra.mcpApiKey)."
+          : "vaNumber wajib diisi untuk update VA via DOKU MCP.",
+      };
+    }
+    try {
+      const toolRequest: Record<string, any> = {
+        channel,
+        trxId: params.orderId,
+        virtualAccountNo: params.vaNumber,
+        virtualAccountName: params.providerParams?.virtualAccountName || "Customer",
+      };
+      if (params.amount !== undefined) toolRequest.totalAmount = String(Math.round(params.amount));
+      const data = await callDokuMcpTool(creds, DOKU_MCP_UPDATE_VA_TOOL, { toolRequest });
+      const va = data?.virtualAccountData;
+      if (!va) {
+        return {
+          success: false,
+          provider: "doku",
+          orderId: params.orderId,
+          vaNumber: params.vaNumber,
+          rawResponse: data,
+          error: data?.responseMessage || "Update VA DOKU MCP gagal (tanpa virtualAccountData)",
+        };
+      }
+      return {
+        success: true,
+        provider: "doku",
+        orderId: va.trxId || params.orderId,
+        vaNumber: String(va.virtualAccountNo || params.vaNumber).trim(),
+        amount: params.amount,
+        expiresAt: va.expiredDate ? new Date(va.expiredDate) : undefined,
+        rawResponse: data,
+      };
+    } catch (e: any) {
+      return {
+        success: false,
+        provider: "doku",
+        orderId: params.orderId,
+        vaNumber: params.vaNumber,
+        rawResponse: null,
+        error: e?.message || "Failed to update DOKU MCP Virtual Account",
+      };
+    }
+  }
+
+  /** D-16: hapus VA kanal mcpOnly via tool MCP `delete_virtual_account_payment`. */
+  private async deleteMcpVirtualAccount(
+    params: DeleteVaParams,
+    config: ProviderConfig,
+    method: string
+  ): Promise<DeleteVaResult> {
+    const creds = resolveDokuMcpCredentials(config);
+    const channel = DOKU_MCP_ONLY_VA_CHANNELS[method];
+    if (!creds || !channel || !params.vaNumber) {
+      return {
+        success: false,
+        provider: "doku",
+        orderId: params.orderId,
+        vaNumber: params.vaNumber,
+        rawResponse: null,
+        error: !creds
+          ? "Kanal ini tidak punya endpoint REST non-SNAP; delete VA via DOKU MCP butuh DOKU_MCP_API_KEY (extra.mcpApiKey)."
+          : "vaNumber wajib diisi untuk delete VA via DOKU MCP.",
+      };
+    }
+    try {
+      const data = await callDokuMcpTool(creds, DOKU_MCP_DELETE_VA_TOOL, {
+        toolRequest: {
+          channel,
+          trxId: params.orderId,
+          virtualAccountNo: params.vaNumber,
+        },
+      });
+      if (!data) {
+        return {
+          success: false,
+          provider: "doku",
+          orderId: params.orderId,
+          vaNumber: params.vaNumber,
+          rawResponse: null,
+          error: "Delete VA DOKU MCP gagal (tanpa respons)",
+        };
+      }
+      return {
+        success: true,
+        provider: "doku",
+        orderId: data.trxId || params.orderId,
+        vaNumber: String(data.virtualAccountNo || params.vaNumber).trim(),
+        status: data.responseMessage || data.status || "DELETED",
+        rawResponse: data,
+      };
+    } catch (e: any) {
+      return {
+        success: false,
+        provider: "doku",
+        orderId: params.orderId,
+        vaNumber: params.vaNumber,
+        rawResponse: null,
+        error: e?.message || "Failed to delete DOKU MCP Virtual Account",
+      };
+    }
+  }
+
   /**
    * Update Virtual Account (Jokul v2 atau BI-SNAP)
    */
   async updateVirtualAccount(params: UpdateVaParams, config: ProviderConfig): Promise<UpdateVaResult> {
+    // D-16: kanal mcpOnly (BTN, BJB, ...) tidak punya endpoint REST — pakai MCP tool.
+    const mcpMethod = resolveMcpOnlyVaMethod(params.bank);
+    if (mcpMethod) {
+      return this.updateMcpVirtualAccount(params, config, mcpMethod);
+    }
     try {
       const client = new DokuClient(config);
       const data = await client.updateVirtualAccount(params);
@@ -973,6 +1370,11 @@ export class DokuProvider extends BasePaymentProvider {
    * Delete / Cancel Virtual Account (Jokul v2 atau BI-SNAP)
    */
   async deleteVirtualAccount(params: DeleteVaParams, config: ProviderConfig): Promise<DeleteVaResult> {
+    // D-16: kanal mcpOnly (BTN, BJB, ...) tidak punya endpoint REST — pakai MCP tool.
+    const mcpMethod = resolveMcpOnlyVaMethod(params.bank);
+    if (mcpMethod) {
+      return this.deleteMcpVirtualAccount(params, config, mcpMethod);
+    }
     try {
       const client = new DokuClient(config);
       const data = await client.deleteVirtualAccount(params);

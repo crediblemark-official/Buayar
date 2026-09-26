@@ -146,8 +146,15 @@ function firstDefined(env: Record<string, string | undefined>, keys?: string[]):
 function resolveSandbox(env: Record<string, string | undefined>, provider: string): boolean {
   const universal = firstDefined(env, ["BUAYAR_SANDBOX", "PG_SANDBOX", "PAYMENT_SANDBOX"]);
   if (universal !== undefined) return universal === "true" || universal === "1";
+
+  // Midtrans: dukung MIDTRANS_SANDBOX langsung, atau MIDTRANS_IS_PRODUCTION (inversi legacy)
+  if (provider === "midtrans") {
+    if (env.MIDTRANS_SANDBOX !== undefined) return env.MIDTRANS_SANDBOX === "true" || env.MIDTRANS_SANDBOX === "1";
+    if (env.MIDTRANS_IS_PRODUCTION !== undefined) return env.MIDTRANS_IS_PRODUCTION !== "true" && env.MIDTRANS_IS_PRODUCTION !== "1";
+  }
+
   const specificMap: Record<string, string[]> = {
-    midtrans: ["MIDTRANS_IS_PRODUCTION"],
+    midtrans: ["MIDTRANS_SANDBOX"],
     duitku: ["DUITKU_SANDBOX"],
     ipaymu: ["IPAYMU_SANDBOX"],
     doku: ["DOKU_SANDBOX"],
@@ -170,7 +177,6 @@ function resolveSandbox(env: Record<string, string | undefined>, provider: strin
   };
   const specific = firstDefined(env, specificMap[provider]);
   if (specific !== undefined) {
-    if (provider === "midtrans") return specific !== "true" && specific !== "1";
     return specific === "true" || specific === "1";
   }
   return env.NODE_ENV !== "production";
@@ -187,9 +193,18 @@ export function resolveConfigFromEnv(customConfig?: BuayarConfig): BuayarConfig 
     env.BUAYAR_PROVIDER ||
     env.PAYMENT_PROVIDER ||
     ""
-  ).toLowerCase().trim();
-  let provider = explicit || providerRegistry.detectFromEnv(env as any) || "midtrans";
-  provider = provider.replace("oyindonesia", "oy").replace("2checkout", "twocheckout");
+  ).toLowerCase().trim().replace("oyindonesia", "oy").replace("2checkout", "twocheckout");
+
+  const detected = !explicit ? providerRegistry.detectFromEnv(env as any) : undefined;
+  if (!explicit && detected) {
+    if (typeof console !== "undefined" && console.warn) {
+      console.warn(
+        `[Buayar] Warning: Active payment provider was not explicitly configured; autodetected '${detected}' from environment credentials. Set BUAYAR_PROVIDER='${detected}' in production to avoid ambiguity.`
+      );
+    }
+  }
+
+  const provider = explicit || detected || "";
 
   // 2. Sandbox
   const sandbox = customConfig?.sandbox ?? resolveSandbox(env, provider);
@@ -214,30 +229,41 @@ export function resolveConfigFromEnv(customConfig?: BuayarConfig): BuayarConfig 
   const callbackUrl = customConfig?.callbackUrl || env.BUAYAR_CALLBACK_URL || env.PG_CALLBACK_URL || env.PAYMENT_CALLBACK_URL;
   const returnUrl = customConfig?.returnUrl || env.BUAYAR_RETURN_URL || env.PG_RETURN_URL || env.PAYMENT_RETURN_URL;
   const publicKey = customConfig?.publicKey || firstDefined(env, ["BUAYAR_PUBLIC_KEY", "PG_PUBLIC_KEY", "PUBLIC_KEY"]) || cfg.clientKey;
-  const privateKey = customConfig?.privateKey || firstDefined(env, ["BUAYAR_PRIVATE_KEY", "PG_PRIVATE_KEY", "PRIVATE_KEY"]) || (provider === "braintree" ? cfg.apiKey : undefined);
+  const privateKey = customConfig?.privateKey || firstDefined(env, ["BUAYAR_PRIVATE_KEY", "PG_PRIVATE_KEY", "PRIVATE_KEY"]) || cfg.apiKey;
 
   const extra = {
-    webhookToken: (env.SUMOPOD_SANDBOX === 'true' ? env.SUMOPOD_SANDBOX_WEBHOOK_TOKEN : env.SUMOPOD_PRODUCTION_WEBHOOK_TOKEN) || env.SUMOPOD_WEBHOOK_TOKEN || env.XENDIT_WEBHOOK_TOKEN || env.BUAYAR_WEBHOOK_TOKEN,
-    webhookSecret: (env.SUMOPOD_SANDBOX === 'true' ? env.SUMOPOD_SANDBOX_WEBHOOK_SECRET : env.SUMOPOD_PRODUCTION_WEBHOOK_SECRET) || env.SUMOPOD_WEBHOOK_SECRET || env.STRIPE_WEBHOOK_SECRET || env.CHECKOUTCOM_WEBHOOK_SECRET || env.RAZORPAY_WEBHOOK_SECRET || env.BUAYAR_WEBHOOK_SECRET,
-    merchantName: env.FASPAY_MERCHANT_NAME || env.BUAYAR_MERCHANT_NAME,
-    userId: env.FASPAY_USER_ID,
-    iMid: env.NICEPAY_IMID,
-    username: env.OY_USERNAME,
-    hmacKey: env.ADYEN_HMAC_KEY,
+    webhookToken: (customConfig as any)?.webhookToken || (provider === "xendit" ? (customConfig?.secretKey || customConfig?.apiKey) : undefined) || (env.SUMOPOD_SANDBOX === 'true' ? env.SUMOPOD_SANDBOX_WEBHOOK_TOKEN : env.SUMOPOD_PRODUCTION_WEBHOOK_TOKEN) || env.SUMOPOD_WEBHOOK_TOKEN || env.XENDIT_WEBHOOK_TOKEN || env.BUAYAR_WEBHOOK_TOKEN,
+    webhookSecret: (customConfig as any)?.webhookSecret || customConfig?.secretKey || (env.SUMOPOD_SANDBOX === 'true' ? env.SUMOPOD_SANDBOX_WEBHOOK_SECRET : env.SUMOPOD_PRODUCTION_WEBHOOK_SECRET) || env.SUMOPOD_WEBHOOK_SECRET || env.STRIPE_WEBHOOK_SECRET || env.CHECKOUTCOM_WEBHOOK_SECRET || env.RAZORPAY_WEBHOOK_SECRET || env.BUAYAR_WEBHOOK_SECRET,
+    merchantName: (customConfig as any)?.merchantName || env.FASPAY_MERCHANT_NAME || env.BUAYAR_MERCHANT_NAME,
+    userId: (customConfig as any)?.userId || env.FASPAY_USER_ID,
+    iMid: (customConfig as any)?.iMid || (customConfig as any)?.imid || env.NICEPAY_IMID,
+    username: (customConfig as any)?.username || env.OY_USERNAME,
+    hmacKey: (customConfig as any)?.hmacKey || (provider === "adyen" ? customConfig?.secretKey : undefined) || env.ADYEN_HMAC_KEY,
     liveUrlPrefix: env.ADYEN_LIVE_URL_PREFIX,
-    webhookId: env.PAYPAL_WEBHOOK_ID,
-    merchantAccount: env.ADYEN_MERCHANT_ACCOUNT,
-    md5Key: env.PAYU_MD5_KEY,
-    oauthClientId: env.PAYU_OAUTH_CLIENT_ID,
-    oauthClientSecret: env.PAYU_OAUTH_CLIENT_SECRET,
-    locationId: env.SQUARE_LOCATION_ID,
-    webhookSignatureKey: env.SQUARE_WEBHOOK_SIGNATURE_KEY,
-    publicKey: env.BRAINTREE_PUBLIC_KEY || env.ADYEN_CLIENT_KEY,
-    secretWord: env.TWOCHECKOUT_SECRET_WORD,
+    webhookId: (customConfig as any)?.webhookId || (provider === "paypal" ? customConfig?.projectId : undefined) || env.PAYPAL_WEBHOOK_ID,
+    merchantAccount: (customConfig as any)?.merchantAccount || (provider === "adyen" ? customConfig?.merchantCode : undefined) || env.ADYEN_MERCHANT_ACCOUNT,
+    md5Key: (customConfig as any)?.md5Key || customConfig?.apiKey || env.PAYU_MD5_KEY,
+    oauthClientId: (customConfig as any)?.oauthClientId || env.PAYU_OAUTH_CLIENT_ID,
+    oauthClientSecret: (customConfig as any)?.oauthClientSecret || env.PAYU_OAUTH_CLIENT_SECRET,
+    locationId: (customConfig as any)?.locationId || env.SQUARE_LOCATION_ID,
+    webhookSignatureKey: (customConfig as any)?.webhookSignatureKey || (provider === "square" ? customConfig?.secretKey : undefined) || env.SQUARE_WEBHOOK_SIGNATURE_KEY,
+    publicKey: (customConfig as any)?.publicKey || customConfig?.clientKey || env.BRAINTREE_PUBLIC_KEY || env.ADYEN_CLIENT_KEY,
+    secretWord: (customConfig as any)?.secretWord || customConfig?.apiKey || env.TWOCHECKOUT_SECRET_WORD,
+    // DOKU MCP Server (sumber daftar channel LIVE). API Key "General" DOKU berbeda
+    // dari Secret Key `SK-...`, jadi disimpan terpisah di `extra.mcpApiKey`.
+    mcpApiKey:
+      (customConfig as any)?.mcpApiKey ||
+      (provider === "doku" ? env.DOKU_MCP_API_KEY || env.DOKU_API_KEY : undefined) ||
+      env.BUAYAR_MCP_API_KEY,
+    mcpUrl: (customConfig as any)?.mcpUrl || env.DOKU_MCP_URL,
     ...customConfig?.extra,
   };
 
   const apiKey = cfg.apiKey || cfg.secretKey || cfg.serverKey;
+  const simulate =
+    customConfig?.simulate !== undefined
+      ? customConfig.simulate
+      : env.BUAYAR_SIMULATE === "1" || env.BUAYAR_SIMULATE === "true";
 
   return {
     provider,
@@ -251,6 +277,7 @@ export function resolveConfigFromEnv(customConfig?: BuayarConfig): BuayarConfig 
     publicKey,
     privateKey,
     sandbox,
+    simulate,
     callbackUrl,
     returnUrl,
     extra,

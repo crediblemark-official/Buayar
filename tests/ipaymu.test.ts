@@ -376,6 +376,111 @@ describe("iPaymu Provider & Client Integration", () => {
     }
   });
 
+  it("should send product/qty/price on Direct Payment, plus item dims; COD channel kini lolos validasi 'product wajib diisi' (I-7)", async () => {
+    let capturedBody: any = null;
+    const originalFetch = globalThis.fetch;
+    (globalThis as any).fetch = async (_url: any, options: any) => {
+      capturedBody = JSON.parse(options.body);
+      return {
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify({
+            Status: 200,
+            Success: true,
+            Data: { TransactionId: 500, PaymentNo: "1234567890" },
+          }),
+      } as any;
+    };
+
+    try {
+      const buayar = new Buayar({
+        provider: "ipaymu",
+        merchantCode: "0000001411234567",
+        apiKey: "test-api-key",
+      });
+
+      // COD: wajib membawa product/qty/price + dimensi (weight/width/length).
+      await buayar.createInvoice({
+        orderId: "ORDER-COD",
+        amount: 25000,
+        paymentMethod: "cod",
+        productDetails: "Paket COD",
+        customer: { name: "Budi", email: "budi@mail.com" },
+        items: [{ name: "Kaos", price: 25000, quantity: 1, weight: 1, width: 10, length: 20, height: 5 }],
+      });
+      expect(capturedBody.paymentMethod).toBe("cod");
+      expect(capturedBody.paymentChannel).toBe("cod");
+      expect(capturedBody.product).toEqual(["Kaos"]);
+      expect(capturedBody.qty).toEqual([1]);
+      expect(capturedBody.price).toEqual([25000]);
+      expect(capturedBody.weight).toEqual([1]);
+      expect(capturedBody.width).toEqual([10]);
+      expect(capturedBody.length).toEqual([20]);
+      expect(capturedBody.height).toEqual([5]);
+
+      // Tanpa items: product jatuh ke productDetails; dimensi tidak dikirim
+      // (dipasok merchant lewat providerParams bila COD).
+      await buayar.createInvoice({
+        orderId: "ORDER-VA",
+        amount: 10000,
+        paymentMethod: "bca_va",
+        productDetails: "Langganan Premium",
+        customer: { name: "Budi", email: "budi@mail.com" },
+      });
+      expect(capturedBody.product).toEqual(["Langganan Premium"]);
+      expect(capturedBody.qty).toEqual([1]);
+      expect(capturedBody.price).toEqual([10000]);
+      expect(capturedBody.weight).toBeUndefined();
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("should map debit online to cc/debitonline and include redirect URLs (I-8)", async () => {
+    let capturedBody: any = null;
+    let capturedUrl = "";
+    const originalFetch = globalThis.fetch;
+    (globalThis as any).fetch = async (url: any, options: any) => {
+      capturedUrl = String(url);
+      capturedBody = JSON.parse(options.body);
+      return {
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify({
+            Status: 200,
+            Success: true,
+            Data: { TransactionId: 501, Url: "https://securetest.bayarind.id/payment/landing" },
+          }),
+      } as any;
+    };
+
+    try {
+      const buayar = new Buayar({
+        provider: "ipaymu",
+        merchantCode: "0000001411234567",
+        apiKey: "test-api-key",
+      });
+
+      await buayar.createInvoice({
+        orderId: "ORDER-DEBIT",
+        amount: 10000,
+        paymentMethod: "debitonline",
+        productDetails: "Debit Online",
+        customer: { name: "Budi", email: "budi@mail.com" },
+        returnUrl: "https://shop.test/return",
+      });
+      expect(capturedUrl).toContain("/payment/direct");
+      expect(capturedBody.paymentMethod).toBe("cc");
+      expect(capturedBody.paymentChannel).toBe("debitonline");
+      expect(capturedBody.successUrl).toBe("https://shop.test/return");
+      expect(capturedBody.cancelUrl).toBe("https://shop.test/return");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
   it("should return failure without static methods when credentials are missing", async () => {
     const buayar = new Buayar({
       provider: "ipaymu",

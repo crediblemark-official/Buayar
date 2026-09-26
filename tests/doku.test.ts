@@ -190,6 +190,40 @@ describe("DOKU Provider & Client Integration", () => {
     }
   });
 
+  it("memakai channel-name 'bsm-virtual-account' untuk update VA BSI (D-8)", async () => {
+    const originalFetch = globalThis.fetch;
+    let interceptedUrl = "";
+    (globalThis as any).fetch = async (url: any) => {
+      interceptedUrl = String(url);
+      return {
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify({ order: { invoice_number: "INV-BSI-1" } }),
+      } as any;
+    };
+
+    try {
+      const buayar = new Buayar({
+        provider: "doku",
+        merchantCode: "MALL-ID-123",
+        apiKey: "SK-secret-123",
+        sandbox: true,
+      });
+
+      await buayar.updateVirtualAccount({
+        orderId: "INV-BSI-1",
+        bank: "bsi",
+        vaNumber: "6059000000511600",
+        amount: 200000,
+      });
+
+      expect(interceptedUrl).toContain("/bsm-virtual-account/v2/payment-code");
+      expect(interceptedUrl).not.toContain("/bsi-virtual-account/");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
   it("should delete virtual account via DOKU API", async () => {
     const originalFetch = globalThis.fetch;
     let interceptedMethod = "";

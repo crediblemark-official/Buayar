@@ -112,7 +112,19 @@ export interface PaymentService {
   }): Promise<any>;
   getMethods(amount?: number): Promise<any>;
   checkStatus(orderId: string): Promise<any>;
-  handleWebhook(payload: any, headers: Record<string, string | string[] | undefined>): Promise<any>;
+  /**
+   * Verifikasi webhook.
+   *
+   * Parameter rawBody WAJIB diteruskan untuk provider yang menandatangani byte
+   * mentah (Stripe, Checkout.com, Razorpay, Square, PayU, Braintree, DOKU Snap,
+   * SumoPod). Tanpa itu isValid akan selalu false, dan result.error akan
+   * menjelaskan langkah yang perlu dilakukan.
+   */
+  handleWebhook(
+    payload: any,
+    headers: Record<string, string | string[] | undefined>,
+    rawBody?: string
+  ): Promise<any>;
   refund(transactionId: string, amount?: number, reason?: string): Promise<any>;
   checkBalance(): Promise<any>;
   disburse(payload: {
@@ -145,8 +157,8 @@ export const paymentService: PaymentService = {
     return buayar.checkTransaction({ merchantOrderId: orderId });
   },
 
-  async handleWebhook(payload, headers) {
-    return buayar.verifyWebhook(payload, headers);
+  async handleWebhook(payload, headers, rawBody) {
+    return buayar.verifyWebhook(payload, headers, rawBody !== undefined ? { rawBody } : undefined);
   },
 
   async refund(transactionId, amount, reason) {
@@ -174,7 +186,7 @@ export const ROUTES_EXPRESS_TEMPLATE = `// src/payment/routes/express.ts
 // Controller + route untuk Express. Mount via:
 //   import { paymentRoutes } from "./payment/routes/express";
 //   app.use("/api/payment", paymentRoutes);
-import { Router } from "express";
+import express, { Router } from "express";
 import { paymentService } from "../service";
 
 export const paymentRoutes = Router();
@@ -199,12 +211,23 @@ paymentRoutes.get("/status/:orderId", async (req, res) => {
 });
 
 // POST /api/payment/webhook — notifikasi dari payment gateway
-paymentRoutes.post("/webhook", async (req, res) => {
-  const verification = await paymentService.handleWebhook(req.body, req.headers as any);
-  return verification.isValid
-    ? res.status(200).json({ status: "OK" })
-    : res.status(400).json({ error: "Invalid signature" });
-});
+//
+// PENTING: \`express.raw()\` WAJIB di route ini (dan TIDAK boleh dipakai di route lain).
+// Stripe, Checkout.com, Razorpay, Square, PayU, Braintree, DOKU Snap, dan SumoPod
+// menandatangani byte persis yang mereka kirim. Kalau body di-parse dulu oleh
+// express.json(), signature check SELALU gagal.
+paymentRoutes.post(
+  "/webhook",
+  express.raw({ type: "application/json" }),
+  async (req, res) => {
+    const rawBody = Buffer.isBuffer(req.body) ? req.body.toString("utf8") : String(req.body ?? "");
+    const payload = rawBody ? JSON.parse(rawBody) : {};
+    const verification = await paymentService.handleWebhook(payload, req.headers as any, rawBody);
+    return verification.isValid
+      ? res.status(200).json({ status: "OK" })
+      : res.status(400).json({ error: verification.error || "Invalid signature" });
+  }
+);
 
 // POST /api/payment/refund — refund transaksi
 paymentRoutes.post("/refund", async (req, res) => {
@@ -243,12 +266,18 @@ paymentRoutes.get("/status/:orderId", async (c) => {
 });
 
 paymentRoutes.post("/webhook", async (c) => {
-  const payload = await c.req.json();
+  // WAJIB baca sebagai text, BUKAN c.req.json(): provider menandatangani byte mentah.
+  const rawBody = await c.req.text();
+  const payload = rawBody ? JSON.parse(rawBody) : {};
   const headers = c.req.raw.headers;
-  const verification = await paymentService.handleWebhook(payload, Object.fromEntries(headers) as any);
+  const verification = await paymentService.handleWebhook(
+    payload,
+    Object.fromEntries(headers) as any,
+    rawBody
+  );
   return verification.isValid
     ? c.json({ status: "OK" }, 200)
-    : c.json({ error: "Invalid signature" }, 400);
+    : c.json({ error: verification.error || "Invalid signature" }, 400);
 });
 
 paymentRoutes.post("/refund", async (c) => {
@@ -268,17 +297,20 @@ import { NextResponse } from "next/server";
 import { paymentService } from "@/payment/service";
 
 export async function POST(request: Request) {
-  const payload = await request.json();
+  // WAJIB baca sebagai text, BUKAN request.json(): provider menandatangani byte mentah.
+  // Jangan tambahkan body parser di route ini.
+  const rawBody = await request.text();
+  const payload = rawBody ? JSON.parse(rawBody) : {};
   const headers: Record<string, string | string[] | undefined> = {};
   request.headers.forEach((value, key) => {
     headers[key] = value;
   });
 
-  const verification = await paymentService.handleWebhook(payload, headers);
+  const verification = await paymentService.handleWebhook(payload, headers, rawBody);
 
   return verification.isValid
     ? NextResponse.json({ status: "OK" })
-    : NextResponse.json({ error: "Invalid signature" }, { status: 400 });
+    : NextResponse.json({ error: verification.error || "Invalid signature" }, { status: 400 });
 }
 `;
 

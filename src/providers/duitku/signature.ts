@@ -8,6 +8,23 @@ export function getDuitkuInquirySignatures(merchantCode: string, orderId: string
   return { payloadSignature, timestamp, headerSignature };
 }
 
+/**
+ * Signature header Duitku **POP** (`POST /api/merchant/createInvoice`).
+ *
+ * Dokumentasi resmi Duitku POP:
+ *   stringToSign = merchantCode + timestamp
+ *   signature    = HMAC_SHA256(stringToSign, apiKey)   // hex lowercase
+ *
+ * Catatan penting:
+ * - Body request **tidak** ikut ditandatangani (tidak ada field `signature` di body POP).
+ * - `timestamp` adalah UNIX milidetik (zona Jakarta), dikirim di header `x-duitku-timestamp`.
+ */
+export function getDuitkuPopSignature(merchantCode: string, apiKey: string) {
+  const timestamp = Date.now().toString();
+  const signature = hmacSha256(`${merchantCode}${timestamp}`, apiKey);
+  return { timestamp, signature };
+}
+
 export function verifyDuitkuCallbackSignature(body: any, apiKey: string): boolean {
   const merchantCode = body.merchantCode || "";
   const amount = body.amount || "";

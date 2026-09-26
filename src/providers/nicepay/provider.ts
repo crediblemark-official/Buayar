@@ -36,19 +36,9 @@ export class NicepayProvider extends BasePaymentProvider {
     const timeStamp = formatNicepayTimestamp();
     const merchantToken = generateNicepayToken(timeStamp, iMid, orderId, integerAmount, merchantKey);
 
-    let endpoint = "/api/orderRegist.do";
-    if (isDirect) {
-      if (niceMethod.payMethod === "02") {
-        endpoint = "/api/oneStepVa.do";
-      } else if (niceMethod.payMethod === "08") {
-        endpoint = "/api/oneStepQris.do";
-      } else if (niceMethod.payMethod === "03") {
-        endpoint = "/api/oneStepCstore.do";
-      } else if (niceMethod.payMethod === "05") {
-        endpoint = "/api/oneStepEwallet.do";
-      }
-    }
-
+    // NICEPAY Non-SNAP memakai SATU endpoint registrasi terpadu; `payMethod` yang
+    // membedakan kanal. Endpoint lama per-kanal (`/api/oneStep*.do`) sudah tidak dipakai.
+    const endpoint = "/direct/v2/registration";
     const url = `${baseUrl}${endpoint}`;
 
     const payload: any = {
@@ -281,7 +271,7 @@ export class NicepayProvider extends BasePaymentProvider {
       {
         paymentMethod: "alfamart",
         code: "alfamart",
-        paymentName: "Alfamart (ALFA)",
+        paymentName: "Alfamart (ALMA)",
         paymentImage: "https://www.nicepay.co.id/assets/images/alfamart.png",
         totalFee: "IDR 5,000",
         category: "Retail / Gerai",
@@ -375,7 +365,7 @@ export class NicepayProvider extends BasePaymentProvider {
     const merchantKey = config.apiKey || config.serverKey || config.secretKey || "";
     const sandbox = !!config.sandbox;
 
-    const url = `${this.getBaseUrl(sandbox)}/api/oneStepTransInquiry.do`;
+    const url = `${this.getBaseUrl(sandbox)}/direct/v2/inquiry`;
     const timeStamp = formatNicepayTimestamp();
     const merchantToken = generateNicepayToken(timeStamp, iMid, merchantOrderId, 0, merchantKey);
 

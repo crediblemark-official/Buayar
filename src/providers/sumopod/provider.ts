@@ -11,6 +11,7 @@ import {
   PaymentMethod,
 } from "../../types";
 import { verifySumopodSvixSignature, verifySumopodToken } from "./signature";
+import { resolveRawBody, RAW_BODY_REQUIRED_MESSAGE } from "../../utils/rawBody";
 
 export class SumopodProvider extends BasePaymentProvider {
   readonly name = "sumopod";
@@ -104,7 +105,10 @@ export class SumopodProvider extends BasePaymentProvider {
   }
 
   async verifyCallback(body: any, config: ProviderConfig): Promise<VerifyCallbackResult> {
-    const rawBody = typeof body === "string" ? body : JSON.stringify(body);
+    // Raw body wajib untuk verifikasi Svix (HMAC atas byte persis). Kalau tidak tersedia,
+    // JANGAN fallback ke JSON.stringify — hasil serialisasi tidak pernah identik dengan
+    // byte yang dikirim provider, sehingga signature check akan gagal diam-diam.
+    const rawBody = resolveRawBody(config, body);
     let parsedBody: any;
     try {
       parsedBody = typeof body === "string" ? JSON.parse(body) : body;
@@ -133,16 +137,29 @@ export class SumopodProvider extends BasePaymentProvider {
     const webhookToken = config.extra?.webhookToken || config.extra?.callbackToken || "";
 
     let isValid = false;
+    let error: string | undefined;
 
     // Verifikasi via Svix Signature jika header Svix tersedia
     if (svixId && svixTimestamp && svixSignature && webhookSecret) {
-      isValid = verifySumopodSvixSignature(webhookSecret, svixId, svixTimestamp, svixSignature, rawBody);
+      if (rawBody === undefined) {
+        error = RAW_BODY_REQUIRED_MESSAGE + " (SumoPod via Svix — see docs/sumopod.md)";
+        isValid = false;
+      } else {
+        isValid = verifySumopodSvixSignature(webhookSecret, svixId, svixTimestamp, svixSignature, rawBody);
+        if (!isValid) error = "Svix signature mismatch.";
+      }
     } else if (receivedToken && webhookToken) {
       // Verifikasi via X-Webhook-Token jika token header tersedia
       isValid = verifySumopodToken(webhookToken, receivedToken);
+      if (!isValid) error = "X-Webhook-Token mismatch.";
     } else if (!webhookSecret && !webhookToken) {
-      // Jika merchant belum mengatur secret/token di konfigurasi, toleransi namun beri tanda
-      isValid = true;
+      // FAIL-CLOSED: tanpa secret/token yang dikonfigurasi, webhook TIDAK BOLEH dipercaya.
+      // Menolak selalu lebih aman daripada menerima pembayaran palsu.
+      error = "SumoPod webhook secret/token not configured. Set BUAYAR_WEBHOOK_SECRET (or BUAYAR_WEBHOOK_TOKEN); webhook rejected because it cannot be authenticated.";
+      isValid = false;
+    } else {
+      error = "SumoPod webhook could not be authenticated: missing Svix headers or X-Webhook-Token header.";
+      isValid = false;
     }
 
     const eventType = parsedBody?.event_type || "";
@@ -152,12 +169,15 @@ export class SumopodProvider extends BasePaymentProvider {
     const amount = Number(data?.amount || 0);
     const statusRaw = (data?.status || "").toLowerCase();
 
-    const isPaid = eventType === "payment.completed" || statusRaw === "completed";
-    const isFailed = eventType === "payment.failed" || statusRaw === "failed";
-    const isExpired = eventType === "payment.expired" || statusRaw === "expired";
-    const isPending = !isPaid && !isFailed && !isExpired;
+    // Status hanya dipercaya bila signature valid.
+    const isPaid = isValid && (eventType === "payment.completed" || statusRaw === "completed");
+    const isFailed = !isValid || eventType === "payment.failed" || statusRaw === "failed";
+    const isExpired = isValid && (eventType === "payment.expired" || statusRaw === "expired");
+    const isPending = isValid && !isPaid && !isFailed && !isExpired;
 
-    const status: "paid" | "pending" | "failed" | "expired" = isPaid
+    const status: "paid" | "pending" | "failed" | "expired" = !isValid
+      ? "failed"
+      : isPaid
       ? "paid"
       : isExpired
       ? "expired"
@@ -178,6 +198,7 @@ export class SumopodProvider extends BasePaymentProvider {
       statusCode: eventType || statusRaw,
       transactionTime: data?.completed_at ? new Date(data.completed_at) : undefined,
       rawPayload: parsedBody,
+      error,
     };
   }
 

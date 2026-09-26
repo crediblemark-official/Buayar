@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+import { createHash, createHmac } from "crypto";
 import { Buayar } from "../src";
 
 describe("Braintree Provider & Client Integration", () => {
@@ -49,7 +50,8 @@ describe("Braintree Provider & Client Integration", () => {
   });
 
   it("should normalize Braintree webhook notification (transaction settled)", async () => {
-    const buayar = new Buayar({ provider: "braintree", apiKey: "mockPrivateKey" });
+    const privateKey = "mockPrivateKey";
+    const buayar = new Buayar({ provider: "braintree", apiKey: privateKey });
 
     const payload = {
       kind: "transaction_settled",
@@ -63,10 +65,36 @@ describe("Braintree Provider & Client Integration", () => {
       },
     };
 
-    const result = await buayar.verifyWebhook(payload);
+    // Braintree mengirim bt_signature (public_key|sha1_hmac) + bt_payload (base64 raw body).
+    const rawBody = JSON.stringify(payload);
+    const btPayload = Buffer.from(rawBody, "utf8").toString("base64");
+    const secretHash = createHash("sha1").update(privateKey).digest("hex");
+    const hmac = createHmac("sha1", secretHash).update(rawBody).digest("hex");
+    const btSignature = `mockPublicKey|${hmac}`;
+
+    const result = await buayar.verifyWebhook(payload, {
+      bt_signature: btSignature,
+      bt_payload: btPayload,
+    });
+
     expect(result.provider).toBe("braintree");
+    expect(result.isValid).toBe(true);
     expect(result.isPaid).toBe(true);
     expect(result.orderId).toBe("ORDER-BT-001");
     expect(result.amount).toBe(2000); // 20.00 * 100
+  });
+
+  // SECURITY: tanpa bt_signature/bt_payload tidak ada bukti — tolak.
+  it("should REJECT an unauthenticated Braintree webhook (fail-closed)", async () => {
+    const buayar = new Buayar({ provider: "braintree", apiKey: "mockPrivateKey" });
+
+    const result = await buayar.verifyWebhook({
+      kind: "transaction_settled",
+      subject: { transaction: { id: "x", orderId: "ORDER-BT-FORGED", amount: "20.00", status: "settled" } },
+    });
+
+    expect(result.isValid).toBe(false);
+    expect(result.isPaid).toBe(false);
+    expect(result.status).toBe("failed");
   });
 });

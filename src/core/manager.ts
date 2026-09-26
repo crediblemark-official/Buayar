@@ -53,7 +53,10 @@ import {
   CheckBalanceResult,
   DisburseParams,
   DisburseResult,
+  resolvePaymentMethodCode,
 } from "../types";
+import { providerRegistry } from "./providerRegistry";
+import { simulatorEngine } from "../simulator/engine";
 
 export class PaymentManager {
   private providers: Map<string, BasePaymentProvider> = new Map();
@@ -88,6 +91,11 @@ export class PaymentManager {
   }
 
   getProvider(name: string): BasePaymentProvider {
+    if (!name) {
+      throw new Error(
+        "No payment provider configured. Set BUAYAR_PROVIDER (e.g. BUAYAR_PROVIDER=midtrans) in environment or specify { provider: '...' } in config."
+      );
+    }
     const provider = this.providers.get(name.toLowerCase());
     if (!provider) {
       throw new Error(`Payment provider '${name}' is not registered`);
@@ -267,6 +275,37 @@ export class PaymentManager {
     config: ProviderConfig
   ): Promise<InvoiceResponse> {
     const provider = this.getProvider(providerName);
+
+    // K5: Pre-flight capability check — tolak sebelum request bila method tidak didukung
+    if (params.paymentMethod) {
+      const isRawEscapeHatch =
+        typeof params.paymentMethod === "object" &&
+        params.paymentMethod !== null &&
+        "raw" in params.paymentMethod;
+
+      if (!isRawEscapeHatch) {
+        const code = resolvePaymentMethodCode(params.paymentMethod);
+        if (code) {
+          const canonicalCode = code.toLowerCase().trim();
+          const desc = providerRegistry.get(providerName);
+          if (desc && desc.methods.length > 0 && !desc.methods.includes(canonicalCode)) {
+            return {
+              success: false,
+              provider: providerName,
+              orderId: params.orderId,
+              amount: params.amount,
+              error: `Payment method '${code}' is not supported by provider '${providerName}'. Supported methods: ${desc.methods.join(", ")}`,
+              rawResponse: null,
+            };
+          }
+        }
+      }
+    }
+
+    if (config.simulate) {
+      return simulatorEngine.createInvoice(providerName, params, config);
+    }
+
     return provider.createInvoice(params, config);
   }
 
@@ -293,6 +332,9 @@ export class PaymentManager {
     params: CheckTransactionParams,
     config: ProviderConfig
   ): Promise<CheckTransactionResult> {
+    if (config.simulate) {
+      return simulatorEngine.checkTransaction(providerName, params, config);
+    }
     const provider = this.getProvider(providerName);
     return provider.checkTransaction(params, config);
   }
@@ -300,10 +342,14 @@ export class PaymentManager {
   async probePaymentMethods(
     providerName: string,
     config: ProviderConfig
-  ): Promise<{ success: boolean; enabled: string[]; error?: string }> {
+  ): Promise<{ success: boolean; enabled: string[]; source?: "live" | "static"; error?: string }> {
     const provider = this.getProvider(providerName);
     if (provider.probePaymentMethods) {
-      return provider.probePaymentMethods(config);
+      const res = await provider.probePaymentMethods(config);
+      return {
+        ...res,
+        source: (res as any).source || "live",
+      };
     }
     // Fallback dinamis: jika provider memiliki getPaymentMethods, manfaatkan untuk probing
     try {
@@ -313,13 +359,14 @@ export class PaymentManager {
           return {
             success: true,
             enabled: res.methods.map((m: any) => m.paymentMethod),
+            source: "static",
           };
         }
       }
     } catch (e) {
       // ignore
     }
-    return { success: false, enabled: [], error: `Provider '${providerName}' does not support payment methods probing` };
+    return { success: false, enabled: [], source: "static", error: `Provider '${providerName}' does not support payment methods probing` };
   }
 
   // ─── Unified Advanced Operations (Refund / Balance / Disburse) ─────────────
@@ -335,6 +382,9 @@ export class PaymentManager {
     params: RefundParams,
     config: ProviderConfig
   ): Promise<RefundResult> {
+    if (config.simulate) {
+      return simulatorEngine.refund(providerName, params, config);
+    }
     const name = providerName.toLowerCase();
     try {
       switch (name) {
@@ -396,6 +446,9 @@ export class PaymentManager {
   }
 
   async checkBalance(providerName: string, config: ProviderConfig): Promise<CheckBalanceResult> {
+    if (config.simulate) {
+      return simulatorEngine.checkBalance(providerName, config);
+    }
     const name = providerName.toLowerCase();
     try {
       let balance: number | undefined;
@@ -473,6 +526,9 @@ export class PaymentManager {
     params: DisburseParams,
     config: ProviderConfig
   ): Promise<DisburseResult> {
+    if (config.simulate) {
+      return simulatorEngine.disburse(providerName, params, config);
+    }
     const name = providerName.toLowerCase();
     try {
       switch (name) {
@@ -484,7 +540,7 @@ export class PaymentManager {
             purpose: params.description || "Disbursement",
             merchantOrderId: params.externalId,
           });
-          return { success: data?.statusCode === "00", supported: true, provider: "duitku", reference: params.externalId, status: data?.statusMessage, rawResponse: data };
+          return { success: data?.statusCode === "00", supported: true, provider: name, reference: params.externalId, status: data?.statusMessage, rawResponse: data };
         }
         case "xendit": {
           const data = await this.getXenditClient(config).createDisbursement({

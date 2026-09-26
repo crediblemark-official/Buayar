@@ -123,4 +123,61 @@ describe("Provider Matrix — matriks fitur unggulan", () => {
       globalThis.fetch = originalFetch;
     }
   });
+
+  it("K1 DoD — 20/20 provider lolos smoke test createInvoice yang dikonfigurasi 100% via env var", async () => {
+    const ENV_MAP: Record<string, Record<string, string>> = {
+      midtrans:    { MIDTRANS_SERVER_KEY: "SB-Mid-server-x" },
+      duitku:      { DUITKU_API_KEY: "k", DUITKU_MERCHANT_CODE: "M" },
+      ipaymu:      { IPAYMU_API_KEY: "k", IPAYMU_VA: "00000014" },
+      xendit:      { XENDIT_SECRET_KEY: "xnd_development_x" },
+      doku:        { DOKU_CLIENT_ID: "c", DOKU_SECRET_KEY: "s" },
+      prismalink:  { PRISMALINK_MERCHANT_ID: "M", PRISMALINK_SECRET_KEY: "s" },
+      faspay:      { FASPAY_MERCHANT_ID: "M", FASPAY_USER_ID: "u", FASPAY_PASSWORD: "p" },
+      finpay:      { FINPAY_MERCHANT_ID: "M", FINPAY_MERCHANT_KEY: "k" },
+      nicepay:     { NICEPAY_IMID: "M", NICEPAY_KEY: "k" },
+      oy:          { OY_USERNAME: "u", OY_API_KEY: "k" },
+      stripe:      { STRIPE_SECRET_KEY: "sk_test_x" },
+      paypal:      { PAYPAL_CLIENT_ID: "c", PAYPAL_CLIENT_SECRET: "s" },
+      adyen:       { ADYEN_API_KEY: "k", ADYEN_MERCHANT_ACCOUNT: "acc" },
+      checkoutcom: { CHECKOUTCOM_SECRET_KEY: "sk_x" },
+      razorpay:    { RAZORPAY_KEY_ID: "rzp_x", RAZORPAY_KEY_SECRET: "s" },
+      square:      { SQUARE_ACCESS_TOKEN: "EAAA_x", SQUARE_LOCATION_ID: "L" },
+      payu:        { PAYU_POS_ID: "P", PAYU_MD5_KEY: "k" },
+      braintree:   { BRAINTREE_MERCHANT_ID: "M", BRAINTREE_PUBLIC_KEY: "pub", BRAINTREE_PRIVATE_KEY: "priv" },
+      twocheckout: { TWOCHECKOUT_MERCHANT_CODE: "M", TWOCHECKOUT_SECRET_KEY: "s" },
+      sumopod:     { SUMOPOD_API_KEY: "sumo_k" },
+    };
+
+    const prevEnv = { ...process.env };
+    (globalThis as any).fetch = async (url: string) => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ id: "mock_order_123", redirect_url: "https://pay.test", token: "tok_123", url: "https://pay.test" }),
+      text: async () => JSON.stringify({ id: "mock_order_123", redirect_url: "https://pay.test", token: "tok_123", url: "https://pay.test" }),
+    });
+
+    try {
+      for (const name of PROVIDERS) {
+        process.env = {
+          PROVIDER_PG: name,
+          ...ENV_MAP[name],
+        };
+
+        const buayar = new Buayar();
+        expect(buayar.provider).toBe(name);
+
+        const res = await buayar.createInvoice({
+          orderId: `ORDER-ENV-${name}`,
+          amount: 50000,
+          productDetails: "Smoke Test",
+          customer: { name: "Tester", email: "tester@example.com" },
+        });
+
+        expect(res.provider).toBe(name);
+      }
+    } finally {
+      process.env = prevEnv;
+      globalThis.fetch = originalFetch;
+    }
+  });
 });

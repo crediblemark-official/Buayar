@@ -13,6 +13,14 @@ export type CanonicalPaymentMethod =
   | "bag_va"
   | "btn_va"
   | "artajasa_va"
+  | "doku_va"
+  | "maybank_va"
+  | "bjb_va"
+  | "bpd_bali_va"
+  | "sinarmas_va"
+  | "ocbc_va"
+  | "bnc_va"
+  | "bss_va"
   // QRIS
   | "qris"
   | "gopay_qris"
@@ -31,10 +39,51 @@ export type CanonicalPaymentMethod =
   | "pos"
   // Kartu Kredit & Debit
   | "credit_card"
+  | "debitonline"
   // Paylater & Cicilan
   | "kredivo"
   | "akulaku"
   | "indodana"
   // COD
   | "cod"
-  | string;
+  // International Methods
+  | "paypal"
+  | "apple_pay"
+  | "google_pay"
+  | "bank_transfer"
+  | "wallet"
+  | "paylater"
+  | "klarna"
+  | "sepa"
+  | "sofort"
+  | "upi"
+  | "netbanking"
+  | "emi"
+  | "afterpay"
+  | "cash_app"
+  | "blik"
+  | "installment"
+  | "venmo"
+  | "wire_transfer";
+
+/**
+ * Escape hatch eksplisit untuk kode internal spesifik provider yang tidak portabel.
+ * Menandakan dengan jelas saat code review bahwa metode ini sengaja non-portable.
+ */
+export type RawProviderMethod = {
+  raw: string;
+  providerOnly: true;
+};
+
+export type PaymentMethodInput = CanonicalPaymentMethod | RawProviderMethod;
+
+/**
+ * Helper untuk mengekstrak string kode pembayaran dari PaymentMethodInput.
+ */
+export function resolvePaymentMethodCode(method?: PaymentMethodInput | string): string | undefined {
+  if (!method) return undefined;
+  if (typeof method === "object" && method !== null && "raw" in method) {
+    return method.raw;
+  }
+  return typeof method === "string" ? method : undefined;
+}

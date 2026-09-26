@@ -52,6 +52,87 @@ export class PaypalProvider extends BasePaymentProvider {
     return data.access_token;
   }
 
+  /**
+   * Verifikasi webhook via PayPal Webhook Verification API (cert-chain nyata).
+   * Fail-closed: tanpa kredensial, tanpa webhook id, atau tanpa header wajib
+   * → return false (JANGAN pernah fallback ke "assume valid").
+   */
+  private async verifyWebhookSignature(
+    body: any,
+    headers: Record<string, string | string[] | undefined>,
+    config: ProviderConfig
+  ): Promise<{ valid: boolean; error?: string }> {
+    const h = (name: string): string => {
+      const v = headers[name];
+      return Array.isArray(v) ? v[0] || "" : v || "";
+    };
+
+    const authAlgo = h("paypal-auth-algo");
+    const certUrl = h("paypal-cert-url");
+    const transmissionId = h("paypal-transmission-id");
+    const transmissionSig = h("paypal-transmission-sig");
+    const transmissionTime = h("paypal-transmission-time");
+    const webhookId = h("paypal-webhook-id") || config.extra?.webhookId || config.extra?.paypalWebhookId || "";
+
+    const missing = [
+      ["paypal-auth-algo", authAlgo],
+      ["paypal-cert-url", certUrl],
+      ["paypal-transmission-id", transmissionId],
+      ["paypal-transmission-sig", transmissionSig],
+      ["paypal-transmission-time", transmissionTime],
+    ]
+      .filter(([, val]) => !val)
+      .map(([name]) => name as string);
+
+    if (missing.length > 0) {
+      return { valid: false, error: `Missing PayPal verification header(s): ${missing.join(", ")}.` };
+    }
+    if (!webhookId) {
+      return {
+        valid: false,
+        error: "PayPal webhook id not configured. Set PAYPAL_WEBHOOK_ID (or config.extra.webhookId) to the id of the webhook registered in your PayPal dashboard.",
+      };
+    }
+
+    if (config.simulate) {
+      if (!transmissionSig || transmissionSig.includes("invalid")) {
+        return { valid: false, error: "Invalid simulated PayPal transmission signature" };
+      }
+      return { valid: true };
+    }
+
+    let accessToken: string;
+    try {
+      accessToken = await this.getAccessToken(config);
+    } catch (e: any) {
+      return { valid: false, error: `Could not authenticate against PayPal: ${e.message}` };
+    }
+
+    try {
+      const response = await fetch(`${this.getBaseUrl(config)}/v1/notifications/verify-webhook-signature`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          auth_algo: authAlgo,
+          cert_url: certUrl,
+          transmission_id: transmissionId,
+          transmission_sig: transmissionSig,
+          transmission_time: transmissionTime,
+          webhook_id: webhookId,
+          webhook_event: typeof body === "string" ? JSON.parse(body) : body,
+        }),
+      });
+      const data = await response.json().catch(() => null);
+      if (data?.verification_status === "SUCCESS") return { valid: true };
+      return {
+        valid: false,
+        error: `PayPal rejected the webhook signature (verification_status=${data?.verification_status ?? response.status}).`,
+      };
+    } catch (e: any) {
+      return { valid: false, error: `PayPal verification request failed: ${e.message}` };
+    }
+  }
+
   async createInvoice(params: CreateInvoiceParams, config: ProviderConfig): Promise<InvoiceResponse> {
     const { orderId, amount, productDetails, customer, returnUrl, callbackUrl } = params;
     const currency = (params.currency || "USD").toUpperCase();
@@ -145,7 +226,9 @@ export class PaypalProvider extends BasePaymentProvider {
   }
 
   async verifyCallback(body: any, config: ProviderConfig): Promise<VerifyCallbackResult> {
-    // PayPal webhook: check for required headers presence (simplified)
+    const headers = config.extra?.headers || {};
+    const { valid: isValid, error } = await this.verifyWebhookSignature(body, headers, config);
+
     const eventType = body?.event_type || body?.event_name || "";
     const resource = body?.resource || {};
 
@@ -159,23 +242,27 @@ export class PaypalProvider extends BasePaymentProvider {
       Number(resource.amount?.value || resource.purchase_units?.[0]?.amount?.value || 0) * 100; // Convert back to integer
 
     const statusRaw = (resource.status || "").toUpperCase();
-    const isPaid = statusRaw === "COMPLETED" || eventType === "PAYMENT.CAPTURE.COMPLETED";
-    const isPending = statusRaw === "PENDING" || eventType === "PAYMENT.CAPTURE.PENDING";
-    const isExpired = statusRaw === "EXPIRED" || eventType === "CHECKOUT.ORDER.EXPIRED";
+    // Status hanya dipercaya bila signature PayPal sudah diverifikasi.
+    const isPaid = isValid && (statusRaw === "COMPLETED" || eventType === "PAYMENT.CAPTURE.COMPLETED");
+    const isPending = isValid && (statusRaw === "PENDING" || eventType === "PAYMENT.CAPTURE.PENDING");
+    const isExpired = isValid && (statusRaw === "EXPIRED" || eventType === "CHECKOUT.ORDER.EXPIRED");
     const isFailed =
-      !isPaid && !isPending && !isExpired &&
-      (statusRaw === "DENIED" || statusRaw === "FAILED" || eventType.includes("FAILED") || eventType.includes("DENIED"));
+      !isValid ||
+      (!isPaid && !isPending && !isExpired &&
+        (statusRaw === "DENIED" || statusRaw === "FAILED" || eventType.includes("FAILED") || eventType.includes("DENIED")));
 
-    const status: "paid" | "pending" | "failed" | "expired" = isPaid
-      ? "paid"
-      : isPending
-        ? "pending"
-        : isExpired
-          ? "expired"
-          : "failed";
+    const status: "paid" | "pending" | "failed" | "expired" = !isValid
+      ? "failed"
+      : isPaid
+        ? "paid"
+        : isPending
+          ? "pending"
+          : isExpired
+            ? "expired"
+            : "failed";
 
     return {
-      isValid: true, // Full cert-chain validation deferred to PayPal's verify API
+      isValid,
       provider: "paypal",
       orderId: String(orderId),
       amount,
@@ -186,6 +273,7 @@ export class PaypalProvider extends BasePaymentProvider {
       isExpired,
       statusCode: eventType,
       rawPayload: body,
+      error,
     };
   }
 

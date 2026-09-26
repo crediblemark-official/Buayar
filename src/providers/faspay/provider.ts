@@ -174,8 +174,8 @@ export class FaspayProvider extends BasePaymentProvider {
     if (typeof amount === "string") {
       if (amount.includes(".")) {
         numAmount = Math.round(parseFloat(amount));
-      } else if (amount.length > 2 && Number(amount) > 10000000) {
-        // Faspay amounts in cents without decimal point (e.g. 35000000 -> 350000)
+      } else if (body.payment_total !== undefined) {
+        // Kontrak Faspay Debit: field payment_total selalu dikirim dalam representasi sen (2 digit desimal tanpa dot)
         numAmount = Math.round(Number(amount) / 100);
       } else {
         numAmount = Number(amount);

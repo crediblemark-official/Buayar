@@ -48,7 +48,7 @@ describe("Adyen Provider & Client Integration", () => {
   });
 
   it("should verify and normalize Adyen webhook HMAC signature", () => {
-    // Test with no HMAC key (simplified — always valid)
+    const hmacKey = "44DAC70D0210E570E301E2A99FC16B7B37F1B8EB9AC7F9E81002FF13975296D3";
     const notificationItem = {
       pspReference: "8535284862439990",
       originalReference: "",
@@ -62,9 +62,48 @@ describe("Adyen Provider & Client Integration", () => {
 
     const isValid = verifyAdyenWebhook(notificationItem, ""); // empty key = false
     expect(isValid).toBe(false);
+
+    const isInvalidSig = verifyAdyenWebhook(notificationItem, hmacKey);
+    expect(isInvalidSig).toBe(false);
   });
 
-  it("should normalize Adyen webhook notification", async () => {
+  it("should normalize Adyen webhook notification with valid HMAC", async () => {
+    const hmacKey = "44DAC70D0210E570E301E2A99FC16B7B37F1B8EB9AC7F9E81002FF13975296D3";
+    const signedData = "8535284862439990::MyCompanyCOM:ORDER-ADYEN-001:1000:EUR:AUTHORISATION:true";
+    const validSignature = require("crypto")
+      .createHmac("sha256", Buffer.from(hmacKey, "hex"))
+      .update(signedData, "utf8")
+      .digest("base64");
+
+    const buayar = new Buayar({
+      provider: "adyen",
+      apiKey: "AQEymock",
+      extra: { hmacKey },
+    });
+
+    const payload = {
+      notificationItems: [{
+        NotificationRequestItem: {
+          pspReference: "8535284862439990",
+          merchantReference: "ORDER-ADYEN-001",
+          merchantAccountCode: "MyCompanyCOM",
+          amount: { value: 1000, currency: "EUR" },
+          eventCode: "AUTHORISATION",
+          success: "true",
+          additionalData: { hmacSignature: validSignature },
+        },
+      }],
+    };
+
+    const result = await buayar.verifyWebhook(payload);
+    expect(result.provider).toBe("adyen");
+    expect(result.isValid).toBe(true);
+    expect(result.isPaid).toBe(true);
+    expect(result.orderId).toBe("ORDER-ADYEN-001");
+    expect(result.amount).toBe(1000);
+  });
+
+  it("should REJECT unauthenticated Adyen webhook (fail-closed)", async () => {
     const buayar = new Buayar({ provider: "adyen", apiKey: "AQEymock" });
 
     const payload = {
@@ -81,9 +120,8 @@ describe("Adyen Provider & Client Integration", () => {
     };
 
     const result = await buayar.verifyWebhook(payload);
-    expect(result.provider).toBe("adyen");
-    expect(result.isPaid).toBe(true);
-    expect(result.orderId).toBe("ORDER-ADYEN-001");
-    expect(result.amount).toBe(1000);
+    expect(result.isValid).toBe(false);
+    expect(result.isPaid).toBe(false);
+    expect(result.status).toBe("failed");
   });
 });

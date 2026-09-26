@@ -171,24 +171,28 @@ export class StripeProvider extends BasePaymentProvider {
     const amount = obj.amount_total || obj.amount || 0;
     const paymentStatus = (obj.payment_status || obj.status || "").toLowerCase();
 
-    const isPaid =
+    // Status hanya dipercaya bila signature valid (cegah `isPaid: true` + `isValid: false`).
+    const isPaid = isValid && (
       (eventType === "checkout.session.completed" && (paymentStatus === "paid" || paymentStatus === "complete")) ||
       (eventType === "payment_intent.succeeded" && paymentStatus === "succeeded") ||
       (eventType === "charge.succeeded" && (paymentStatus === "succeeded" || paymentStatus === "paid")) ||
       paymentStatus === "paid" ||
-      paymentStatus === "succeeded";
+      paymentStatus === "succeeded"
+    );
 
-    const isPending = paymentStatus === "unpaid" || paymentStatus === "processing" || paymentStatus === "requires_action";
-    const isExpired = paymentStatus === "expired" || eventType === "checkout.session.expired";
-    const isFailed = !isPaid && !isPending && !isExpired;
+    const isPending = isValid && (paymentStatus === "unpaid" || paymentStatus === "processing" || paymentStatus === "requires_action");
+    const isExpired = isValid && (paymentStatus === "expired" || eventType === "checkout.session.expired");
+    const isFailed = !isValid || (!isPaid && !isPending && !isExpired);
 
-    const status: "paid" | "pending" | "failed" | "expired" = isPaid
-      ? "paid"
-      : isPending
-        ? "pending"
-        : isExpired
-          ? "expired"
-          : "failed";
+    const status: "paid" | "pending" | "failed" | "expired" = !isValid
+      ? "failed"
+      : isPaid
+        ? "paid"
+        : isPending
+          ? "pending"
+          : isExpired
+            ? "expired"
+            : "failed";
 
     return {
       isValid,

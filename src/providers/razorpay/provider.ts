@@ -11,6 +11,7 @@ import {
   PaymentMethod,
 } from "../../types";
 import { buildRazorpayBasicAuth, verifyRazorpayWebhook } from "./signature";
+import { resolveRawBody, RAW_BODY_REQUIRED_MESSAGE } from "../../utils/rawBody";
 
 export class RazorpayProvider extends BasePaymentProvider {
   readonly name = "razorpay";
@@ -104,12 +105,17 @@ export class RazorpayProvider extends BasePaymentProvider {
   async verifyCallback(body: any, config: ProviderConfig): Promise<VerifyCallbackResult> {
     const webhookSecret = config.extra?.webhookSecret || config.secretKey || "";
     const signatureHeader = config.extra?.signatureHeader || "";
-    const rawBody = typeof body === "string" ? body : JSON.stringify(body);
+    const rawBody = resolveRawBody(config, body);
     const parsedBody = typeof body === "string" ? JSON.parse(body) : body;
 
     const isValid = signatureHeader
-      ? verifyRazorpayWebhook(rawBody, signatureHeader, webhookSecret)
+      ? verifyRazorpayWebhook(rawBody as string, signatureHeader, webhookSecret)
       : false;
+    const error = isValid
+      ? undefined
+      : rawBody === undefined
+        ? RAW_BODY_REQUIRED_MESSAGE
+        : "Invalid or missing Razorpay webhook signature.";
 
     const eventType = parsedBody?.event || "";
     const payload = parsedBody?.payload;
@@ -119,16 +125,20 @@ export class RazorpayProvider extends BasePaymentProvider {
     const amount = Number(paymentEntity?.amount || 0);
     const statusRaw = (paymentEntity?.status || "").toLowerCase();
 
-    const isPaid = eventType === "payment.captured" || eventType === "payment_link.paid" || statusRaw === "captured";
-    const isPending = eventType === "payment.authorized" || statusRaw === "authorized" || statusRaw === "created";
-    const isExpired = eventType === "payment_link.expired" || statusRaw === "expired";
-    const isFailed = eventType === "payment.failed" || statusRaw === "failed";
+    // Status hanya dipercaya bila signature valid. Tanpa ini, `isPaid: true` bisa
+    // muncul bersamaan dengan `isValid: false` — kombinasi yang paling berbahaya.
+    const isPaid = isValid && (eventType === "payment.captured" || eventType === "payment_link.paid" || statusRaw === "captured");
+    const isPending = isValid && (eventType === "payment.authorized" || statusRaw === "authorized" || statusRaw === "created");
+    const isExpired = isValid && (eventType === "payment_link.expired" || statusRaw === "expired");
+    const isFailed = !isValid || eventType === "payment.failed" || statusRaw === "failed";
 
-    const status: "paid" | "pending" | "failed" | "expired" = isPaid ? "paid" : isPending ? "pending" : isExpired ? "expired" : "failed";
+    const status: "paid" | "pending" | "failed" | "expired" = !isValid
+      ? "failed"
+      : isPaid ? "paid" : isPending ? "pending" : isExpired ? "expired" : "failed";
 
     return {
       isValid, provider: "razorpay", orderId: String(orderId), amount, status, isPaid, isPending, isFailed, isExpired,
-      statusCode: eventType || statusRaw, rawPayload: parsedBody,
+      statusCode: eventType || statusRaw, rawPayload: parsedBody, error,
     };
   }
 

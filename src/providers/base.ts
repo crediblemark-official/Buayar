@@ -17,6 +17,6 @@ export abstract class BasePaymentProvider {
   abstract checkTransaction(params: CheckTransactionParams, config: ProviderConfig): Promise<CheckTransactionResult>;
   
   /** Probe/discover which payment methods are actually enabled/active for the merchant */
-  async probePaymentMethods?(config: ProviderConfig): Promise<{ success: boolean; enabled: string[]; error?: string }>;
+  async probePaymentMethods?(config: ProviderConfig): Promise<{ success: boolean; enabled: string[]; source?: "live" | "static"; error?: string }>;
 }
 

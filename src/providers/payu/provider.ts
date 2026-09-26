@@ -11,6 +11,8 @@ import {
   PaymentMethod,
 } from "../../types";
 import { verifyPayuWebhook, buildPayuBasicAuth } from "./signature";
+import { resolveRawBody, RAW_BODY_REQUIRED_MESSAGE } from "../../utils/rawBody";
+import { CANONICAL_TO_PAYU, resolvePaymentMethodCode } from "../../core/canonical";
 
 export class PayuProvider extends BasePaymentProvider {
   readonly name = "payu";
@@ -93,10 +95,12 @@ export class PayuProvider extends BasePaymentProvider {
     };
 
     if (isDirect && params.paymentMethod) {
+      const code = resolvePaymentMethodCode(params.paymentMethod);
+      const payuMethod = (code && CANONICAL_TO_PAYU[code.toLowerCase()]) || code;
       body.payMethods = {
         payMethod: {
           type: "PBL",
-          value: params.paymentMethod, // e.g. "blik", "c" (card), "ap" (Apple Pay)
+          value: payuMethod,
         },
       };
     }
@@ -141,28 +145,36 @@ export class PayuProvider extends BasePaymentProvider {
   async verifyCallback(body: any, config: ProviderConfig): Promise<VerifyCallbackResult> {
     const md5Key = config.extra?.md5Key || config.apiKey || config.secretKey || "";
     const signatureHeader = config.extra?.signatureHeader || "";
-    const rawBody = typeof body === "string" ? body : JSON.stringify(body);
+    const rawBody = resolveRawBody(config, body);
     const parsedBody = typeof body === "string" ? JSON.parse(body) : body;
 
     const isValid = signatureHeader
-      ? verifyPayuWebhook(rawBody, signatureHeader, md5Key)
+      ? verifyPayuWebhook(rawBody as string, signatureHeader, md5Key)
       : false;
+    const error = isValid
+      ? undefined
+      : rawBody === undefined
+        ? RAW_BODY_REQUIRED_MESSAGE
+        : "Invalid or missing PayU webhook signature.";
 
     const order = parsedBody?.order || parsedBody;
     const orderId = order.extOrderId || order.orderId || "";
     const amount = Number(order.totalAmount || 0);
     const statusRaw = (order.status || "").toUpperCase();
 
-    const isPaid = statusRaw === "COMPLETED";
-    const isPending = statusRaw === "PENDING" || statusRaw === "WAITING_FOR_CONFIRMATION";
-    const isFailed = statusRaw === "CANCELED" || statusRaw === "REJECTED";
+    // Status hanya dipercaya bila signature valid (cegah `isPaid: true` + `isValid: false`).
+    const isPaid = isValid && statusRaw === "COMPLETED";
+    const isPending = isValid && (statusRaw === "PENDING" || statusRaw === "WAITING_FOR_CONFIRMATION");
+    const isFailed = !isValid || statusRaw === "CANCELED" || statusRaw === "REJECTED";
     const isExpired = false;
 
-    const status: "paid" | "pending" | "failed" | "expired" = isPaid ? "paid" : isPending ? "pending" : "failed";
+    const status: "paid" | "pending" | "failed" | "expired" = !isValid
+      ? "failed"
+      : isPaid ? "paid" : isPending ? "pending" : "failed";
 
     return {
       isValid, provider: "payu", orderId: String(orderId), amount, status, isPaid, isPending, isFailed, isExpired,
-      statusCode: statusRaw, rawPayload: parsedBody,
+      statusCode: statusRaw, rawPayload: parsedBody, error,
     };
   }
 

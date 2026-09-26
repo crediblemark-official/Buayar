@@ -70,11 +70,44 @@ describe("Razorpay Provider & Client Integration", () => {
     const signature = createHmac("sha256", secret).update(rawBody).digest("hex");
 
     const buayar = new Buayar({ provider: "razorpay", apiKey: "mockSecret", extra: { webhookSecret: secret } });
-    const result = await buayar.verifyWebhook(payload, { "x-razorpay-signature": signature });
+    // rawBody WAJIB diteruskan: Razorpay menandatangani byte persis yang dikirimnya.
+    const result = await buayar.verifyWebhook(
+      payload,
+      { "x-razorpay-signature": signature },
+      { rawBody }
+    );
 
     expect(result.provider).toBe("razorpay");
     expect(result.isValid).toBe(true);
     expect(result.isPaid).toBe(true);
     expect(result.orderId).toBe("ORDER-RZP-001");
+  });
+
+  // SECURITY: tanpa rawBody, HMAC atas byte persis tidak bisa dihitung → WAJIB fail-closed.
+  // Dulu library memakai JSON.stringify(payload) sehingga test lama ikut hijau, padahal
+  // di produksi bytes dari Razorpay tidak pernah dijamin identik dengan hasil serialisasi.
+  it("should REJECT a Razorpay webhook when rawBody is not provided (fail-closed)", async () => {
+    const secret = "mockWebhookSecret";
+    const payload = {
+      event: "payment.captured",
+      payload: {
+        payment: {
+          entity: {
+            order_id: "order_x",
+            amount: 50000,
+            status: "captured",
+            notes: { order_id: "ORDER-RZP-FORGED" },
+          },
+        },
+      },
+    };
+    const signature = createHmac("sha256", secret).update(JSON.stringify(payload)).digest("hex");
+
+    const buayar = new Buayar({ provider: "razorpay", apiKey: "mockSecret", extra: { webhookSecret: secret } });
+    const result = await buayar.verifyWebhook(payload, { "x-razorpay-signature": signature });
+
+    expect(result.isValid).toBe(false);
+    expect(result.isPaid).toBe(false);
+    expect(result.error).toContain("raw request body");
   });
 });

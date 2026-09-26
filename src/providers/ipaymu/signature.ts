@@ -1,6 +1,23 @@
 import { sha256, hmacSha256, safeCompare } from "../../utils/crypto";
 
 /**
+ * Format timestamp header iPaymu.
+ *
+ * Dokumentasi resmi (Introduction & Signature Generation) menetapkan header
+ * `timestamp` memakai format `YYYYMMDDHHmmss` (bukan epoch milidetik).
+ * Zona waktu mengikuti WIB (UTC+7) karena iPaymu adalah gateway Indonesia;
+ * nilai ini murni informasional — ia tidak ikut ditandatangani.
+ */
+export function formatIpaymuTimestamp(date: Date = new Date()): string {
+  const wib = new Date(date.getTime() + 7 * 60 * 60 * 1000);
+  const p = (n: number) => String(n).padStart(2, "0");
+  return (
+    `${wib.getUTCFullYear()}${p(wib.getUTCMonth() + 1)}${p(wib.getUTCDate())}` +
+    `${p(wib.getUTCHours())}${p(wib.getUTCMinutes())}${p(wib.getUTCSeconds())}`
+  );
+}
+
+/**
  * Generate signature for iPaymu API v2 requests
  * 
  * Signature formula:
@@ -13,7 +30,7 @@ export function generateIpaymuSignature(
   apiKey: string,
   body?: any
 ): { signature: string; timestamp: string } {
-  const timestamp = Date.now().toString();
+  const timestamp = formatIpaymuTimestamp();
   // iPaymu v2 signature spec:
   // For GET: SHA256 of stringified query params (or "{}" if no query)
   // For POST: SHA256 of JSON body (or "{}" if empty)

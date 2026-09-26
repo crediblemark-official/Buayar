@@ -89,7 +89,7 @@ export class ProviderRegistry {
       }
 
       if (h["stripe-signature"]) return "stripe";
-      if (h["x-callback-token"]) return "xendit";
+      if (h["x-callback-token"] || h["x-callback-signature"]) return "xendit";
       if (h["x-razorpay-signature"]) return "razorpay";
       if (h["cko-signature"]) return "checkoutcom";
       if (h["openpayu-signature"]) return "payu";
@@ -98,8 +98,10 @@ export class ProviderRegistry {
       if (h["x-oy-username"]) return "oy";
       if (h["signature"] && (h["client-id"] || h["request-id"])) return "doku";
       if (h["x-signature"] && (payload?.trx_id || payload?.via || payload?.sid)) return "ipaymu";
+      if (h["x-signature"] && (h["x-partner-id"] || h["x-external-id"])) return "doku";
       if (h["svix-signature"] || h["svix-id"]) return "sumopod";
       if (h["x-webhook-token"]) return "sumopod";
+      if (h["paypal-transmission-id"] || h["paypal-transmission-sig"]) return "paypal";
     }
 
     if (!payload) return undefined;

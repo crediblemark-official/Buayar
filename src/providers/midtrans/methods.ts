@@ -165,6 +165,39 @@ export const MIDTRANS_STATIC_METHODS: PaymentMethod[] = [
   },
 ];
 
+/**
+ * Terjemahkan error probe Midtrans menjadi petunjuk aksi.
+ *
+ * Midtrans membalas pesan yang **tidak spesifik** untuk channel yang belum diaktifkan di
+ * akun merchant: `400 · One or more parameters in the payload is invalid.`
+ *
+ * Bukti uji sandbox (2026-09-25): OVO gagal **identik** untuk `08...`, `62...`, maupun
+ * dengan tambahan `customer_details.phone`; DANA gagal identik dengan/tanpa phone;
+ * LinkAja `401`. Artinya bukan masalah payload — channel tersebut memang belum aktif.
+ * Tanpa petunjuk ini, developer cenderung berputar-putar membetulkan payload.
+ */
+export function hintMidtransProbeError(
+  method: string,
+  error?: string,
+  statusCode?: string
+): string | undefined {
+  const message = (error || "").toLowerCase();
+
+  if (message.includes("payload is invalid")) {
+    return (
+      `Midtrans membalas error generik 400 untuk channel yang belum diaktifkan. ` +
+      `Kemungkinan besar '${method}' belum aktif di akun ini (bukan masalah payload) — ` +
+      `minta aktivasi channel lewat dashboard/support Midtrans.`
+    );
+  }
+
+  if (statusCode === "401" || message.includes("401") || message.includes("unauthorized")) {
+    return `Channel '${method}' tidak diizinkan / belum aktif untuk akun ini (HTTP 401).`;
+  }
+
+  return undefined;
+}
+
 export const MIDTRANS_PROBE_PAYLOADS: Record<string, any> = {
   qris: { payment_type: "qris", qris: { acquirer: "gopay" } },
   gopay: { payment_type: "gopay", gopay: { enable_callback: true, callback_url: "https://example.com" } },
@@ -180,7 +213,8 @@ export const MIDTRANS_PROBE_PAYLOADS: Record<string, any> = {
   bsi: { payment_type: "bank_transfer", bank_transfer: { bank: "bsi" } },
   seabank: { payment_type: "bank_transfer", bank_transfer: { bank: "seabank" } },
   mandiri: { payment_type: "echannel", echannel: { bill_info1: "Payment", bill_info2: "Probe" } },
-  permata: { payment_type: "permata" },
+  // Permata VA memakai bank_transfer + bank "permata" (tidak ada payment_type "permata").
+  permata: { payment_type: "bank_transfer", bank_transfer: { bank: "permata" } },
   alfamart: { payment_type: "cstore", cstore: { store: "alfamart", message: "Probe" } },
   indomaret: { payment_type: "cstore", cstore: { store: "indomaret", message: "Probe" } },
   akulaku: { payment_type: "akulaku" },

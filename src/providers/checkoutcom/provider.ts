@@ -11,6 +11,7 @@ import {
   PaymentMethod,
 } from "../../types";
 import { verifyCheckoutComWebhook } from "./signature";
+import { resolveRawBody, RAW_BODY_REQUIRED_MESSAGE } from "../../utils/rawBody";
 
 export class CheckoutComProvider extends BasePaymentProvider {
   readonly name = "checkoutcom";
@@ -114,12 +115,17 @@ export class CheckoutComProvider extends BasePaymentProvider {
   async verifyCallback(body: any, config: ProviderConfig): Promise<VerifyCallbackResult> {
     const webhookSecret = config.extra?.webhookSecret || config.secretKey || "";
     const signatureHeader = config.extra?.signatureHeader || "";
-    const rawBody = typeof body === "string" ? body : JSON.stringify(body);
+    const rawBody = resolveRawBody(config, body);
     const parsedBody = typeof body === "string" ? JSON.parse(body) : body;
 
     const isValid = signatureHeader
-      ? verifyCheckoutComWebhook(rawBody, signatureHeader, webhookSecret)
+      ? verifyCheckoutComWebhook(rawBody as string, signatureHeader, webhookSecret)
       : false;
+    const error = isValid
+      ? undefined
+      : rawBody === undefined
+        ? RAW_BODY_REQUIRED_MESSAGE
+        : "Invalid or missing Checkout.com webhook signature.";
 
     const eventType = parsedBody?.type || "";
     const data = parsedBody?.data || parsedBody;
@@ -127,12 +133,15 @@ export class CheckoutComProvider extends BasePaymentProvider {
     const orderId = data?.reference || data?.metadata?.order_id || data?.id || "";
     const amount = Number(data?.amount || 0);
 
-    const isPaid = eventType === "payment_approved" || eventType === "payment_captured" || data?.approved === true;
-    const isPending = eventType === "payment_pending" || eventType === "payment_voided";
-    const isExpired = eventType === "payment_expired";
-    const isFailed = eventType === "payment_declined" || eventType === "payment_capture_declined";
+    // Status hanya dipercaya bila signature valid (cegah `isPaid: true` + `isValid: false`).
+    const isPaid = isValid && (eventType === "payment_approved" || eventType === "payment_captured" || data?.approved === true);
+    const isPending = isValid && (eventType === "payment_pending" || eventType === "payment_voided");
+    const isExpired = isValid && eventType === "payment_expired";
+    const isFailed = !isValid || eventType === "payment_declined" || eventType === "payment_capture_declined";
 
-    const status: "paid" | "pending" | "failed" | "expired" = isPaid
+    const status: "paid" | "pending" | "failed" | "expired" = !isValid
+      ? "failed"
+      : isPaid
       ? "paid"
       : isPending ? "pending" : isExpired ? "expired" : "failed";
 
@@ -148,6 +157,7 @@ export class CheckoutComProvider extends BasePaymentProvider {
       isExpired,
       statusCode: eventType,
       rawPayload: parsedBody,
+      error,
     };
   }
 

@@ -11,12 +11,16 @@ describe("Xendit Provider & Client Integration", () => {
     expect(buayar.getConfig().apiKey).toBe("xnd_development_secret123");
   });
 
-  it("should create direct VA invoice via Xendit Payment Requests API", async () => {
+  it("should create direct VA invoice via Xendit Payments API v3 (endpoint, header, schema)", async () => {
     const originalFetch = globalThis.fetch;
     let capturedBody: any = null;
+    let capturedUrl = "";
+    let capturedHeaders: any = null;
     (globalThis as any).fetch = async (url: any, options: any) => {
       const body = JSON.parse(options.body);
       capturedBody = body;
+      capturedUrl = String(url);
+      capturedHeaders = options.headers;
       return {
         ok: true,
         status: 200,
@@ -24,16 +28,14 @@ describe("Xendit Provider & Client Integration", () => {
           id: "pr-12345678",
           reference_id: body.reference_id,
           currency: "IDR",
-          amount: body.amount,
-          status: "PENDING",
-          payment_method: {
-            type: "VIRTUAL_ACCOUNT",
-            channel_code: "BCA",
-            channel_properties: {
-              virtual_account_number: "88089912345678",
-              expires_at: "2026-09-02T12:00:00.000Z",
-            },
+          request_amount: body.request_amount,
+          status: "REQUIRES_ACTION",
+          channel_code: "BCA",
+          channel_properties: {
+            virtual_account_number: "88089912345678",
+            expires_at: "2026-09-02T12:00:00.000Z",
           },
+          actions: [{ type: "PRESENT_TO_CUSTOMER", value: "88089912345678", descriptor: "VIRTUAL_ACCOUNT_NUMBER" }],
         }),
       } as any;
     };
@@ -58,10 +60,22 @@ describe("Xendit Provider & Client Integration", () => {
       expect(response.vaNumber).toBe("88089912345678");
       expect(response.vaBank).toBe("bca");
       expect(response.reference).toBe("pr-12345678");
+      expect(response.amount).toBe(150000);
 
-      // Payment Requests API rejects the inline `customer` object; it must be
-      // omitted and any customer attribution must come via `customer_id`.
-      expect(capturedBody).toBeDefined();
+      // Payments API v3: endpoint + api-version header + top-level channel schema.
+      expect(capturedUrl).toContain("/v3/payment_requests");
+      expect(capturedHeaders["api-version"]).toBe("2024-11-11");
+      expect(capturedBody.type).toBe("PAY");
+      expect(capturedBody.request_amount).toBe(150000);
+      // v3 memakai sufiks `_VIRTUAL_ACCOUNT` (diverifikasi live); `"BCA"` → API_VALIDATION_ERROR.
+      expect(capturedBody.channel_code).toBe("BCA_VIRTUAL_ACCOUNT");
+      expect(capturedBody.payment_method).toBeUndefined();
+      expect(capturedBody.amount).toBeUndefined();
+      // v3 VA mewajibkan `display_name` (bukan `customer_name`).
+      expect(capturedBody.channel_properties.display_name).toBe("Budi");
+      expect(capturedBody.channel_properties.customer_name).toBeUndefined();
+      // Kami sengaja omit objek `customer` terstruktur (reference_id wajib alfanumerik,
+      // orderId umumnya mengandung `-`); atribusi lewat `customer_id` bila tersedia.
       expect(capturedBody.customer).toBeUndefined();
       expect(capturedBody.customer_id).toBe("cust-12345");
     } finally {
@@ -69,21 +83,157 @@ describe("Xendit Provider & Client Integration", () => {
     }
   });
 
-  it("should create redirect invoice via Xendit Invoice v2 API", async () => {
+  it("should send failure_return_url on Xendit e-wallet channel_properties (X-2)", async () => {
     const originalFetch = globalThis.fetch;
-    (globalThis as any).fetch = async (url: any, options: any) => {
-      const body = JSON.parse(options.body);
+    let capturedBody: any = null;
+    (globalThis as any).fetch = async (_url: any, options: any) => {
+      capturedBody = JSON.parse(options.body);
       return {
         ok: true,
         status: 200,
-        text: async () => JSON.stringify({
-          id: "inv-67890",
-          external_id: body.external_id,
-          amount: body.amount,
-          status: "PENDING",
-          invoice_url: "https://checkout.xendit.co/web/inv-67890",
-          expiry_date: "2026-09-02T12:00:00.000Z",
-        }),
+        text: async () =>
+          JSON.stringify({
+            id: "pr-ewallet",
+            reference_id: capturedBody.reference_id,
+            request_amount: capturedBody.request_amount,
+            status: "REQUIRES_ACTION",
+            channel_code: "OVO",
+            actions: [{ type: "REDIRECT_CUSTOMER", value: "https://checkout.xendit.co/ovo" }],
+          }),
+      } as any;
+    };
+
+    try {
+      const buayar = new Buayar({ provider: "xendit", apiKey: "xnd_development_test" });
+      const response = await buayar.createInvoice({
+        orderId: "ORDER-XND-EW-1",
+        amount: 50000,
+        paymentMethod: "ovo",
+        productDetails: "Topup OVO",
+        customer: { name: "Budi", email: "budi@mail.com", phone: "08123456789" },
+        returnUrl: "https://myapp.com/return",
+      });
+
+      expect(response.success).toBe(true);
+      expect(capturedBody.channel_code).toBe("OVO");
+      expect(capturedBody.channel_properties.success_return_url).toBe("https://myapp.com/return");
+      expect(capturedBody.channel_properties.failure_return_url).toBe("https://myapp.com/return");
+      // OVO v3 mewajibkan `account_mobile_number` (E.164).
+      expect(capturedBody.channel_properties.account_mobile_number).toBe("+628123456789");
+      expect(response.paymentUrl).toBe("https://checkout.xendit.co/ovo");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("should use REUSABLE_PAYMENT_CODE + payer_name for retail outlets (alfamart/indomaret) on v3", async () => {
+    const originalFetch = globalThis.fetch;
+    let capturedBody: any = null;
+    (globalThis as any).fetch = async (_url: any, options: any) => {
+      capturedBody = JSON.parse(options.body);
+      return {
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify({
+            id: "pr-otc",
+            reference_id: capturedBody.reference_id,
+            request_amount: capturedBody.request_amount,
+            status: "REQUIRES_ACTION",
+            channel_code: "ALFAMART",
+            actions: [{ type: "PRESENT_TO_CUSTOMER", value: "TESTABC123", descriptor: "PAYMENT_CODE" }],
+          }),
+      } as any;
+    };
+
+    try {
+      const buayar = new Buayar({ provider: "xendit", apiKey: "xnd_development_test" });
+      const response = await buayar.createInvoice({
+        orderId: "ORDER-XND-OTC-1",
+        amount: 25000,
+        paymentMethod: "alfamart",
+        productDetails: "Voucher Game",
+        customer: { name: "Budi Santoso", email: "budi@mail.com" },
+      });
+
+      expect(response.success).toBe(true);
+      expect(response.paymentCode).toBe("TESTABC123");
+      expect(capturedBody.channel_code).toBe("ALFAMART");
+      expect(capturedBody.type).toBe("REUSABLE_PAYMENT_CODE");
+      expect(capturedBody.channel_properties.payer_name).toBe("Budi Santoso");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("should keep legacy v2 channel schema when config.extra.xenditApiVersion = 'v2'", async () => {
+    const originalFetch = globalThis.fetch;
+    let capturedBody: any = null;
+    let capturedUrl = "";
+    (globalThis as any).fetch = async (url: any, options: any) => {
+      capturedUrl = String(url);
+      capturedBody = JSON.parse(options.body);
+      return {
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify({
+            id: "pr-v2",
+            status: "REQUIRES_ACTION",
+            payment_method: {
+              virtual_account: {
+                channel_code: "BCA",
+                channel_properties: { virtual_account_number: "88089900000001" },
+              },
+            },
+          }),
+      } as any;
+    };
+
+    try {
+      const buayar = new Buayar({
+        provider: "xendit",
+        apiKey: "xnd_development_test",
+        extra: { xenditApiVersion: "v2" },
+      });
+      const response = await buayar.createInvoice({
+        orderId: "ORDER-XND-V2-1",
+        amount: 30000,
+        paymentMethod: "bca_va",
+        productDetails: "Legacy VA",
+        customer: { name: "Budi", email: "budi@mail.com" },
+      });
+
+      expect(response.success).toBe(true);
+      expect(capturedUrl).not.toContain("/v3/");
+      expect(capturedBody.payment_method).toBeDefined();
+      expect(capturedBody.payment_method.virtual_account.channel_code).toBe("BCA");
+      expect(capturedBody.payment_method.virtual_account.channel_properties.customer_name).toBe("Budi");
+      expect(capturedBody.channel_code).toBeUndefined();
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("should create hosted checkout via Xendit Payment Sessions (legacy Invoice replacement)", async () => {
+    const originalFetch = globalThis.fetch;
+    let capturedUrl = "";
+    let capturedBody: any = null;
+    (globalThis as any).fetch = async (url: any, options: any) => {
+      capturedUrl = String(url);
+      capturedBody = JSON.parse(options.body);
+      return {
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify({
+            payment_session_id: "ps-67890",
+            reference_id: capturedBody.reference_id,
+            amount: capturedBody.amount,
+            status: "ACTIVE",
+            payment_link_url: "https://checkout.xendit.co/web/ps-67890",
+            expires_at: "2026-09-02T12:00:00.000Z",
+          }),
       } as any;
     };
 
@@ -97,11 +247,65 @@ describe("Xendit Provider & Client Integration", () => {
         orderId: "ORDER-XND-002",
         amount: 200000,
         productDetails: "Lisensi Software",
-        customer: { name: "Budi", email: "budi@mail.com" },
+        customer: { name: "Budi Santoso", email: "budi@mail.com", phone: "081234567890" },
+        returnUrl: "https://myapp.com/return",
       });
 
       expect(response.success).toBe(true);
       expect(response.provider).toBe("xendit");
+      expect(response.reference).toBe("ps-67890");
+      expect(response.paymentUrl).toBe("https://checkout.xendit.co/web/ps-67890");
+
+      // Endpoint Payment Sessions + skema PAYMENT_LINK, bukan /v2/invoices (legacy).
+      expect(capturedUrl).toContain("/sessions");
+      expect(capturedBody.session_type).toBe("PAY");
+      expect(capturedBody.mode).toBe("PAYMENT_LINK");
+      expect(capturedBody.external_id).toBeUndefined();
+      // Nomor telepon lokal dinormalisasi ke E.164.
+      expect(capturedBody.customer.mobile_number).toBe("+6281234567890");
+      // reference_id pelanggan wajib alfanumerik.
+      expect(capturedBody.customer.reference_id).toBe("ORDERXND002");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("should fall back to legacy Invoice v2 when config.extra.xenditRedirect = 'invoice'", async () => {
+    const originalFetch = globalThis.fetch;
+    let capturedUrl = "";
+    (globalThis as any).fetch = async (url: any, options: any) => {
+      capturedUrl = String(url);
+      const body = JSON.parse(options.body);
+      return {
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify({
+            id: "inv-67890",
+            external_id: body.external_id,
+            amount: body.amount,
+            status: "PENDING",
+            invoice_url: "https://checkout.xendit.co/web/inv-67890",
+          }),
+      } as any;
+    };
+
+    try {
+      const buayar = new Buayar({
+        provider: "xendit",
+        apiKey: "xnd_development_test",
+        extra: { xenditRedirect: "invoice" },
+      });
+
+      const response = await buayar.createInvoice({
+        orderId: "ORDER-XND-003",
+        amount: 200000,
+        productDetails: "Lisensi Software",
+        customer: { name: "Budi", email: "budi@mail.com" },
+      });
+
+      expect(response.success).toBe(true);
+      expect(capturedUrl).toContain("/v2/invoices");
       expect(response.paymentUrl).toBe("https://checkout.xendit.co/web/inv-67890");
     } finally {
       globalThis.fetch = originalFetch;
@@ -210,6 +414,8 @@ describe("Xendit Provider & Client Integration", () => {
       const probe = await buayar.probePaymentMethods();
       expect(probe.success).toBe(true);
       expect(probe.enabled).toEqual(["bca_va", "ovo"]);
+      // Endpoint /payment_channels berhasil → sumber harus dilaporkan LIVE (X-8).
+      expect((probe as any).source).toBe("live");
     } finally {
       globalThis.fetch = originalFetch;
     }

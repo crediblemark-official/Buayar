@@ -42,36 +42,83 @@ export class IpaymuProvider extends BasePaymentProvider {
     const escrow = params.escrow !== undefined ? params.escrow : (params.extra?.escrow !== undefined ? params.extra?.escrow : config.extra?.escrow);
     const subAccount = params.subAccountId || params.extra?.subAccountId || params.extra?.account || params.extra?.childAccount || (params as any).account || config.extra?.account;
 
+    // Batas kadaluarsa (jam) per channel sesuai dokumentasi resmi iPaymu Direct Payment:
+    // BSI VA maks 3 jam, BRI VA maks 2 jam; BCA VA, Alfamart, dan QRIS tidak bisa dikustom
+    // (default vendor: BCA 12 jam, Alfamart 24 jam, QRIS 5 menit). Mengirim `expired`
+    // di luar batas dapat ditolak gateway, jadi nilai di-clamp dan di-omit bila dilarang.
+    const channel = (ipaymuMethod?.paymentChannel || "").toLowerCase();
+    const expiryLocked =
+      ipaymuMethod?.paymentMethod === "qris" || channel === "bca" || channel === "alfamart";
+    const EXPIRY_CAP_HOURS: Record<string, number> = { bri: 2, bsi: 3 };
+    const requestedExpiry =
+      params.extra?.expiredHours ??
+      params.providerParams?.expired ??
+      config.extra?.expiredHours ??
+      config.extra?.expired;
+    const capHours = EXPIRY_CAP_HOURS[channel];
+    const resolvedExpiry =
+      typeof requestedExpiry === "number" && Number.isFinite(requestedExpiry)
+        ? capHours
+          ? Math.max(1, Math.min(requestedExpiry, capHours))
+          : Math.max(1, Math.min(requestedExpiry, 24))
+        : capHours;
+
+    // Rincian item (product/qty/price). Dokumentasi resmi iPaymu mencantumkan
+    // ketiganya sebagai parameter Direct Payment (WAJIB untuk COD — gateway
+    // menolak dengan "product wajib diisi." bila kosong) dan opsional untuk
+    // channel lain. Dikirim selalu agar payload patuh dokumen di semua channel.
+    const hasItems = params.items && params.items.length > 0;
+    const product = hasItems ? params.items!.map(i => i.name) : [productDetails];
+    const qty = hasItems ? params.items!.map(i => i.quantity) : [1];
+    const price = hasItems ? params.items!.map(i => Math.round(i.price)) : [integerAmount];
+    // Dimensi per item (kg/cm). Dikirim sebagai array paralel hanya bila SEMUA
+    // item mendefinisikannya, karena iPaymu mencocokkan indeks array. Wajib untuk
+    // COD (gateway menolak dengan "weight wajib diisi."), opsional untuk channel lain.
+    const dims: Record<string, number[]> = {};
+    for (const key of ["weight", "width", "length", "height"] as const) {
+      if (hasItems && params.items!.every(i => i[key] !== undefined)) {
+        dims[key] = params.items!.map(i => i[key] as number);
+      }
+    }
+
     let payload: any;
     if (isDirect) {
+      const needsRedirectUrls =
+        ipaymuMethod.paymentMethod === "cc" || ipaymuMethod.paymentMethod === "paylater";
       payload = {
         name: customer.name,
         email: customer.email,
         ...(customer.phone ? { phone: customer.phone } : {}),
         amount: integerAmount,
         notifyUrl,
-        expired: 24,
-        expiredType: "hours",
+        // `expired` hanya dikirim bila channel mengizinkannya (lihat clamp di atas).
+        ...(expiryLocked || resolvedExpiry === undefined
+          ? {}
+          : { expired: resolvedExpiry, expiredType: "hours" }),
         comments: productDetails,
         referenceId: orderId,
+        product,
+        qty,
+        price,
+        ...dims,
         paymentMethod: ipaymuMethod.paymentMethod,
         ...(ipaymuMethod.paymentChannel ? { paymentChannel: ipaymuMethod.paymentChannel } : {}),
+        ...(needsRedirectUrls ? { successUrl: redirectUrl, cancelUrl: redirectUrl } : {}),
         ...(feeDirection ? { feeDirection } : {}),
         ...(escrow !== undefined ? { escrow } : {}),
         ...(subAccount ? { account: subAccount } : {}),
         ...params.providerParams,
       };
     } else {
-      const hasItems = params.items && params.items.length > 0;
-      const product = hasItems
+      // Halaman hosted iPaymu membatasi panjang nama produk (50 karakter),
+      // jadi nama dipotong untuk mode Semi-Integrasi.
+      const hostedProduct = hasItems
         ? params.items!.map(i => i.name)
         : [productDetails.length > 50 ? productDetails.substring(0, 47) + "..." : productDetails];
-      const qty = hasItems ? params.items!.map(i => i.quantity) : [1];
-      const price = hasItems ? params.items!.map(i => Math.round(i.price)) : [integerAmount];
       const description = hasItems ? params.items!.map(i => i.description || i.name) : [productDetails];
 
       payload = {
-        product,
+        product: hostedProduct,
         qty,
         price,
         description,
@@ -257,16 +304,14 @@ export class IpaymuProvider extends BasePaymentProvider {
           const groupName = group.Name || group.Description || "Lainnya";
           const channels = group.Channels || [];
 
-          let category = "Lainnya";
+          let category: "Virtual Account" | "QRIS" | "E-Wallet" | "Retail / Gerai" | "Kartu Kredit" | "Paylater / Cicilan" | "Lainnya" = "Lainnya";
           if (groupCode === "va") category = "Virtual Account";
           else if (groupCode === "cstore") category = "Retail / Gerai";
           else if (groupCode === "qris") category = "QRIS";
-          else if (groupCode === "cc") category = "Kartu Kredit";
+          else if (groupCode === "cc" || groupCode === "debitonline") category = "Kartu Kredit";
           else if (groupCode === "paylater") category = "Paylater / Cicilan";
-          else if (groupCode === "cod") category = "COD";
           else if (groupCode === "ewallet" || groupCode === "ewallet-asia") category = "E-Wallet";
-          else if (groupCode === "debitonline") category = "Debit Online";
-          else category = groupName;
+          else category = "Lainnya";
 
           for (const ch of channels) {
             const chCode = (ch.Code || "").toLowerCase();
@@ -348,24 +393,34 @@ export class IpaymuProvider extends BasePaymentProvider {
     }
   }
 
-  async probePaymentMethods(config: ProviderConfig): Promise<{ success: boolean; enabled: string[]; error?: string }> {
+  async probePaymentMethods(config: ProviderConfig): Promise<{
+    success: boolean;
+    enabled: string[];
+    source?: "live" | "static";
+    error?: string;
+  }> {
+    // LIVE: iPaymu menyediakan `GET /api/v2/payment-channels`, jadi hasil ini
+    // benar-benar mencerminkan channel yang aktif di akun merchant.
     try {
       const res = await this.getPaymentMethods({ amount: 10000 }, config);
       if (res.success && res.methods) {
         return {
           success: true,
           enabled: res.methods.map((m) => m.paymentMethod),
+          source: "live",
         };
       }
       return {
         success: false,
         enabled: [],
+        source: "live",
         error: res.error || "Failed to probe iPaymu payment methods",
       };
     } catch (e: any) {
       return {
         success: false,
         enabled: [],
+        source: "live",
         error: e.message || "Failed to probe iPaymu payment methods",
       };
     }

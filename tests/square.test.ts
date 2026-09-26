@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+import { createHmac } from "crypto";
 import { Buayar } from "../src";
 
 describe("Square Provider & Client Integration", () => {
@@ -49,8 +50,9 @@ describe("Square Provider & Client Integration", () => {
     }
   });
 
-  it("should normalize Square webhook notification", async () => {
-    const buayar = new Buayar({ provider: "square", apiKey: "EAAAEmock" });
+  it("should normalize Square webhook notification when the signature is valid", async () => {
+    const signatureKey = "mockSignatureKey";
+    const notificationUrl = "https://example.test/webhook";
 
     const payload = {
       type: "payment.completed",
@@ -67,9 +69,42 @@ describe("Square Provider & Client Integration", () => {
       },
     };
 
-    const result = await buayar.verifyWebhook(payload);
+    const rawBody = JSON.stringify(payload);
+    // Square menandatangani notificationUrl + rawBody dengan HMAC-SHA256 (base64).
+    const signature = createHmac("sha256", signatureKey)
+      .update(notificationUrl + rawBody)
+      .digest("base64");
+
+    const buayar = new Buayar({
+      provider: "square",
+      apiKey: "EAAAEmock",
+      callbackUrl: notificationUrl,
+      extra: { webhookSignatureKey: signatureKey },
+    });
+
+    const result = await buayar.verifyWebhook(
+      payload,
+      { "x-square-hmacsha256-signature": signature },
+      { rawBody }
+    );
     expect(result.provider).toBe("square");
+    expect(result.isValid).toBe(true);
     expect(result.isPaid).toBe(true);
     expect(result.amount).toBe(2500);
+  });
+
+  // SECURITY: tanpa signature, `isValid` harus false DAN `isPaid` harus false.
+  // Test lama justru mengharapkan isPaid: true dari webhook tanpa autentikasi apa pun.
+  it("should REJECT an unauthenticated Square webhook (fail-closed)", async () => {
+    const buayar = new Buayar({ provider: "square", apiKey: "EAAAEmock" });
+
+    const result = await buayar.verifyWebhook({
+      type: "payment.completed",
+      data: { object: { payment: { reference_id: "ORDER-SQ-FORGED", amount_money: { amount: 2500 }, status: "COMPLETED" } } },
+    });
+
+    expect(result.isValid).toBe(false);
+    expect(result.isPaid).toBe(false);
+    expect(result.status).toBe("failed");
   });
 });

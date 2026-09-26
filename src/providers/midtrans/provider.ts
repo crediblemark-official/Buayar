@@ -10,6 +10,7 @@ import {
   CheckTransactionParams,
   CheckTransactionResult,
   PaymentMethod,
+  resolvePaymentMethodCode,
 } from "../../types";
 import { toCanonicalPaymentMethod } from "../../core/canonical";
 import { sha512, safeCompare } from "../../utils/crypto";
@@ -17,11 +18,43 @@ import {
   CORE_API_METHODS,
   buildCoreChargePayload,
   parseCoreChargeResponse,
+  toMidtransSnapEnabledPayment,
 } from "./charge";
 import {
   MIDTRANS_STATIC_METHODS,
   MIDTRANS_PROBE_PAYLOADS,
+  hintMidtransProbeError,
 } from "./methods";
+import {
+  MidtransSnapClient,
+  buildMidtransSnapQrisBody,
+  buildMidtransSnapQrisQueryBody,
+  buildMidtransSnapVaBody,
+  buildMidtransSnapVaStatusBody,
+  describeMidtransSnapFailure,
+  extractMidtransSnapNotificationOrderId,
+  isMidtransSnapEnabled,
+  isMidtransSnapSuccess,
+  mapMidtransSnapStatus,
+  midtransSnapExternalId,
+  parseMidtransSnapQrisResponse,
+  parseMidtransSnapVaResponse,
+  resolveMidtransSnapCredentials,
+  toMidtransSnapMethod,
+  toMidtransSnapReferenceNo,
+  verifyMidtransSnapNotificationSignature,
+  type MidtransSnapMethod,
+} from "./snap";
+
+/** Hasil probe satu channel Midtrans beserta diagnosanya. */
+export interface MidtransProbeChannelResult {
+  method: string;
+  enabled: boolean;
+  statusCode?: string;
+  error?: string;
+  /** Petunjuk aksi bila kegagalan berasal dari channel yang belum diaktifkan. */
+  hint?: string;
+}
 
 export class MidtransProvider extends BasePaymentProvider {
   readonly name = "midtrans";
@@ -42,9 +75,23 @@ export class MidtransProvider extends BasePaymentProvider {
     const { orderId, amount, productDetails, customer, returnUrl } = params;
     const sandbox = !!config.sandbox;
     const integerAmount = Math.round(amount);
-    const rawMethod = params.paymentMethod?.toLowerCase().trim() || "";
+    const methodCode = resolvePaymentMethodCode(params.paymentMethod);
+    const rawMethod = methodCode?.toLowerCase().trim() || "";
     const canonicalMethod = toCanonicalPaymentMethod("midtrans", rawMethod);
     const method = canonicalMethod || rawMethod;
+    // `enabled_payments` Snap memakai kosakata berbeda dari kode kanonikal
+    // (mis. qris → other_qris, mandiri_va → echannel). Lihat CANONICAL_TO_MIDTRANS_SNAP.
+    const snapEnabledPayment = toMidtransSnapEnabledPayment(method) || methodCode;
+
+    // 0. BI-SNAP Core API (opt-in) — jalur resmi bagi merchant yang sudah dimigrasikan
+    // Midtrans. Hanya menangani kanal yang memang tersedia di SNAP (VA bank + QRIS MPM);
+    // kanal lain tetap memakai Core API legacy / Snap agar tidak ada perubahan perilaku.
+    if (isMidtransSnapEnabled(config)) {
+      const snapMethod = toMidtransSnapMethod(method);
+      if (snapMethod) {
+        return this.createInvoiceViaSnap(snapMethod, params, config, integerAmount);
+      }
+    }
 
     // 1. Core API (Direct Charge / Custom Native UI)
     if (method && CORE_API_METHODS.includes(method)) {
@@ -95,7 +142,7 @@ export class MidtransProvider extends BasePaymentProvider {
       customer_details: {
         first_name: customer.name,
         email: customer.email,
-        phone: customer.phone || "",
+        ...(customer.phone ? { phone: customer.phone } : {}),
       },
       item_details: [
         {
@@ -106,7 +153,7 @@ export class MidtransProvider extends BasePaymentProvider {
         },
       ],
       callbacks: { finish: returnUrl || config.returnUrl || "" },
-      ...(params.paymentMethod ? { enabled_payments: [params.paymentMethod] } : {}),
+      ...(snapEnabledPayment ? { enabled_payments: [snapEnabledPayment] } : {}),
       ...params.providerParams,
     };
 
@@ -146,7 +193,124 @@ export class MidtransProvider extends BasePaymentProvider {
     }
   }
 
+  /** Respons kegagalan seragam untuk jalur BI-SNAP. */
+  private snapError(orderId: string, amount: number, error: string, raw: any = null): InvoiceResponse {
+    return { success: false, provider: "midtrans", orderId, amount, rawResponse: raw, error };
+  }
+
+  /**
+   * Charge lewat **BI-SNAP Core API** Midtrans (VA bank & QRIS MPM).
+   * Kontrak API-nya didokumentasikan di `src/providers/midtrans/snap.ts`.
+   */
+  private async createInvoiceViaSnap(
+    snapMethod: MidtransSnapMethod,
+    params: CreateInvoiceParams,
+    config: ProviderConfig,
+    integerAmount: number
+  ): Promise<InvoiceResponse> {
+    const { orderId, customer } = params;
+    const extra = (config.extra || {}) as Record<string, any>;
+    const { credentials, missing } = resolveMidtransSnapCredentials(config);
+
+    if (missing.length) {
+      return this.snapError(
+        orderId,
+        integerAmount,
+        `Midtrans BI-SNAP aktif tetapi kredensial belum lengkap: ${missing.join(", ")}`
+      );
+    }
+
+    const client = new MidtransSnapClient(config);
+
+    try {
+      if (snapMethod.kind === "qris") {
+        const body = buildMidtransSnapQrisBody({
+          orderId,
+          amount: integerAmount,
+          currency: params.currency,
+          acquirer: snapMethod.acquirer,
+          merchantId: credentials.merchantId || undefined,
+          validityPeriod: extra.snapValidityPeriod,
+          customer: { name: customer.name, email: customer.email, phone: customer.phone },
+          items: extra.snapItems,
+        });
+
+        // Pada MPM, X-EXTERNAL-ID wajib sama dengan body.partnerReferenceNo.
+        const data = await client.createQris(body, body.partnerReferenceNo);
+        if (!isMidtransSnapSuccess(data)) {
+          return this.snapError(orderId, integerAmount, describeMidtransSnapFailure(data), data);
+        }
+
+        const res = parseMidtransSnapQrisResponse(data, orderId, integerAmount);
+        if (!res.qrString && !res.qrCodeUrl) {
+          return this.snapError(
+            orderId,
+            integerAmount,
+            `Midtrans BI-SNAP tidak mengembalikan qrContent/qrUrl (responseCode: ${data?.responseCode ?? "-"})`,
+            data
+          );
+        }
+        return res;
+      }
+
+      // Create VA memerlukan partnerServiceId (8 karakter) & customerNo milik akun merchant.
+      const partnerServiceId = typeof extra.snapPartnerServiceId === "string" ? extra.snapPartnerServiceId.trim() : "";
+      const customerNo = typeof extra.snapCustomerNo === "string" ? extra.snapCustomerNo.trim() : "";
+      if (!partnerServiceId || !customerNo) {
+        return this.snapError(
+          orderId,
+          integerAmount,
+          "Midtrans BI-SNAP VA membutuhkan config.extra.snapPartnerServiceId (8 karakter) & config.extra.snapCustomerNo yang diberikan Midtrans."
+        );
+      }
+
+      const body = buildMidtransSnapVaBody({
+        orderId,
+        amount: integerAmount,
+        currency: params.currency,
+        bank: snapMethod.bank,
+        partnerServiceId,
+        customerNo,
+        virtualAccountName: customer.name,
+        virtualAccountEmail: customer.email,
+        virtualAccountPhone: customer.phone,
+        expiredDate: extra.snapExpiredDate,
+        merchantId: credentials.merchantId || undefined,
+        customer: { name: customer.name, email: customer.email, phone: customer.phone },
+        items: extra.snapItems,
+        randomizeVaNumber: extra.snapRandomizeVaNumber,
+      });
+
+      const data = await client.createVa(body, midtransSnapExternalId());
+      if (!isMidtransSnapSuccess(data)) {
+        return this.snapError(orderId, integerAmount, describeMidtransSnapFailure(data), data);
+      }
+
+      const res = parseMidtransSnapVaResponse(data, orderId, integerAmount, snapMethod.bank);
+      if (!res.vaNumber) {
+        return this.snapError(
+          orderId,
+          integerAmount,
+          `Midtrans BI-SNAP tidak mengembalikan virtualAccountNo (responseCode: ${data?.responseCode ?? "-"})`,
+          data
+        );
+      }
+      return res;
+    } catch (e: any) {
+      return this.snapError(
+        orderId,
+        integerAmount,
+        e?.message || "Gagal memanggil Midtrans BI-SNAP Core API"
+      );
+    }
+  }
+
   async verifyCallback(body: any, config: ProviderConfig): Promise<VerifyCallbackResult> {
+    // Notifikasi BI-SNAP (MPM QRIS & Direct Debit) memakai signature asimetris dan
+    // status numerik; Virtual Account tetap memakai notifikasi legacy di bawah.
+    if (body && typeof body === "object" && body.latestTransactionStatus !== undefined) {
+      return this.verifySnapNotification(body, config);
+    }
     const serverKey = config.serverKey || config.apiKey || "";
     const orderId = body.order_id || "";
     const statusCode = body.status_code || "";
@@ -205,6 +369,43 @@ export class MidtransProvider extends BasePaymentProvider {
     };
   }
 
+  private verifySnapNotification(body: any, config: ProviderConfig): VerifyCallbackResult {
+    const extra = (config.extra || {}) as Record<string, any>;
+    const meta = extra.snapNotification || {};
+    const publicKey = meta.publicKey || extra.snapMidtransPublicKey || "";
+    const urlPath = meta.urlPath || extra.snapNotificationPath || "";
+    const timeStamp = meta.timeStamp || extra.snapTimestamp || "";
+    const signature = meta.signature || extra.snapSignature || "";
+
+    const isValid = verifyMidtransSnapNotificationSignature({
+      body,
+      urlPath,
+      timeStamp,
+      signature,
+      publicKey,
+      httpMethod: meta.httpMethod,
+    });
+
+    const code = String(body.latestTransactionStatus ?? "");
+    const status = mapMidtransSnapStatus(code);
+    const orderId = extractMidtransSnapNotificationOrderId(body);
+    const amount = Number(body?.amount?.value ?? body?.totalAmount?.value ?? 0);
+
+    return {
+      isValid,
+      provider: "midtrans",
+      orderId: String(orderId || ""),
+      amount: Number.isFinite(amount) ? amount : 0,
+      status: isValid ? status : "failed",
+      isPaid: isValid && status === "paid",
+      isPending: isValid && status === "pending",
+      isFailed: !isValid || status === "failed",
+      isExpired: isValid && status === "expired",
+      statusCode: code,
+      rawPayload: body,
+    };
+  }
+
   async getPaymentMethods(params: GetPaymentMethodsParams, config: ProviderConfig): Promise<GetPaymentMethodsResult> {
     const categories: Record<string, PaymentMethod[]> = {};
     for (const item of MIDTRANS_STATIC_METHODS) {
@@ -225,6 +426,12 @@ export class MidtransProvider extends BasePaymentProvider {
 
   async checkTransaction(params: CheckTransactionParams, config: ProviderConfig): Promise<CheckTransactionResult> {
     const { merchantOrderId } = params;
+
+    // Jalur BI-SNAP: status diambil dari Status API SNAP, bukan `/v2/{order}/status`.
+    if (isMidtransSnapEnabled(config)) {
+      const snapResult = await this.checkTransactionViaSnap(merchantOrderId, config);
+      if (snapResult) return snapResult;
+    }
 
     try {
       const client = new MidtransClient(config);
@@ -299,34 +506,176 @@ export class MidtransProvider extends BasePaymentProvider {
     }
   }
 
+  /**
+   * Status transaksi lewat BI-SNAP. Mengembalikan `null` bila konfigurasi belum
+   * lengkap, sehingga pemanggil bisa jatuh kembali ke jalur legacy.
+   */
+  private async checkTransactionViaSnap(
+    merchantOrderId: string,
+    config: ProviderConfig
+  ): Promise<CheckTransactionResult | null> {
+    const extra = (config.extra || {}) as Record<string, any>;
+    const { credentials, missing } = resolveMidtransSnapCredentials(config);
+    if (missing.length) return null;
+
+    const queryType = String(extra.snapQueryType || "qris").toLowerCase();
+    const client = new MidtransSnapClient(config);
+
+    try {
+      let data: any;
+
+      if (queryType === "va") {
+        const partnerServiceId = typeof extra.snapPartnerServiceId === "string" ? extra.snapPartnerServiceId.trim() : "";
+        const customerNo = typeof extra.snapCustomerNo === "string" ? extra.snapCustomerNo.trim() : "";
+        if (!partnerServiceId || !customerNo) return null;
+        data = await client.queryVa(
+          buildMidtransSnapVaStatusBody({
+            partnerServiceId,
+            customerNo,
+            trxId: toMidtransSnapReferenceNo(merchantOrderId),
+          })
+        );
+      } else {
+        data = await client.queryQris(
+          buildMidtransSnapQrisQueryBody({
+            originalReferenceNo: extra.snapOriginalReferenceNo,
+            originalPartnerReferenceNo: toMidtransSnapReferenceNo(merchantOrderId),
+            merchantId: credentials.merchantId || undefined,
+          })
+        );
+      }
+
+      // Status numerik dapat berada di root maupun di dalam objek data transaksi.
+      const code = String(
+        data?.latestTransactionStatus ??
+          data?.virtualAccountData?.latestTransactionStatus ??
+          data?.transactionStatus ??
+          data?.additionalInfo?.latestTransactionStatus ??
+          ""
+      );
+      const status = mapMidtransSnapStatus(code);
+      const amount = Number(data?.amount?.value ?? data?.virtualAccountData?.totalAmount?.value ?? 0);
+
+      return {
+        success: true,
+        provider: "midtrans",
+        orderId: String(extractMidtransSnapNotificationOrderId(data) || merchantOrderId),
+        reference: data?.referenceNo || data?.virtualAccountData?.trxId || "",
+        amount: Number.isFinite(amount) ? amount : 0,
+        statusCode: code,
+        status,
+        isPaid: status === "paid",
+        isPending: status === "pending",
+        isFailed: status === "failed",
+        isExpired: status === "expired",
+        statusMessage:
+          data?.latestTransactionStatusDesc || data?.responseMessage || "",
+        paymentType: queryType === "va" ? "va" : "qris",
+        rawResponse: data,
+      };
+    } catch (e: any) {
+      return {
+        success: false,
+        provider: "midtrans",
+        orderId: merchantOrderId,
+        reference: "",
+        amount: 0,
+        statusCode: "",
+        status: "failed",
+        isPaid: false,
+        isPending: false,
+        isFailed: true,
+        isExpired: false,
+        statusMessage: "Network error",
+        error: e?.message || "Gagal mengecek status transaksi Midtrans BI-SNAP",
+        rawResponse: null,
+      };
+    }
+  }
+
   getClient(config: ProviderConfig): MidtransClient {
     return new MidtransClient(config);
   }
 
-  async probePaymentMethods(config: ProviderConfig): Promise<{ success: boolean; enabled: string[]; error?: string }> {
-    const enabled: string[] = [];
+  async probePaymentMethods(config: ProviderConfig): Promise<{
+    success: boolean;
+    enabled: string[];
+    source?: "live" | "static";
+    error?: string;
+  }> {
+    const detailed = await this.probePaymentMethodsDetailed(config);
+    return { success: detailed.success, enabled: detailed.enabled, source: "live" };
+  }
+
+  /**
+   * Probe channel Midtrans **beserta alasan kegagalannya**.
+   *
+   * `probePaymentMethods()` hanya mengembalikan daftar channel yang aktif; kegagalan
+   * di-swallow sehingga sulit membedakan "channel tidak diaktifkan di akun" dari
+   * "payload salah" atau "kredensial kurang". Versi ini mengembalikan hasil per-channel
+   * (status_code / pesan error) agar bisa didiagnosa.
+   */
+  async probePaymentMethodsDetailed(config: ProviderConfig): Promise<{
+    success: boolean;
+    enabled: string[];
+    results: MidtransProbeChannelResult[];
+    source: "live";
+  }> {
+    const results: MidtransProbeChannelResult[] = [];
     const client = new MidtransClient(config);
 
     for (const [methodId, specificPayload] of Object.entries(MIDTRANS_PROBE_PAYLOADS)) {
-      try {
-        const probeOrderId = `PROBE-${methodId}-${Date.now()}`;
-        const probeBody = {
-          ...specificPayload,
-          transaction_details: { order_id: probeOrderId, gross_amount: 15000 },
-          item_details: [{ id: probeOrderId, name: "Probe", price: 15000, quantity: 1 }],
-          customer_details: { first_name: "Probe", email: "probe@test.com" },
-        };
+      const probeOrderId = `PROBE-${methodId}-${Date.now()}`;
+      const probeBody = {
+        ...specificPayload,
+        transaction_details: { order_id: probeOrderId, gross_amount: 15000 },
+        item_details: [{ id: probeOrderId, name: "Probe", price: 15000, quantity: 1 }],
+        customer_details: { first_name: "Probe", email: "probe@test.com" },
+      };
 
+      try {
         const result = await client.request("POST", "/charge", probeBody);
-        if (result && ["200", "201", "202"].includes(result.status_code)) {
-          enabled.push(methodId);
+        const ok = !!result && ["200", "201", "202"].includes(result.status_code);
+        const statusCode = result?.status_code;
+        const error = ok
+          ? undefined
+          : result?.status_message || `status_code ${statusCode ?? "-"}`;
+
+        results.push({
+          method: methodId,
+          enabled: ok,
+          statusCode,
+          error,
+          hint: ok ? undefined : hintMidtransProbeError(methodId, error, statusCode),
+        });
+
+        if (ok) {
+          // Bersihkan transaksi probe agar tidak menumpuk di dashboard sandbox.
           try {
             await client.cancelTransaction(probeOrderId);
           } catch (e) {}
         }
-      } catch (e) {}
+      } catch (e: any) {
+        const message = e?.message || "probe request gagal";
+        // `MidtransClient` melempar `HTTP error! Status: 401 - {...}` untuk HTTP non-2xx.
+        const statusCode = /Status:\s*(\d+)/.exec(message)?.[1];
+        results.push({
+          method: methodId,
+          enabled: false,
+          statusCode,
+          error: message,
+          hint: hintMidtransProbeError(methodId, message, statusCode),
+        });
+      }
     }
 
-    return { success: true, enabled };
+    // LIVE: tiap channel diprobe dengan `/charge` asli lalu langsung di-cancel,
+    // sehingga hasilnya membuktikan channel benar-benar aktif di akun merchant.
+    return {
+      success: true,
+      enabled: results.filter((r) => r.enabled).map((r) => r.method),
+      results,
+      source: "live",
+    };
   }
 }

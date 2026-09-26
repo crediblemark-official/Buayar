@@ -121,7 +121,7 @@ export class DokuClient {
       return snap.request("PUT", "/virtual-accounts/bi-snap-va/v1.1/transfer-va/update-va", body);
     }
 
-    const bank = (params.bank || "bca").toLowerCase();
+    const bank = this.vaChannelName(params.bank);
     const endpoint = `/${bank}-virtual-account/v2/payment-code`;
     const payload: any = {
       order: {
@@ -153,6 +153,15 @@ export class DokuClient {
   /**
    * Delete / Cancel Virtual Account (Jokul v2 atau BI-SNAP)
    */
+  /**
+   * Nama kanal VA Jokul v2. BSI memakai `bsm-` — `bsi-virtual-account` tidak ada
+   * di DOKU ("No static resource"), diverifikasi live 2026-09-26.
+   */
+  private vaChannelName(bank?: string): string {
+    const b = (bank || "bca").toLowerCase();
+    return b === "bsi" ? "bsm" : b;
+  }
+
   async deleteVirtualAccount(params: DeleteVaParams): Promise<any> {
     if (this.isSnap()) {
       const snap = this.buildSnap();
@@ -172,7 +181,7 @@ export class DokuClient {
       return snap.request("DELETE", "/virtual-accounts/bi-snap-va/v1.1/transfer-va/delete-va", body);
     }
 
-    const bank = (params.bank || "bca").toLowerCase();
+    const bank = this.vaChannelName(params.bank);
     const endpoint = `/${bank}-virtual-account/v2/payment-code/${encodeURIComponent(params.orderId)}`;
     const payload = params.providerParams ? { ...params.providerParams } : undefined;
     return this.request("DELETE", endpoint, payload);

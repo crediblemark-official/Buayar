@@ -1,6 +1,11 @@
-import type { CanonicalPaymentMethod } from "../types";
+import {
+  type CanonicalPaymentMethod,
+  type PaymentMethodInput,
+  resolvePaymentMethodCode,
+} from "../types";
 
-export type { CanonicalPaymentMethod };
+export type { CanonicalPaymentMethod, PaymentMethodInput };
+export { resolvePaymentMethodCode };
 
 /**
  * Mapping dari Canonical Payment Method ke kode internal Duitku
@@ -118,17 +123,38 @@ export const CANONICAL_TO_IPAYMU: Record<string, { paymentMethod: string; paymen
   btn_va: { paymentMethod: "va", paymentChannel: "btn" },
   muamalat_va: { paymentMethod: "va", paymentChannel: "bmi" },
   bmi_va: { paymentMethod: "va", paymentChannel: "bmi" },
+  // QRIS: `GET /api/v2/payment-channels` mengembalikan group `qris` dengan
+  // `channel.Code = "mpm"` (diverifikasi langsung terhadap sandbox iPaymu) — jadi
+  // tabel API docs benar dan konstanta SDK Go (`qris`) tidak dipakai.
+  // Masih dapat dioverride lewat `providerParams.paymentChannel`.
   qris: { paymentMethod: "qris", paymentChannel: "mpm" },
   gopay_qris: { paymentMethod: "qris", paymentChannel: "mpm" },
   shopeepay_qris: { paymentMethod: "qris", paymentChannel: "mpm" },
+  // E-Wallet: daftar channel live (sandbox) hanya mengaktifkan `dana` & `shopeepay`
+  // (group `ewallet`), sedangkan `ovo`/`gopay`/`linkaja` berada di group `ewallet-asia`
+  // yang belum aktif. Ketiganya tetap dipetakan agar merchant yang mengaktifkannya
+  // bisa langsung memakainya; ketersediaan riil dibaca dari `getPaymentMethods()`.
   dana: { paymentMethod: "ewallet", paymentChannel: "dana" },
   shopeepay: { paymentMethod: "ewallet", paymentChannel: "shopeepay" },
+  ovo: { paymentMethod: "ewallet", paymentChannel: "ovo" },
+  gopay: { paymentMethod: "ewallet", paymentChannel: "gopay" },
+  linkaja: { paymentMethod: "ewallet", paymentChannel: "linkaja" },
   alfamart: { paymentMethod: "cstore", paymentChannel: "alfamart" },
   indomaret: { paymentMethod: "cstore", paymentChannel: "indomaret" },
   credit_card: { paymentMethod: "cc", paymentChannel: "cc" },
+  // Debit Online (B-Secure) — diverifikasi live: gateway memakai `paymentMethod: "cc"`
+  // dengan `paymentChannel: "debitonline"`. Mengirim `paymentMethod: "debitonline"`
+  // ditolak dengan "Invalid payment method" (nilai itu bukan paymentMethod resmi;
+  // ia hanya nama group pada `GET /payment-channels`).
+  debitonline: { paymentMethod: "cc", paymentChannel: "debitonline" },
+  // Paylater: hanya `akulaku` (docs + SDK resmi). `kredivo` TIDAK tersedia untuk iPaymu.
   akulaku: { paymentMethod: "paylater", paymentChannel: "akulaku" },
-  kredivo: { paymentMethod: "paylater", paymentChannel: "kredivo" },
+  // COD: `GET /api/v2/payment-channels` mengembalikan group `cod` dengan
+  // `channel.Code = "cod"` (diverifikasi langsung terhadap sandbox), sehingga nilai
+  // itulah yang dikirim pada `paymentChannel`. Tabel dokumentasi & SDK Go menyebut
+  // `rpx` (kurir RPX); nilai itu tetap diterima sebagai alias/override eksplisit.
   cod: { paymentMethod: "cod", paymentChannel: "cod" },
+  rpx: { paymentMethod: "cod", paymentChannel: "rpx" },
 };
 
 /**
@@ -163,7 +189,17 @@ export const CANONICAL_TO_XENDIT: Record<string, { type: string; channel_code?: 
 /**
  * Mapping dari Canonical Payment Method ke endpoint Direct DOKU Jokul
  */
-export const CANONICAL_TO_DOKU: Record<string, { endpoint: string; type: "va" | "qris" | "cstore" | "ewallet"; bank?: string }> = {
+export const CANONICAL_TO_DOKU: Record<
+  string,
+  {
+    endpoint: string;
+    type: "va" | "qris" | "cstore" | "ewallet";
+    bank?: string;
+    snapOnly?: boolean;
+    /** D-16: tidak ada endpoint REST non-SNAP — terbitkan VA via DOKU MCP Server. */
+    mcpOnly?: boolean;
+  }
+> = {
   bca_va: { endpoint: "/bca-virtual-account/v2/payment-code", type: "va", bank: "bca" },
   mandiri_va: { endpoint: "/mandiri-virtual-account/v2/payment-code", type: "va", bank: "mandiri" },
   bni_va: { endpoint: "/bni-virtual-account/v2/payment-code", type: "va", bank: "bni" },
@@ -171,15 +207,42 @@ export const CANONICAL_TO_DOKU: Record<string, { endpoint: string; type: "va" | 
   permata_va: { endpoint: "/permata-virtual-account/v2/payment-code", type: "va", bank: "permata" },
   cimb_va: { endpoint: "/cimb-virtual-account/v2/payment-code", type: "va", bank: "cimb" },
   danamon_va: { endpoint: "/danamon-virtual-account/v2/payment-code", type: "va", bank: "danamon" },
-  bsi_va: { endpoint: "/bsi-virtual-account/v2/payment-code", type: "va", bank: "bsi" },
-  qris: { endpoint: "/qris-payment/v2/generate-qr-code", type: "qris" },
-  gopay_qris: { endpoint: "/qris-payment/v2/generate-qr-code", type: "qris" },
-  shopeepay_qris: { endpoint: "/qris-payment/v2/generate-qr-code", type: "qris" },
-  alfamart: { endpoint: "/alfa-online/v2/payment-code", type: "cstore" },
-  indomaret: { endpoint: "/indomaret-online/v2/payment-code", type: "cstore" },
-  ovo: { endpoint: "/ovo-payment/v2/charge", type: "ewallet" },
-  dana: { endpoint: "/dana-payment/v2/charge", type: "ewallet" },
-  shopeepay: { endpoint: "/shopeepay-payment/v2/charge", type: "ewallet" },
+  // BSI: nama kanal resmi DOKU adalah `bsm-virtual-account` (bukan `bsi-...`).
+  // Diverifikasi live — `bsi-virtual-account` → "No static resource".
+  bsi_va: { endpoint: "/bsm-virtual-account/v2/payment-code", type: "va", bank: "bsi" },
+  // DOKU VA & Maybank VA: endpoint non-SNAP diverifikasi live 2026-09-26 (VA benar
+  // terbit).
+  doku_va: { endpoint: "/doku-virtual-account/v2/payment-code", type: "va", bank: "doku" },
+  maybank_va: { endpoint: "/maybank-virtual-account/v2/payment-code", type: "va", bank: "maybank" },
+  // D-16: BTN/BJB/BPD Bali/Sinarmas/OCBC/BNC/BSS **tidak punya endpoint REST non-SNAP**
+  // (`/{bank}-virtual-account/v2/payment-code` → 404 untuk semua varian penamaan,
+  // diverifikasi live 2026-09-26). Jalur non-SNAP-nya adalah layanan VA terpadu DOKU
+  // (BI-SNAP VA dengan BIN aggregator merchant) yang diekspos via DOKU MCP Server
+  // `create_virtual_account_payment` — ditandai `mcpOnly` (lihat `DOKU_MCP_ONLY_VA_CHANNELS`).
+  btn_va: { endpoint: "", type: "va", bank: "btn", mcpOnly: true },
+  bjb_va: { endpoint: "", type: "va", bank: "bjb", mcpOnly: true },
+  bpd_bali_va: { endpoint: "", type: "va", bank: "bpd bali", mcpOnly: true },
+  sinarmas_va: { endpoint: "", type: "va", bank: "sinarmas", mcpOnly: true },
+  ocbc_va: { endpoint: "", type: "va", bank: "ocbc", mcpOnly: true },
+  bnc_va: { endpoint: "", type: "va", bank: "bnc", mcpOnly: true },
+  bss_va: { endpoint: "", type: "va", bank: "bss", mcpOnly: true },
+  // QRIS TIDAK ADA di jalur Jokul Direct non-SNAP (daftar kanal resmi: Virtual Account,
+  // O2O, Credit Card, E-Money, Direct Debit, P2P). Endpoint QRIS DOKU hanya tersedia via
+  // SNAP (`/qris-payment/v2/generate-qr-code`), jadi ditandai `snapOnly`.
+  qris: { endpoint: "", type: "qris", snapOnly: true },
+  gopay_qris: { endpoint: "", type: "qris", snapOnly: true },
+  shopeepay_qris: { endpoint: "", type: "qris", snapOnly: true },
+  // Endpoint non-SNAP resmi DOKU untuk convenience store / O2O.
+  alfamart: { endpoint: "/alfa-online-to-offline/v2/payment-code", type: "cstore" },
+  indomaret: { endpoint: "/indomaret-online-to-offline/v2/payment-code", type: "cstore" },
+  // OVO Push Payment non-SNAP (payload & checksum khusus, lihat provider).
+  ovo: { endpoint: "/ovo-emoney/v1/payment", type: "ewallet" },
+  // DANA & ShopeePay TIDAK memiliki endpoint non-SNAP di dokumentasi DOKU —
+  // keduanya hanya tersedia lewat jalur SNAP (`config.extra.snap`). Entri ini
+  // ditandai `snapOnly` agar tetap muncul di capability list tetapi ditolak
+  // dengan pesan jelas bila SNAP belum diaktifkan.
+  dana: { endpoint: "", type: "ewallet", snapOnly: true },
+  shopeepay: { endpoint: "", type: "ewallet", snapOnly: true },
 };
 
 /**
@@ -274,7 +337,8 @@ export const CANONICAL_TO_NICEPAY: Record<string, { payMethod: string; bankCd?: 
   qris: { payMethod: "08" },
   gopay_qris: { payMethod: "08" },
   shopeepay_qris: { payMethod: "08" },
-  alfamart: { payMethod: "03", mitraCd: "ALFA" },
+  // Mitra code Alfamart Group resmi di NICEPAY adalah "ALMA" (bukan "ALFA").
+  alfamart: { payMethod: "03", mitraCd: "ALMA" },
   indomaret: { payMethod: "03", mitraCd: "INDO" },
   ovo: { payMethod: "05", mitraCd: "OVO" },
   dana: { payMethod: "05", mitraCd: "DANA" },
@@ -328,21 +392,23 @@ export const CANONICAL_TO_STRIPE: Record<string, string> = {
 /**
  * Ubah method code apapun (baik canonical maupun kode raw provider) ke kode Duitku yang valid
  */
-export function toDuitkuPaymentMethod(code?: string): string | undefined {
-  if (!code) return undefined;
-  const lower = code.toLowerCase().trim();
+export function toDuitkuPaymentMethod(code?: PaymentMethodInput | string): string | undefined {
+  const resolved = resolvePaymentMethodCode(code);
+  if (!resolved) return undefined;
+  const lower = resolved.toLowerCase().trim();
   if (CANONICAL_TO_DUITKU[lower]) {
     return CANONICAL_TO_DUITKU[lower];
   }
-  return code.toUpperCase().trim();
+  return resolved.toUpperCase().trim();
 }
 
 /**
  * Ubah method code apapun ke format iPaymu direct channel
  */
-export function toIpaymuPaymentMethod(code?: string): { paymentMethod: string; paymentChannel?: string } | undefined {
-  if (!code) return undefined;
-  const lower = code.toLowerCase().trim();
+export function toIpaymuPaymentMethod(code?: PaymentMethodInput | string): { paymentMethod: string; paymentChannel?: string } | undefined {
+  const resolved = resolvePaymentMethodCode(code);
+  if (!resolved) return undefined;
+  const lower = resolved.toLowerCase().trim();
   if (CANONICAL_TO_IPAYMU[lower]) {
     return CANONICAL_TO_IPAYMU[lower];
   }
@@ -352,21 +418,27 @@ export function toIpaymuPaymentMethod(code?: string): { paymentMethod: string; p
   if (lower.includes("qris")) {
     return { paymentMethod: "qris", paymentChannel: "mpm" };
   }
+  if (lower.includes("debit")) {
+    return { paymentMethod: "cc", paymentChannel: "debitonline" };
+  }
   if (lower.includes("alfa") || lower.includes("indo")) {
     return { paymentMethod: "cstore", paymentChannel: lower };
   }
   if (lower.includes("dana") || lower.includes("shopee") || lower.includes("ovo") || lower.includes("gopay") || lower.includes("linkaja")) {
     return { paymentMethod: "ewallet", paymentChannel: lower };
   }
+  // Kredivo bukan kanal paylater iPaymu (hanya Akulaku) → biarkan jatuh ke
+  // mode Semi-Integrasi (hosted page) alih-alih mengirim kanal yang tidak ada.
   return { paymentMethod: lower };
 }
 
 /**
  * Ubah method code apapun ke format Payment Request Xendit
  */
-export function toXenditPaymentMethod(code?: string): { type: string; channel_code?: string } | undefined {
-  if (!code) return undefined;
-  const lower = code.toLowerCase().trim();
+export function toXenditPaymentMethod(code?: PaymentMethodInput | string): { type: string; channel_code?: string } | undefined {
+  const resolved = resolvePaymentMethodCode(code);
+  if (!resolved) return undefined;
+  const lower = resolved.toLowerCase().trim();
   if (CANONICAL_TO_XENDIT[lower]) {
     return CANONICAL_TO_XENDIT[lower];
   }
@@ -382,9 +454,12 @@ export function toXenditPaymentMethod(code?: string): { type: string; channel_co
 /**
  * Ubah method code apapun ke format Direct API DOKU Jokul
  */
-export function toDokuPaymentMethod(code?: string): { endpoint: string; type: "va" | "qris" | "cstore" | "ewallet"; bank?: string } | undefined {
-  if (!code) return undefined;
-  const lower = code.toLowerCase().trim();
+export function toDokuPaymentMethod(
+  code?: PaymentMethodInput | string
+): { endpoint: string; type: "va" | "qris" | "cstore" | "ewallet"; bank?: string; snapOnly?: boolean; mcpOnly?: boolean } | undefined {
+  const resolved = resolvePaymentMethodCode(code);
+  if (!resolved) return undefined;
+  const lower = resolved.toLowerCase().trim();
   if (CANONICAL_TO_DOKU[lower]) {
     return CANONICAL_TO_DOKU[lower];
   }
@@ -394,45 +469,49 @@ export function toDokuPaymentMethod(code?: string): { endpoint: string; type: "v
 /**
  * Ubah method code apapun ke format channel PrismaLink
  */
-export function toPrismalinkPaymentMethod(code?: string): string | undefined {
-  if (!code) return undefined;
-  const lower = code.toLowerCase().trim();
+export function toPrismalinkPaymentMethod(code?: PaymentMethodInput | string): string | undefined {
+  const resolved = resolvePaymentMethodCode(code);
+  if (!resolved) return undefined;
+  const lower = resolved.toLowerCase().trim();
   if (CANONICAL_TO_PRISMALINK[lower]) {
     return CANONICAL_TO_PRISMALINK[lower];
   }
-  return code.toUpperCase().trim();
+  return resolved.toUpperCase().trim();
 }
 
 /**
  * Ubah method code apapun ke format payment channel Faspay
  */
-export function toFaspayPaymentMethod(code?: string): string | undefined {
-  if (!code) return undefined;
-  const lower = code.toLowerCase().trim();
+export function toFaspayPaymentMethod(code?: PaymentMethodInput | string): string | undefined {
+  const resolved = resolvePaymentMethodCode(code);
+  if (!resolved) return undefined;
+  const lower = resolved.toLowerCase().trim();
   if (CANONICAL_TO_FASPAY[lower]) {
     return CANONICAL_TO_FASPAY[lower];
   }
-  return code.trim();
+  return resolved.trim();
 }
 
 /**
  * Ubah method code apapun ke format channel Finpay
  */
-export function toFinpayPaymentMethod(code?: string): string | undefined {
-  if (!code) return undefined;
-  const lower = code.toLowerCase().trim();
+export function toFinpayPaymentMethod(code?: PaymentMethodInput | string): string | undefined {
+  const resolved = resolvePaymentMethodCode(code);
+  if (!resolved) return undefined;
+  const lower = resolved.toLowerCase().trim();
   if (CANONICAL_TO_FINPAY[lower]) {
     return CANONICAL_TO_FINPAY[lower];
   }
-  return code.toUpperCase().trim();
+  return resolved.toUpperCase().trim();
 }
 
 /**
  * Ubah method code apapun ke format Nicepay
  */
-export function toNicepayPaymentMethod(code?: string): { payMethod: string; bankCd?: string; mitraCd?: string } | undefined {
-  if (!code) return undefined;
-  const lower = code.toLowerCase().trim();
+export function toNicepayPaymentMethod(code?: PaymentMethodInput | string): { payMethod: string; bankCd?: string; mitraCd?: string } | undefined {
+  const resolved = resolvePaymentMethodCode(code);
+  if (!resolved) return undefined;
+  const lower = resolved.toLowerCase().trim();
   if (CANONICAL_TO_NICEPAY[lower]) {
     return CANONICAL_TO_NICEPAY[lower];
   }
@@ -442,9 +521,10 @@ export function toNicepayPaymentMethod(code?: string): { payMethod: string; bank
 /**
  * Ubah method code apapun ke format OY! Bisnis
  */
-export function toOyPaymentMethod(code?: string): { type: "va" | "qris" | "ewallet" | "cstore"; bank_code?: string; channel?: string } | undefined {
-  if (!code) return undefined;
-  const lower = code.toLowerCase().trim();
+export function toOyPaymentMethod(code?: PaymentMethodInput | string): { type: "va" | "qris" | "ewallet" | "cstore"; bank_code?: string; channel?: string } | undefined {
+  const resolved = resolvePaymentMethodCode(code);
+  if (!resolved) return undefined;
+  const lower = resolved.toLowerCase().trim();
   if (CANONICAL_TO_OY[lower]) {
     return CANONICAL_TO_OY[lower];
   }
@@ -454,9 +534,10 @@ export function toOyPaymentMethod(code?: string): { type: "va" | "qris" | "ewall
 /**
  * Ubah method code apapun ke format Stripe
  */
-export function toStripePaymentMethod(code?: string): string | undefined {
-  if (!code) return undefined;
-  const lower = code.toLowerCase().trim();
+export function toStripePaymentMethod(code?: PaymentMethodInput | string): string | undefined {
+  const resolved = resolvePaymentMethodCode(code);
+  if (!resolved) return undefined;
+  const lower = resolved.toLowerCase().trim();
   if (CANONICAL_TO_STRIPE[lower]) {
     return CANONICAL_TO_STRIPE[lower];
   }
@@ -494,6 +575,24 @@ export function toSumopodPaymentMethod(code?: string): string | undefined {
   return code;
 }
 
+export const CANONICAL_TO_PAYU: Record<string, string> = {
+  credit_card: "c",
+  blik: "blik",
+  apple_pay: "ap",
+  google_pay: "gp",
+  bank_transfer: "m",
+  installment: "ai",
+};
+
+export const PAYU_TO_CANONICAL: Record<string, string> = {
+  c: "credit_card",
+  blik: "blik",
+  ap: "apple_pay",
+  gp: "google_pay",
+  m: "bank_transfer",
+  ai: "installment",
+};
+
 /**
  * Ubah method code apapun ke format canonical standar Buayar
  */
@@ -510,6 +609,10 @@ export function toCanonicalPaymentMethod(provider: string, code?: string): strin
     return SUMOPOD_TO_CANONICAL[upper];
   }
 
+  if (provider.toLowerCase() === "payu" && PAYU_TO_CANONICAL[lower]) {
+    return PAYU_TO_CANONICAL[lower];
+  }
+
   if (
     CANONICAL_TO_MIDTRANS[lower] ||
     CANONICAL_TO_DUITKU[lower] ||
@@ -522,11 +625,13 @@ export function toCanonicalPaymentMethod(provider: string, code?: string): strin
     CANONICAL_TO_NICEPAY[lower] ||
     CANONICAL_TO_OY[lower] ||
     CANONICAL_TO_STRIPE[lower] ||
-    CANONICAL_TO_SUMOPOD[lower]
+    CANONICAL_TO_SUMOPOD[lower] ||
+    CANONICAL_TO_PAYU[lower]
   ) {
     return lower;
   }
 
   return lower;
 }
+
 

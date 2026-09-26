@@ -123,12 +123,15 @@ export class TwoCheckoutProvider extends BasePaymentProvider {
     const amount = Math.round(Number(parsedBody?.IPN_TOTAL_GENERAL || parsedBody?.total || 0) * 100);
     const statusRaw = (parsedBody?.ORDERSTATUS || parsedBody?.order_status || "").toUpperCase();
 
-    const isPaid = statusRaw === "COMPLETE" || statusRaw === "COMPLETE_MANUAL";
-    const isPending = statusRaw === "PENDING" || statusRaw === "PURCHASE_PENDING";
-    const isFailed = statusRaw === "CANCELED" || statusRaw === "REFUND" || statusRaw === "FRAUD";
-    const isExpired = statusRaw === "EXPIRED";
+    // Status hanya dipercaya bila signature valid (cegah `isPaid: true` + `isValid: false`).
+    const isPaid = isValid && (statusRaw === "COMPLETE" || statusRaw === "COMPLETE_MANUAL");
+    const isPending = isValid && (statusRaw === "PENDING" || statusRaw === "PURCHASE_PENDING");
+    const isFailed = !isValid || statusRaw === "CANCELED" || statusRaw === "REFUND" || statusRaw === "FRAUD";
+    const isExpired = isValid && statusRaw === "EXPIRED";
 
-    const status: "paid" | "pending" | "failed" | "expired" = isPaid ? "paid" : isPending ? "pending" : isExpired ? "expired" : "failed";
+    const status: "paid" | "pending" | "failed" | "expired" = !isValid
+      ? "failed"
+      : isPaid ? "paid" : isPending ? "pending" : isExpired ? "expired" : "failed";
 
     return {
       isValid, provider: "twocheckout", orderId: String(orderId), amount, status, isPaid, isPending, isFailed, isExpired,

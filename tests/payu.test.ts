@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+import { createHash } from "crypto";
 import { Buayar } from "../src";
 
 describe("PayU Provider & Client Integration", () => {
@@ -55,7 +56,8 @@ describe("PayU Provider & Client Integration", () => {
   });
 
   it("should normalize PayU webhook notification (OpenPayU-Signature)", async () => {
-    const buayar = new Buayar({ provider: "payu", apiKey: "mockMd5Key" });
+    const md5Key = "mockMd5Key";
+    const buayar = new Buayar({ provider: "payu", apiKey: md5Key, extra: { md5Key } });
 
     const payload = {
       order: {
@@ -67,10 +69,32 @@ describe("PayU Provider & Client Integration", () => {
       },
     };
 
-    const result = await buayar.verifyWebhook(payload);
+    const rawBody = JSON.stringify(payload);
+    // OpenPayU: signature = MD5(rawBody + md5Key)
+    const signature = createHash("md5").update(rawBody + md5Key).digest("hex");
+
+    const result = await buayar.verifyWebhook(
+      payload,
+      { "openpayu-signature": `signature=${signature};algorithm=MD5` },
+      { rawBody }
+    );
     expect(result.provider).toBe("payu");
+    expect(result.isValid).toBe(true);
     expect(result.isPaid).toBe(true);
     expect(result.orderId).toBe("ORDER-PAYU-001");
     expect(result.amount).toBe(10000);
+  });
+
+  // SECURITY: webhook tanpa signature harus tolak — isValid DAN isPaid keduanya false.
+  it("should REJECT an unauthenticated PayU webhook (fail-closed)", async () => {
+    const buayar = new Buayar({ provider: "payu", apiKey: "mockMd5Key", extra: { md5Key: "mockMd5Key" } });
+
+    const result = await buayar.verifyWebhook({
+      order: { orderId: "x", extOrderId: "ORDER-PAYU-FORGED", totalAmount: "10000", status: "COMPLETED" },
+    });
+
+    expect(result.isValid).toBe(false);
+    expect(result.isPaid).toBe(false);
+    expect(result.status).toBe("failed");
   });
 });

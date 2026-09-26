@@ -9,6 +9,7 @@ import {
   CheckTransactionParams,
   CheckTransactionResult,
   PaymentMethod,
+  resolvePaymentMethodCode,
 } from "../../types";
 import { toOyPaymentMethod } from "../../core/canonical";
 import { generateOyHeaders, verifyOyWebhook } from "./signature";
@@ -71,6 +72,7 @@ export class OyProvider extends BasePaymentProvider {
           };
         }
 
+        const methodCode = resolvePaymentMethodCode(params.paymentMethod);
         return {
           success: true,
           provider: "oy",
@@ -78,7 +80,7 @@ export class OyProvider extends BasePaymentProvider {
           amount: integerAmount,
           reference: data.va_number || orderId,
           vaNumber: data.va_number,
-          vaBank: params.paymentMethod?.replace("_va", "").toLowerCase(),
+          vaBank: methodCode ? methodCode.replace("_va", "").toLowerCase() : undefined,
           rawResponse: data,
         };
       } else if (isDirect && oyMethod.type === "qris") {
@@ -194,25 +196,39 @@ export class OyProvider extends BasePaymentProvider {
     const amount = body.amount || body.settlement_amount || 0;
     const rawStatus = (body.status || body.tx_status || "").toUpperCase();
 
-    const isPaid = rawStatus === "SUCCESS" || rawStatus === "PAID" || rawStatus === "SETTLED" || rawStatus === "COMPLETE";
-    const isPending = rawStatus === "PENDING" || rawStatus === "WAITING_PAYMENT";
-    const isExpired = rawStatus === "EXPIRED";
-    const isFailed = rawStatus === "FAILED" || (!isPaid && !isPending && !isExpired);
-
-    const status: "paid" | "pending" | "failed" | "expired" = isPaid
-      ? "paid"
-      : isPending
-        ? "pending"
-        : isExpired
-          ? "expired"
-          : "failed";
     const headers = config.extra?.headers || {};
     const oyUsernameHeader = headers["x-oy-username"] || headers["X-Oy-Username"] || config.extra?.oyUsername;
 
-    let isValid = true;
-    if (oyUsernameHeader || (username && headers && Object.keys(headers).length > 0)) {
+    // FAIL-CLOSED: webhook tanpa header x-oy-username TIDAK BOLEH dipercaya.
+    // OY! mengautentikasi callback lewat shared secret pada header tersebut, jadi
+    // absennya header = tidak ada bukti apa pun = tolak.
+    let isValid = false;
+    let error: string | undefined;
+
+    if (!username) {
+      error = "OY! username not configured. Set OY_USERNAME (or config.clientKey/merchantCode) so the x-oy-username header can be verified.";
+    } else if (!oyUsernameHeader) {
+      error = "Missing x-oy-username header; OY! webhook cannot be authenticated.";
+    } else {
       isValid = verifyOyWebhook(headers, username);
+      if (!isValid) error = "x-oy-username header does not match configured OY! username.";
     }
+
+    // Status hanya dipercaya bila webhook terautentikasi.
+    const isPaid = isValid && (rawStatus === "SUCCESS" || rawStatus === "PAID" || rawStatus === "SETTLED" || rawStatus === "COMPLETE");
+    const isPending = isValid && (rawStatus === "PENDING" || rawStatus === "WAITING_PAYMENT");
+    const isExpired = isValid && rawStatus === "EXPIRED";
+    const isFailed = !isValid || rawStatus === "FAILED" || (!isPaid && !isPending && !isExpired);
+
+    const status: "paid" | "pending" | "failed" | "expired" = !isValid
+      ? "failed"
+      : isPaid
+        ? "paid"
+        : isPending
+          ? "pending"
+          : isExpired
+            ? "expired"
+            : "failed";
 
     return {
       isValid,
@@ -226,6 +242,7 @@ export class OyProvider extends BasePaymentProvider {
       isExpired,
       statusCode: rawStatus,
       rawPayload: body,
+      error,
     };
   }
 

@@ -58,7 +58,13 @@ export function verifyDokuWebhookSignature(
   body: any,
   clientId: string,
   secretKey: string,
-  requestTarget: string = "/api/payment/webhook"
+  requestTarget: string = "/api/payment/webhook",
+  /**
+   * Raw request body (byte asli). WAJIB untuk HMAC yang akurat: `JSON.stringify`
+   * atas objek hasil parse tidak pernah identik dengan byte yang dikirim DOKU
+   * (urutan key, spasi, escape Unicode).
+   */
+  rawBody?: string
 ): boolean {
   const reqClientId = (headers["client-id"] || headers["Client-Id"] || "") as string;
   const reqId = (headers["request-id"] || headers["Request-Id"] || "") as string;
@@ -71,9 +77,9 @@ export function verifyDokuWebhookSignature(
   const target = (headers["request-target"] || headers["Request-Target"] || requestTarget) as string;
   let component = `Client-Id:${reqClientId || clientId}\nRequest-Id:${reqId}\nRequest-Timestamp:${reqTimestamp}\nRequest-Target:${target}`;
 
-  if (body) {
-    const rawBody = typeof body === "string" ? body : JSON.stringify(body);
-    const digest = crypto.createHash("sha256").update(rawBody).digest("base64");
+  if (body || rawBody) {
+    const raw = rawBody ?? (typeof body === "string" ? body : JSON.stringify(body));
+    const digest = crypto.createHash("sha256").update(raw).digest("base64");
     component += `\nDigest:${digest}`;
   }
 

@@ -53,9 +53,31 @@ describe("Canonical Payment Methods Mapping", () => {
     expect(dana?.paymentMethod).toBe("ewallet");
     expect(dana?.paymentChannel).toBe("dana");
 
+    // COD: `GET /api/v2/payment-channels` mengembalikan channel.Code = "cod"
+    // (diverifikasi terhadap sandbox iPaymu).
     const cod = toIpaymuPaymentMethod("cod");
     expect(cod?.paymentMethod).toBe("cod");
     expect(cod?.paymentChannel).toBe("cod");
+
+    // "rpx" tetap didukung sebagai alias eksplisit (disebut di tabel docs/SDK Go).
+    const rpx = toIpaymuPaymentMethod("rpx");
+    expect(rpx?.paymentMethod).toBe("cod");
+    expect(rpx?.paymentChannel).toBe("rpx");
+
+    const ovo = toIpaymuPaymentMethod("ovo");
+    expect(ovo?.paymentMethod).toBe("ewallet");
+    expect(ovo?.paymentChannel).toBe("ovo");
+
+    // Debit Online (B-Secure): gateway memakai paymentMethod "cc" + channel
+    // "debitonline" — diverifikasi live (I-8). Kirim "debitonline" sebagai
+    // paymentMethod ditolak dengan "Invalid payment method".
+    const debit = toIpaymuPaymentMethod("debitonline");
+    expect(debit?.paymentMethod).toBe("cc");
+    expect(debit?.paymentChannel).toBe("debitonline");
+
+    const debitAlias = toIpaymuPaymentMethod("debit_online");
+    expect(debitAlias?.paymentMethod).toBe("cc");
+    expect(debitAlias?.paymentChannel).toBe("debitonline");
   });
 
   it("should correctly classify payment method categories for Accordion UI", () => {

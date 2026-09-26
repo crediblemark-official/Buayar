@@ -136,14 +136,17 @@ export class AdyenProvider extends BasePaymentProvider {
     const orderId = item.merchantReference || item.pspReference || "";
     const amount = item.amount?.value ? Number(item.amount.value) : 0;
 
-    const isPaid = eventCode === "AUTHORISATION" && success;
-    const isPending = eventCode === "PENDING" || eventCode === "OFFER_CLOSED";
-    const isExpired = eventCode === "EXPIRED" || eventCode === "CANCEL";
-    const isFailed = !isPaid && !isPending && !isExpired && (!success || eventCode === "REFUSAL");
+    // Status hanya dipercaya bila signature valid (cegah `isPaid: true` + `isValid: false`).
+    const isPaid = isValid && eventCode === "AUTHORISATION" && success;
+    const isPending = isValid && (eventCode === "PENDING" || eventCode === "OFFER_CLOSED");
+    const isExpired = isValid && (eventCode === "EXPIRED" || eventCode === "CANCEL");
+    const isFailed = !isValid || (!isPaid && !isPending && !isExpired && (!success || eventCode === "REFUSAL"));
 
-    const status: "paid" | "pending" | "failed" | "expired" = isPaid
-      ? "paid"
-      : isPending ? "pending" : isExpired ? "expired" : "failed";
+    const status: "paid" | "pending" | "failed" | "expired" = !isValid
+      ? "failed"
+      : isPaid
+        ? "paid"
+        : isPending ? "pending" : isExpired ? "expired" : "failed";
 
     return {
       isValid,

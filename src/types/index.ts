@@ -1,4 +1,4 @@
-import { CanonicalPaymentMethod } from "./canonical";
+import { CanonicalPaymentMethod, PaymentMethodInput, RawProviderMethod, resolvePaymentMethodCode } from "./canonical";
 
 export * from "./canonical";
 
@@ -17,11 +17,14 @@ export interface CreateInvoiceParams {
   callbackUrl?: string;
   /**
    * Payment method code.
-   * Mendukung Canonical Code (contoh: "bca_va", "mandiri_va", "qris", "gopay", "shopeepay", "alfamart", "indomaret")
-   * atau kode raw spesifik provider (contoh Duitku: "BC", "M2", "SP").
+   * Wajib berupa Canonical Code (contoh: "bca_va", "mandiri_va", "qris", "gopay", "credit_card")
+   * agar portabel saat switching payment gateway.
+   *
+   * Jika sengaja ingin memakai kode raw spesifik provider yang tidak portabel,
+   * gunakan escape hatch eksplisit: `{ raw: "BC", providerOnly: true }`.
    * Jika dikosongkan, akan beralih ke Mode Semi Integrasi (Redirect Checkout).
    */
-  paymentMethod?: CanonicalPaymentMethod | string;
+  paymentMethod?: PaymentMethodInput;
   /**
    * Kode mata uang ISO 4217 (opsional). Default: 'IDR'.
    * Contoh: 'idr', 'usd', 'sgd'
@@ -175,6 +178,27 @@ export interface ProviderConfig {
   callbackUrl?: string;
   returnUrl?: string;
   
+  /**
+   * Raw request body webhook, persis seperti byte yang diterima HTTP (TIDAK di-parse).
+   *
+   * WAJIB diisi untuk provider yang verifikasi lewat HMAC atas raw body:
+   * Stripe, Checkout.com, Razorpay, Square, PayU, Braintree, DOKU Snap, dan SumoPod.
+   *
+   * serializers (JSON.stringify) TIDAK PERNAH menghasilkan byte yang identik dengan
+   * yang dikirim provider — urutan key, spasi, dan escape Unicode berbeda. Karena itu
+   * provider yang butuh raw body akan selalu menolak webhook bila `rawBody` tidak diisi.
+   *
+   * Contoh (Express):
+   *   app.post("/webhook", express.raw({ type: "application/json" }), handler)
+   */
+  rawBody?: string;
+  
+  /**
+   * Mengaktifkan mode simulasi kontrak tanpa network request ke gateway asli.
+   * Cocok untuk development lokal dan testing CI sebelum approval sandbox.
+   */
+  simulate?: boolean;
+
   /** Wadah konfigurasi ekstra fleksibel untuk custom provider */
   extra?: Record<string, any>;
 }
@@ -216,7 +240,7 @@ export interface PaymentMethodItem {
   /** Status ketersediaan channel */
   isOnline: boolean;
   /** Kategori grup untuk Accordion UI */
-  category: "Virtual Account" | "QRIS" | "E-Wallet" | "Retail / Gerai" | "Kartu Kredit" | "Paylater / Cicilan" | "Lainnya" | string;
+  category: "Virtual Account" | "QRIS" | "E-Wallet" | "Retail / Gerai" | "Kartu Kredit" | "Paylater / Cicilan" | "Lainnya";
 }
 
 export interface PaymentMethod {
@@ -224,7 +248,7 @@ export interface PaymentMethod {
   paymentName: string;
   paymentImage: string;
   totalFee: string;
-  category: "Virtual Account" | "QRIS" | "E-Wallet" | "Retail / Gerai" | "Kartu Kredit" | "Paylater / Cicilan" | "Lainnya" | string;
+  category: "Virtual Account" | "QRIS" | "E-Wallet" | "Retail / Gerai" | "Kartu Kredit" | "Paylater / Cicilan" | "Lainnya";
   code?: string;
   extra?: any;
   /** Tandai channel sebagai coming soon / belum tersedia */
