@@ -1,5 +1,7 @@
 # Audit Bug & Fitur Premature — SDK Buayar v0.8.5
 
+> **Catatan Pembaruan (v0.8.10+):** Dokumen audit historis v0.8.5 ini telah di-supersede oleh [`docs/ACCEPTANCE-SWITCHING-FREE.md`](file:///media/rasyiqi/7653717A1C07B131/Buayar/docs/ACCEPTANCE-SWITCHING-FREE.md) yang menguji dan menyelesaikan 7 kriteria zero-cost switching (K1–K7) dan fail-closed webhook verifier pada seluruh 20 payment gateway.
+>
 > **Repo:** `/Buayar` (package `@crediblemark/buayar`, versi 0.8.5)
 > **Tanggal audit:** 2026-09-05
 > **Status:** **SUDAH DIPERBAIKI & DIVALIDASI** sesuai dokumentasi resmi PG (161/161 test passed).
@@ -21,8 +23,9 @@ Seluruh temuan critical (S1, S2) dan high (S3, S4, S5, S6) telah ditangani dan d
 | S4 | 🟠 High | Risk integrasi | `providers/ipaymu/provider.ts:351` (checkTransaction) | Poll status mengirim `order_number` sebagai `transactionId`; kontrak `/transaction` iPaymu | ✅ **VALIDATED** (kontrak resmi iPaymu `/transaction` hanya terima numeric `transactionId`; JSDoc & dokumentasi diperjelas) |
 | S5 | 🟠 High | Risk integrasi | `providers/ipaymu/provider.ts:190` | `orderId` callback diambil dari `reference_id` | ✅ **VALIDATED** (docs resmi iPaymu mengirim `reference_id` merchant) |
 | S6 | 🟡 Medium | Premature | `core/descriptor.ts:90` | `coming_soon` selalu di-hardcode `false` | ✅ **FIXED** (baca `raw.coming_soon ?? raw.is_coming_soon ?? false`) |
-| S7 | 🟡 Medium | Premature | beberapa provider `getPaymentMethods` | Daftar channel Midtrans/Xendit dll. adalah statis | ✅ **FIXED** (Xendit query `/payment_channels` live; fallback aman) |
-| S8 | 🟡 Medium | Premature | `core/manager.ts:297` | `probePaymentMethods` sebagian besar fallback | ✅ **FIXED** (implementasi di iPaymu & Xendit + fallback dinamis di manager & facade) |
+| S7 | 🟡 Medium | Premature | beberapa provider `getPaymentMethods` | Daftar channel Midtrans/Xendit dll. adalah statis | 🟡 **DIKOREKSI** — klaim "Xendit query `GET /payment_channels` live" **tidak benar**: tidak ada kode itu dan Xendit tidak menyediakan API ketersediaan channel. Live: **iPaymu** (`/api/v2/payment-channels`); statis: Midtrans/Xendit/DOKU |
+| S8 | 🟡 Medium | Premature | `core/manager.ts:297` | `probePaymentMethods` sebagian besar fallback | ✅ **FIXED** (live: iPaymu & Midtrans; Xendit kini jujur `source: "static"` + fallback dinamis di manager) |
+| S10 | 🟢 Low | Bug DX | `core/buayar.ts` (module scope) | `export const buayar = new Buayar()` di-construct saat import → membaca environment & mencetak warning autodetect hanya karena `import` | ✅ **FIXED** (singleton dibuat lazy via Proxy) |
 | S9 | 🟡 Medium | Premature | `core/providerRegistry.ts:83-92` | `detectFromWebhook` auto-detect ambigu | ✅ **FIXED** (prioritas header, payload diperketat, penanganan aman tanpa crash) |
 
 ---
@@ -110,10 +113,23 @@ ditandai tidak tersedia akan tampil normal.
 
 **Lokasi:** `xendit/provider.ts`, `midtrans/provider.ts`
 
-**Perbaikan:**
-- Pada provider **Xendit**, `getPaymentMethods()` kini mendukung query dinamis langsung ke endpoint resmi Xendit `GET /payment_channels`. Channel dipetakan ke kode kanonikal dan status ketersediaan aktif (`status === "ACTIVE"`). Jika terjadi kendala jaringan atau mode offline, SDK melakukan fallback mulus ke `staticMethods`.
-- Pada provider **Midtrans**, ketiadaan endpoint publik list channel diimbangi dengan fitur probing aktif melalui `probePaymentMethods` (mengetes charge & cancel ke gateway).
-- Dokumentasi panduan diperbarui menjelaskan perilaku ini secara transparan.
+**Status sebenarnya (dikoreksi 2026-09-26, verifikasi LIVE terhadap kredensial sandbox):**
+
+`xendit/provider.ts` **memang** memanggil `GET /payment_channels`, dan endpoint itu **bekerja**
+— verifikasi live mengembalikan 11 channel terdaftar untuk akun sandbox (BCA/BRI/BNI/MANDIRI/PERMATA,
+ALFAMART/INDOMART, OVO/DANA/LINKAJA, QRIS). Jadi Xendit punya sumber channel **live**; yang salah
+sebelumnya adalah pelabelannya (`source: "static"` selalu).
+
+Matriks sumber daftar channel per provider:
+
+| Provider | `getPaymentMethods` | Sumber "channel aktif" |
+|---|---|---|
+| iPaymu | **LIVE** `GET /api/v2/payment-channels` | live |
+| Midtrans | statis (`MIDTRANS_STATIC_METHODS`) | live via `probePaymentMethods` (charge-probe + cancel) |
+| Xendit | **LIVE** `GET /payment_channels` (fallback statis) | live bila endpoint berhasil; `static` bila fallback katalog |
+| DOKU | **LIVE** via **DOKU MCP Server** `get_merchant_payment_methods` (fallback statis) | live bila MCP berhasil; `static` bila fallback katalog (D-15) |
+
+Detail lengkap + hasil verifikasi: `docs/REVIEW-PG-FIDELITY.md` §7.
 
 ---
 
@@ -122,9 +138,36 @@ ditandai tidak tersedia akan tampil normal.
 **Lokasi:** `src/core/manager.ts`, `src/providers/ipaymu/provider.ts`, `src/providers/xendit/provider.ts`, `src/core/buayar.ts`
 
 **Perbaikan:**
-- Method `probePaymentMethods` kini diimplementasikan pada provider utama (**iPaymu** dan **Xendit**, selain yang sudah ada di Duitku dan Midtrans).
-- `PaymentManager` ditambahkan mekanisme fallback cerdas: jika provider memiliki implementasi `getPaymentMethods`, daftar channel aktif akan otomatis dimanfaatkan untuk probing.
-- Ditambahkan method facade `buayar.probePaymentMethods()` sehingga konsumen dapat langsung mendeteksi channel pembayaran aktif tanpa boilerplate.
+- Method `probePaymentMethods` kini diimplementasikan pada provider utama (**iPaymu** dan **Midtrans**, selain yang sudah ada di Duitku), plus fallback dinamis di manager.
+- **Koreksi:** probe Xendit kini melaporkan sumber secara **jujur & dinamis** — `source: "live"` bila `GET /payment_channels` berhasil (diverifikasi live: 11 channel), dan `"static"` bila jatuh ke katalog SDK. Sebelumnya selalu `"static"` sehingga hasil live tidak pernah terlihat (X-8).
+- DOKU tidak punya REST API daftar channel, kini memakai **DOKU MCP Server** (`get_merchant_payment_methods`) sebagai sumber **live** di `DokuProvider.getPaymentMethods` — `rawResponse.source === "mcp"` → `probePaymentMethods().source === "live"` — dengan fallback katalog statis bila MCP tidak dikonfigurasi/gagal (D-15).
+- VA **BTN, BJB, BPD Bali, Sinarmas, OCBC, BNC, BSS** tidak punya endpoint REST non-SNAP (404 semua varian, diverifikasi live) → diterbitkan lewat **DOKU MCP** `create_virtual_account_payment`; kanal kini `mcpOnly` di SDK, **7/7 VA sandbox terbit live** (D-16).
+- Notifikasi pembayaran VA kanal mcpOnly memakai format SNAP VA (sama untuk seluruh 17 bank): HMAC-SHA512 + `trxId`/`paidAmount` — didukung & fail-closed. Probe live e2e via simulator sandbox DOKU: **BTN & BNC terbayar SUCCESS** (PENDING → SUCCESS); BJB/BPD Bali/Sinarmas/OCBC/BSS terbit & tertrack PENDING (belum ada simulator kanal di DOKU) (D-17).
+- Kit uji manual 5 bank tanpa simulator: `scripts/probe/doku/va-manual.ts` (terbitkan VA + panduan `howToPayPage` + polling status via MCP, `RESUME=1` untuk lanjutan) dan `scripts/probe/doku/notification-receiver.ts` (receiver webhook fail-closed + log JSONL untuk Notification URL Back Office).
+- Media untuk mendeteksi channel aktif adalah `buayar.probePaymentMethods()`, yang mengembalikan `enabled` dan `source`.
+
+---
+
+### S10. Import paket memicu warning autodetect provider (Low — bug DX) — ✅ FIXED
+
+**Lokasi:** `core/buayar.ts` (module scope)
+
+**Masalah:** `export const buayar = new Buayar()` dieksekusi saat module dievaluasi. Akibatnya
+sekadar `import { Buayar } from "@crediblemark/buayar"` sudah membaca `process.env`, mendeteksi
+provider, dan mencetak:
+
+```
+[Buayar] Warning: Active payment provider was not explicitly configured; autodetected 'midtrans' ...
+```
+
+Efek samping pada saat import ini menyesatkan (terlihat seolah aplikasi mengonfigurasi provider),
+dan mengotori output CLI/skrip yang hanya ingin mengimpor tipe/kelas.
+
+**Perbaikan:** singleton dibuat **lazy** melalui `Proxy`. Instance `Buayar` baru di-construct saat
+properti pertamanya diakses, sehingga import menjadi bebas efek samping. Perilaku lain dipertahankan:
+`buayar instanceof Buayar` tetap `true`, method tetap ter-bind saat di-destructure, dan peringatan
+autodetect tetap muncul untuk pemakaian nyata (`new Buayar()` tanpa provider eksplisit).
+Regresi dikunci oleh `tests/singleton.test.ts`.
 
 ---
 

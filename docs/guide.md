@@ -195,6 +195,26 @@ if (probe.success) {
 }
 ```
 
+> ℹ️ **Sumber daftar channel.** `probePaymentMethods()` mengembalikan `source: "live"` bila daftar
+> benar-benar dibaca dari gateway, dan `"static"` bila jatuh ke katalog SDK. Live saat ini untuk
+> **iPaymu** (`GET /payment-channels`), **Xendit** (`GET /payment_channels`), dan **DOKU**
+> (MCP Server `get_merchant_payment_methods`, aktif bila `DOKU_API_KEY`/`extra.mcpApiKey` diisi);
+> Midtrans memakai charge-probe per channel.
+
+#### Verifikasi payload per channel (probe CLI terpadu)
+
+Untuk membuktikan payload kita **benar-benar diterima** gateway (bukan hanya daftar kanal), jalankan
+probe terpadu — semua provider berurutan, dengan ringkasan tabel + JSON:
+
+```bash
+bun run probe                # semua provider (yang kredensialnya tersedia)
+bun run probe midtrans doku  # provider tertentu
+PROBE_JSON=1 bun run probe   # hanya ringkasan JSON (untuk CI)
+```
+
+Provider yang kredensialnya belum diset akan **dilewati**. ⚠️ Setiap probe membuat transaksi
+sandbox nyata (Midtrans dibatalkan otomatis; iPaymu/Xendit/DOKU tidak punya pembatalan seragam).
+
 ### ⚡ Auto-Generate File `payment-channels.json` (CLI & SDK)
 
 Buayar menyediakan generator otomatis untuk membuat file `payment-channels.json` siap render di UI frontend:

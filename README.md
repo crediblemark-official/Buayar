@@ -3,8 +3,21 @@
 [![npm version](https://img.shields.io/npm/v/@crediblemark/buayar.svg?style=flat-square&color=amber)](https://www.npmjs.com/package/@crediblemark/buayar)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](https://opensource.org/licenses/MIT)
 [![TypeScript](https://img.shields.io/badge/TypeScript-Ready-blue.svg?style=flat-square)](https://www.typescriptlang.org/)
+[![Tests](https://github.com/crediblemark-official/Buayar/actions/workflows/tests.yml/badge.svg?style=flat-square)](https://github.com/crediblemark-official/Buayar/actions/workflows/tests.yml)
+[![Typecheck](https://github.com/crediblemark-official/Buayar/actions/workflows/typecheck.yml/badge.svg?style=flat-square)](https://github.com/crediblemark-official/Buayar/actions/workflows/typecheck.yml)
+[![audit](https://img.shields.io/badge/PG%20audit-D1%E2%80%A6D17%20%7C%20M1%E2%80%A6M15%20%7C%20X1%E2%80%A6X8%20%7C%20I1%E2%80%A6I9-verified-blueviolet?style=flat-square)](docs/REVIEW-PG-FIDELITY.md)
+[![docs](https://img.shields.io/badge/docs-per%20provider%20%C3%9720-8A2BE2?style=flat-square)](docs/providers/README.md)
 
 > 🇮🇩 [Baca dalam Bahasa Indonesia](#-bahasa-indonesia) · 🇬🇧 [Read in English](#-english)
+
+### 📚 Documentation / Dokumentasi
+
+| Dokumen | Isi |
+|---|---|
+| **[docs/providers/](docs/providers/README.md)** | **Implementasi per provider (×20)** — peta file, operasi, kredensial, endpoint, status verifikasi live |
+| [docs/REVIEW-PG-FIDELITY.md](docs/REVIEW-PG-FIDELITY.md) | Audit fidelity vs dokumentasi resmi PG (D-1…D-17, M-1…M-15, X-1…X-8, I-1…I-9, DU/N/F/FP) |
+| [docs/AUDIT-BUG-DAN-PREMATURE.md](docs/AUDIT-BUG-DAN-PREMATURE.md) | Ringkasan bug "premature" & status perbaikan per provider |
+| [docs/guide.md](docs/guide.md) · [docs/sumopod.md](docs/sumopod.md) | Panduan pemakaian SDK · panduan lengkap SumoPod |
 
 ---
 
@@ -17,46 +30,51 @@
 ### 🚀 Key Features
 
 - 🔄 **Zero-Code PG Switcher** — Swap providers via `.env` only. No code refactoring needed.
+- 🧪 **Zero-Approval Contract Simulator** — Develop and test production-grade integration without waiting 3–6 weeks for merchant account approvals. Enable via `BUAYAR_SIMULATE=1` or `buayar.simulator`.
+- 🛡️ **Fail-Closed Webhook Verifier (20/20)** — Universal callback endpoint that rejects invalid or unsigned webhooks across all 20 providers with raw-byte streaming support.
+- 🔒 **Compiler-Enforced Portability** — Canonical payment methods (`bca_va`, `qris`, `gopay`, etc.) are type-safe; provider-internal codes are caught at compile time.
+- ⚡ **Pre-Flight Capability Verification** — Validates payment method support before network requests are dispatched, returning actionable errors.
 - ⚡ **Semi & Full Integration**:
   - 🟡 **Semi (Redirect/Hosted)** — Returns a `paymentUrl` to redirect customers to the PG's hosted checkout.
   - 🟢 **Full (Custom Native UI)** — Returns raw data (`vaNumber`, EMVCo `qrString`, `paymentCode`, `deeplink`) to render a completely custom payment UI.
-- 🏷️ **Canonical Payment Methods** — Use universal codes (`bca_va`, `qris`, `gopay`, etc.) and the SDK maps them automatically to each provider's internal format.
+- 🏷️ **Canonical Payment Methods** — Use universal codes and the SDK maps them automatically to each provider's internal format.
 - 📂 **Accordion-Ready Categorization** — Payment methods are pre-grouped by category (`Virtual Account`, `QRIS`, `E-Wallet`, `Retail`, `Credit Card`, `Paylater`) with fees and icon URLs included.
-- 🪝 **Universal Webhook Verifier** — One endpoint to verify and normalize callbacks from any supported provider. Auto-detects the provider from the payload structure.
-- 🛡️ **Strong TypeScript Types** — Fully typed request and response interfaces to catch errors at compile time.
+- 🔎 **Live Channel & Payload Probes** — `bun run probe` runs every provider's per-channel probe with a JSON summary; live channel lists come from the iPaymu/Xendit APIs and the DOKU MCP Server (falls back to the static catalog with an honest `source: "static"` marker).
 - 🌍 **Multi-Currency** — Supports `currency` field for international providers (USD, EUR, GBP, INR, etc.).
 
 ### 📦 Supported Providers
+
+> 📄 Each provider has its own implementation doc — files, operations, credentials, endpoints & live verification status — in [`docs/providers/<provider>/README.md`](docs/providers/README.md).
 
 #### 🇮🇩 Indonesian (11)
 
 | Provider | Status | Redirect | Direct API | Webhook | Client |
 |---|:---:|:---:|:---:|:---:|:---:|
-| Midtrans | - | ✅ Snap | ✅ Core API | SHA-512 | `MidtransClient` |
-| Duitku | - | ✅ | ✅ | MD5 | `DuitkuClient` |
-| iPaymu | Tested | ✅ | ✅ | HMAC-SHA256 | `IpaymuClient` |
-| Xendit | - | ✅ Invoice v2 | ✅ Payments v3 | Token | `XenditClient` |
-| DOKU Jokul | - | ✅ v1 | ✅ v2 | HMAC-SHA256 | `DokuClient` |
-| PrismaLink | - | ✅ | ✅ | SHA-256 | `PrismalinkClient` |
-| Faspay | - | ✅ | ✅ | SHA1(MD5) | `FaspayClient` |
-| Finpay | - | ✅ | ✅ | HMAC-SHA512 | `FinpayClient` |
-| Nicepay | - | ✅ | ✅ | SHA-256 | `NicepayClient` |
-| OY! Bisnis | - | ✅ | ✅ | Header Auth | `OyClient` |
-| [SumoPod](docs/sumopod.md) | Tested | ✅ Payments v1 | ✅ QRIS API | Svix / Token | `SumopodClient` |
+| [Midtrans](docs/providers/midtrans/README.md) | Contract Tested | ✅ Snap | ✅ Core API + BI-SNAP | SHA-512 | `MidtransClient` |
+| [Duitku](docs/providers/duitku/README.md) | Contract Tested | ✅ | ✅ | MD5 | `DuitkuClient` |
+| [iPaymu](docs/providers/ipaymu/README.md) | Live & Contract Tested | ✅ | ✅ | HMAC-SHA256 | `IpaymuClient` |
+| [Xendit](docs/providers/xendit/README.md) | Contract Tested | ✅ Invoice v2 | ✅ Payments v3 | Token | `XenditClient` |
+| [DOKU Jokul](docs/providers/doku/README.md) | Contract Tested | ✅ v1 | ✅ v2 | HMAC-SHA256 | `DokuClient` |
+| [PrismaLink](docs/providers/prismalink/README.md) | Contract Tested | ✅ | ✅ | SHA-256 | `PrismalinkClient` |
+| [Faspay](docs/providers/faspay/README.md) | Contract Tested | ✅ | ✅ | SHA1(MD5) | `FaspayClient` |
+| [Finpay](docs/providers/finpay/README.md) | Contract Tested | ✅ | ✅ | HMAC-SHA512 | `FinpayClient` |
+| [Nicepay](docs/providers/nicepay/README.md) | Contract Tested | ✅ | ✅ | SHA-256 | `NicepayClient` |
+| [OY! Bisnis](docs/providers/oy/README.md) | Contract Tested | ✅ | ✅ | Header Auth | `OyClient` |
+| [SumoPod](docs/providers/sumopod/README.md) | Live & Contract Tested | ✅ Payments v1 | ✅ QRIS API | Svix / Token | `SumopodClient` |
 
 #### 🌍 International (9)
 
 | Provider | Status | Redirect | Direct API | Webhook | Client |
 |---|:---:|:---:|:---:|:---:|:---:|
-| Stripe | - | ✅ Checkout Sessions | ✅ Payment Intents | HMAC-SHA256 | `StripeClient` |
-| PayPal | - | ✅ Orders v2 | ✅ Capture | OAuth2 | `PaypalClient` |
-| Adyen | - | ✅ Sessions v68 | ✅ Payments v68 | HMAC-SHA256 | `AdyenClient` |
-| Checkout.com | - | ✅ Payment Links | ✅ Payments API | HMAC-SHA256 | `CheckoutComClient` |
-| Razorpay | - | ✅ Payment Links | ✅ Orders API | HMAC-SHA256 | `RazorpayClient` |
-| Square | - | ✅ Payment Links | ✅ Payments API | HMAC-SHA256 | `SquareClient` |
-| PayU | - | ✅ Orders v2.1 | ✅ Pay Methods | MD5/SHA-256 | `PayuClient` |
-| Braintree | - | ✅ Drop-in UI Token | ✅ Transaction API | SHA1 HMAC | `BraintreeClient` |
-| 2Checkout | - | ✅ REST v6.0 | ✅ REST v6.0 | IPN MD5 | `TwoCheckoutClient` |
+| [Stripe](docs/providers/stripe/README.md) | Contract Tested | ✅ Checkout Sessions | ✅ Payment Intents | HMAC-SHA256 | `StripeClient` |
+| [PayPal](docs/providers/paypal/README.md) | Contract Tested | ✅ Orders v2 | ✅ Capture | OAuth2 | `PaypalClient` |
+| [Adyen](docs/providers/adyen/README.md) | Contract Tested | ✅ Sessions v68 | ✅ Payments v68 | HMAC-SHA256 | `AdyenClient` |
+| [Checkout.com](docs/providers/checkoutcom/README.md) | Contract Tested | ✅ Payment Links | ✅ Payments API | HMAC-SHA256 | `CheckoutComClient` |
+| [Razorpay](docs/providers/razorpay/README.md) | Contract Tested | ✅ Payment Links | ✅ Orders API | HMAC-SHA256 | `RazorpayClient` |
+| [Square](docs/providers/square/README.md) | Contract Tested | ✅ Payment Links | ✅ Payments API | HMAC-SHA256 | `SquareClient` |
+| [PayU](docs/providers/payu/README.md) | Contract Tested | ✅ Orders v2.1 | ✅ Pay Methods | MD5/SHA-256 | `PayuClient` |
+| [Braintree](docs/providers/braintree/README.md) | Contract Tested | ✅ Drop-in UI Token | ✅ Transaction API | SHA1 HMAC | `BraintreeClient` |
+| [2Checkout](docs/providers/twocheckout/README.md) | Contract Tested | ✅ REST v6.0 | ✅ REST v6.0 | IPN MD5 | `TwoCheckoutClient` |
 
 ### ⚙️ Environment Variables
 
@@ -213,43 +231,48 @@ BUAYAR_WEBHOOK_SECRET=whsec_...
 ### 🚀 Fitur Utama
 
 - 🔄 **Zero-Code PG Switcher** — Ganti provider hanya via `.env`, tanpa refactoring kode.
+- 🧪 **Zero-Approval Contract Simulator** — Koding dan uji transaksi secara production-grade sebelum menunggu 3–6 minggu persetujuan akun PG. Cukup aktifkan `BUAYAR_SIMULATE=1` atau `buayar.simulator`.
+- 🛡️ **Fail-Closed Webhook Verifier (20/20)** — Satu endpoint untuk verifikasi dan normalisasi callback dari seluruh 20 provider dengan fail-closed ketat dan dukungan streaming raw bytes.
+- 🔒 **Compiler-Enforced Portability** — Canonical payment method terjamin type-safe; kode method provider yang tidak portable langsung dicegah oleh `tsc`.
+- ⚡ **Pre-flight Capability Check** — Validasi kapabilitas pembayaran sebelum request dikirim ke PG, mencegah kegagalan runtime.
 - ⚡ **Dukungan Spektrum Integrasi Penuh**:
   - 🟡 **Semi Integrasi (Redirect/Hosted)** — Menghasilkan `paymentUrl` untuk redirect ke halaman checkout PG.
   - 🟢 **Full Integrasi (Custom Native UI)** — Mengembalikan data mentah (`vaNumber`, `qrString` EMVCo, `paymentCode`, `deeplink`) untuk dirender di UI custom.
 - 🏷️ **Canonical Payment Method Mapping** — Gunakan kode universal (`bca_va`, `qris`, `gopay`), SDK memetakannya otomatis ke format internal provider aktif.
 - 📂 **Pre-Kategorisasi (Accordion Ready)** — Channel pembayaran sudah dikelompokkan per kategori (`Virtual Account`, `QRIS`, `E-Wallet`, `Retail`, `Kartu Kredit`, `Paylater`) lengkap dengan fee dan icon URL.
-- 🪝 **Universal Webhook Verifier** — Satu endpoint untuk verifikasi dan normalisasi callback dari provider manapun. Provider terdeteksi otomatis dari struktur payload.
-- 🛡️ **TypeScript Strong-Typed** — Interface request & response terdeklarasi penuh untuk mencegah runtime error.
 - 🌍 **Multi-Currency** — Field `currency` untuk provider internasional (USD, EUR, GBP, dll).
+- 🔎 **Probe Channel & Payload Live** — `bun run probe` menjalankan probe per-channel semua provider dengan ringkasan JSON; daftar channel live diambil dari API iPaymu/Xendit dan DOKU MCP Server (fallback ke katalog statis dengan penanda jujur `source: "static"`).
 - 🛠️ **CLI Tools** — Scaffold boilerplate (`buayar init`) & auto-generate `payment-channels.json` (`buayar channels`).
 
 ### 📦 Provider yang Didukung
 
+> 📄 Setiap provider punya dokumen implementasi sendiri — peta file, operasi, kredensial, endpoint & status verifikasi live — di [`docs/providers/<provider>/README.md`](docs/providers/README.md).
+
 #### 🇮🇩 Lokal Indonesia (11)
 
-* **Midtrans** — Snap API (Redirect/Popup) & Core API Direct Charge. Verifikasi SHA-512. `MidtransClient`.
-* **Duitku** — Redirect Checkout & Direct Inquiry API. Verifikasi MD5. `DuitkuClient` (Disbursement, Inquiry Rekening, Saldo).
-* **iPaymu** `[Tested]` — Redirect & Direct Payment API v2. Verifikasi HMAC-SHA256. `IpaymuClient` (Cek Saldo, Cek Transaksi, Histori, Bank List, Dynamic Methods, COD).
-* **Xendit** — Invoice v2 & Payment Requests v3. Webhook Token. `XenditClient` (Saldo, Expire Invoice, Disbursement).
-* **DOKU Jokul** — Checkout v1 & Direct API v2. HMAC-SHA256 + Digest. `DokuClient`.
-* **PrismaLink** — Checkout Page & Direct API. SHA-256. `PrismalinkClient`.
-* **Faspay** — Post Data Transaction (Redirect & Direct). SHA1(MD5()). `FaspayClient`.
-* **Finpay** — Payment Initiate & Direct API. HMAC-SHA512. `FinpayClient`.
-* **Nicepay** — Order Regist & One-Step API. SHA-256 merchantToken. `NicepayClient`.
-* **OY! Bisnis** — Payment Checkout v2 & Direct VA/QRIS. Header Auth. `OyClient` (Inquiry, Saldo, Disbursement).
-* **SumoPod** `[Tested]` — Payment Link API v1 & QRIS. Verifikasi Svix HMAC-SHA256 / X-Webhook-Token. `SumopodClient`. *Lihat [panduan lengkap SumoPod](docs/sumopod.md)*.
+* **[Midtrans](docs/providers/midtrans/README.md)** `[Contract Tested]` — Snap API (Redirect/Popup) & Core API Direct Charge. Verifikasi SHA-512. `MidtransClient`. Mendukung **BI-SNAP Core API** (opt-in via `config.extra.snap`) untuk VA & QRIS MPM: access token `SHA256withRSA`, signature transaksi `HMAC_SHA512`, status numerik, notifikasi asimetris.
+* **[Duitku](docs/providers/duitku/README.md)** `[Contract Tested]` — Redirect Checkout & Direct Inquiry API. Verifikasi MD5. `DuitkuClient` (Disbursement, Inquiry Rekening, Saldo).
+* **[iPaymu](docs/providers/ipaymu/README.md)** `[Live & Contract Tested]` — Redirect & Direct Payment API v2. Verifikasi HMAC-SHA256. `IpaymuClient` (Cek Saldo, Cek Transaksi, Histori, Bank List, Dynamic Methods, COD).
+* **[Xendit](docs/providers/xendit/README.md)** `[Contract Tested]` — Invoice v2 & Payment Requests v3. Webhook Token. `XenditClient` (Saldo, Expire Invoice, Disbursement).
+* **[DOKU Jokul](docs/providers/doku/README.md)** `[Contract Tested]` — Checkout v1 & Direct API v2. HMAC-SHA256 + Digest. `DokuClient`. Daftar channel **live** via DOKU MCP Server (`get_merchant_payment_methods`, sandbox 32 channel), fallback katalog statis.
+* **[PrismaLink](docs/providers/prismalink/README.md)** `[Contract Tested]` — Checkout Page & Direct API. SHA-256. `PrismalinkClient`.
+* **[Faspay](docs/providers/faspay/README.md)** `[Contract Tested]` — Post Data Transaction (Redirect & Direct). SHA1(MD5()). `FaspayClient`.
+* **[Finpay](docs/providers/finpay/README.md)** `[Contract Tested]` — Payment Initiate & Direct API. HMAC-SHA512. `FinpayClient`.
+* **[Nicepay](docs/providers/nicepay/README.md)** `[Contract Tested]` — Order Regist & One-Step API. SHA-256 merchantToken. `NicepayClient`.
+* **[OY! Bisnis](docs/providers/oy/README.md)** `[Contract Tested]` — Payment Checkout v2 & Direct VA/QRIS. Header Auth. `OyClient` (Inquiry, Saldo, Disbursement).
+* **[SumoPod](docs/providers/sumopod/README.md)** `[Live & Contract Tested]` — Payment Link API v1 & QRIS. Verifikasi Svix HMAC-SHA256 / X-Webhook-Token. `SumopodClient`. *Lihat [panduan lengkap SumoPod](docs/sumopod.md)*.
 
 #### 🌍 Internasional (9)
 
-* **Stripe** — Checkout Sessions (redirect) & Payment Intents (direct). HMAC-SHA256. `StripeClient`.
-* **PayPal** — Orders API v2 + OAuth2 auto-token. `PaypalClient` (Capture, Refund, Saldo).
-* **Adyen** — Sessions v68 (redirect) & Payments v68 (direct). HMAC-SHA256. `AdyenClient`.
-* **Checkout.com** — Payment Links & Payments API. HMAC-SHA256. `CheckoutComClient`.
-* **Razorpay** — Payment Links & Orders API. HMAC-SHA256. `RazorpayClient`.
-* **Square** — Payment Links & Payments API. HMAC-SHA256. `SquareClient`.
-* **PayU** — Orders API v2.1 + OAuth2. Verifikasi MD5/SHA-256. `PayuClient`.
-* **Braintree** — Drop-in UI Client Token & Transaction API. SHA1 HMAC. `BraintreeClient`.
-* **2Checkout/Verifone** — REST API 6.0. IPN MD5. `TwoCheckoutClient`.
+* **[Stripe](docs/providers/stripe/README.md)** `[Contract Tested]` — Checkout Sessions (redirect) & Payment Intents (direct). HMAC-SHA256. `StripeClient`.
+* **[PayPal](docs/providers/paypal/README.md)** `[Contract Tested]` — Orders API v2 + OAuth2 auto-token. `PaypalClient` (Capture, Refund, Saldo).
+* **[Adyen](docs/providers/adyen/README.md)** `[Contract Tested]` — Sessions v68 (redirect) & Payments v68 (direct). HMAC-SHA256. `AdyenClient`.
+* **[Checkout.com](docs/providers/checkoutcom/README.md)** `[Contract Tested]` — Payment Links & Payments API. HMAC-SHA256. `CheckoutComClient`.
+* **[Razorpay](docs/providers/razorpay/README.md)** `[Contract Tested]` — Payment Links & Orders API. HMAC-SHA256. `RazorpayClient`.
+* **[Square](docs/providers/square/README.md)** `[Contract Tested]` — Payment Links & Payments API. HMAC-SHA256. `SquareClient`.
+* **[PayU](docs/providers/payu/README.md)** `[Contract Tested]` — Orders API v2.1 + OAuth2. Verifikasi MD5/SHA-256. `PayuClient`.
+* **[Braintree](docs/providers/braintree/README.md)** `[Contract Tested]` — Drop-in UI Client Token & Transaction API. SHA1 HMAC. `BraintreeClient`.
+* **[2Checkout/Verifone](docs/providers/twocheckout/README.md)** `[Contract Tested]` — REST API 6.0. IPN MD5. `TwoCheckoutClient`.
 
 ### ⚙️ Konfigurasi Environment Variables (`.env`)
 
@@ -380,6 +403,51 @@ BUAYAR_WEBHOOK_SECRET=whsec_...
 | **Kartu Kredit** | `credit_card` | Visa, Mastercard, JCB, Amex |
 | **Paylater** | `kredivo`, `akulaku`, `indodana` | Cicilan & paylater |
 | **International** | `apple_pay`, `google_pay`, `paypal`, `klarna`, `sepa` | Metode internasional |
+
+### 🧪 Zero-Approval Sandbox & Contract Simulator
+
+Anda tidak perlu menunggu 3–6 minggu sampai merchant account PG disetujui hanya untuk menguji alur integrasi pembayaran. `@crediblemark/buayar` menyertakan simulator kontrak bawaan yang realistis untuk ke-20 provider.
+
+#### 1. Aktifkan Mode Simulasi
+Cukup tambahkan di environment variable atau instance config:
+```env
+BUAYAR_SIMULATE=1
+```
+atau di kode:
+```typescript
+const buayar = new Buayar({ simulate: true });
+```
+
+#### 2. Matriks Status Transaksi Deterministik
+Gunakan prefix khusus pada `orderId` untuk menguji berbagai skenario respons PG:
+- `ORDER-SIM_PAID-001` → Langsung sukses / lunas (`isPaid: true`, status `settlement`/`paid`)
+- `ORDER-SIM_PENDING-002` → Transaksi menunggu pembayaran (`status: "pending"`)
+- `ORDER-SIM_EXPIRED-003` → Transaksi kedaluwarsa (`status: "expired"`)
+- `ORDER-SIM_FAILED-004` → Transaksi gagal (`status: "failed"`)
+- `ORDER-SIM_TIMEOUT-005` → Simulasi network timeout / gateway unreachable
+- `ORDER-SIM_ERROR-006` → Simulasi error sistem PG internal
+
+#### 3. Generator Webhook Kriptografis untuk Pengujian Lokal & CI
+Generate webhook event lengkap dengan signature kriptografis sah untuk provider apa pun:
+```typescript
+const webhookEvent = buayar.simulator.createWebhookEvent({
+  provider: "midtrans", // atau 'stripe', 'xendit', 'doku', dll.
+  orderId: "ORDER-1001",
+  amount: 150000,
+  status: "paid",
+  secretKey: "your-secret",
+});
+
+// Kirim ke endpoint webhook Anda atau verifikasi langsung:
+const verifyResult = await buayar.verifyWebhook(
+  webhookEvent.payload,
+  webhookEvent.headers,
+  { rawBody: webhookEvent.rawBody }
+);
+
+console.log(verifyResult.isValid); // true
+console.log(verifyResult.isPaid);  // true
+```
 
 ---
 

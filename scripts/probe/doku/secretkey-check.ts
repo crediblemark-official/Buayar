@@ -1,13 +1,18 @@
 import { Buayar } from "../src";
 
-const CLIENT_ID = "BRN-0268-1789326133127";
-const SECRET_KEY = "SK-HjhGYlaRK3bFBNtWK7ij";
+const CLIENT_ID = process.env.DOKU_CLIENT_ID;
+const SECRET_KEY = process.env.DOKU_SECRET_KEY;
 
 async function main() {
+  if (!CLIENT_ID || !SECRET_KEY) {
+    console.error("❌ DOKU_CLIENT_ID dan DOKU_SECRET_KEY harus disetel di environment variable.");
+    process.exit(1);
+  }
+
   console.log("==================================================================");
   console.log("🚀 PENGUJIAN REAL API DOKU SANDBOX DENGAN SECRET KEY RESMI");
   console.log("Client-Id  :", CLIENT_ID);
-  console.log("Secret-Key :", SECRET_KEY);
+  console.log("Secret-Key : [MASKED]");
   console.log("==================================================================\n");
 
   const buayar = new Buayar({

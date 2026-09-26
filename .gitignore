@@ -4,3 +4,17 @@ dist
 *.log
 .DS_Store
 buayar/
+
+# Kredensial sandbox/live — JANGAN pernah commit (lihat isi file untuk kredensial asli)
+sandbox.md
+env.local
+.env
+.env.*
+
+# Artefak runtime probe DOKU (berisi trxId & payload transaksi)
+doku-va-manual-state.json
+doku-notifications.log
+receiver.out
+tunnel.out
+receiver.pid
+tunnel.pid

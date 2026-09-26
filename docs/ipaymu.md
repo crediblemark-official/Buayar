@@ -29,7 +29,7 @@ BUAYAR_RETURN_URL=https://domain-anda.com/payment/success
 ## 2. Inisialisasi SDK
 
 ```typescript
-import { Buayar } from "buayar";
+import { Buayar } from "@crediblemark/buayar";
 
 // Otomatis membaca dari process.env:
 const buayar = new Buayar();
@@ -149,6 +149,16 @@ if (invoice.success) {
 
 > 💡 **Parameter `customer.phone` Opsional:** Sesuai dokumentasi resmi iPaymu v2, parameter `phone` bersifat opsional. Buayar tidak lagi menyisipkan nomor fallback buatan — field `phone` hanya disertakan jika memang diisi oleh pembeli/merchant.
 
+> 🧾 **`product`/`qty`/`price` otomatis dikirim:** Dokumentasi resmi Direct Payment mencantumkan
+> ketiganya sebagai parameter body (wajib untuk COD). Buayar menurunkannya dari `items` bila
+> diisi, atau dari `productDetails` + `amount` sebagai satu item. Bila item mendefinisikan
+> `weight`/`width`/`length`/`height`, array dimensi paralel ikut dikirim.
+
+> 💳 **Debit Online:** gunakan kode kanonikal **`debitonline`** (laporan `GET /api/v2/payment-channels`
+> menampilkan grup `debitonline`). Buayar otomatis menerjemahkannya ke `paymentMethod: "cc"` +
+> `paymentChannel: "debitonline"` — mengirim `paymentMethod: "debitonline"` langsung akan ditolak
+> gateway dengan *"Invalid payment method"*.
+
 ### B. Redirect Payment (Hosted Payment Page)
 Cukup kosongkan `paymentMethod` untuk menggunakan halaman checkout bawaan iPaymu:
 
@@ -209,6 +219,37 @@ const invoice = await buayar.createInvoice({
 ## 6. Logistik COD (Cash On Delivery)
 
 iPaymu mendukung pembayaran COD terintegrasi dengan ekspedisi pengiriman (SAP, SiCepat, SPX, RPX, dll.).
+
+### 6a. COD via Direct Payment (`paymentMethod: "cod"`)
+
+COD Direct Payment memiliki prasyarat tambahan di luar transaksi biasa. `CreateInvoiceParams`
+belum memodelkan data pengiriman, jadi lengkapi lewat `items` (dimensi) dan `providerParams`
+(data kirim):
+
+```typescript
+const invoice = await buayar.createInvoice({
+  orderId: `COD-${Date.now()}`,
+  amount: 150000,
+  paymentMethod: "cod",
+  productDetails: "Sepatu Olahraga",
+  customer: { name: "Budi Santoso", email: "budi@mail.com", phone: "081234567890" },
+  // Dimensi wajib: dikirim sebagai array paralel dari items.
+  items: [{ name: "Sepatu Olahraga", price: 150000, quantity: 1, weight: 1, width: 30, length: 20, height: 12 }],
+  // Data pengiriman/ekspedisi (belum dimodelkan SDK) → escape hatch providerParams.
+  providerParams: {
+    deliveryArea: "80231",              // kode pos tujuan (lihat getCodArea)
+    deliveryAddress: "Jl. Contoh No. 1, Denpasar",
+    shipping: "SICEPAT",                // nama ekspedisi dari getCodRate
+    shippingService: "REG",
+    pickupArea: "80113",                // kode pos area pickup merchant (harus terdaftar)
+  },
+});
+```
+
+> ⚠️ Validasi gateway berurutan: bila `product`/dimensi belum lengkap Anda akan menerima
+> *"product wajib diisi."* atau *"weight wajib diisi."*. Setelah payload lengkap, galat
+> berikutnya — *"Pickup area not registered"* — berarti **area pickup akun merchant belum
+> terdaftar** di iPaymu (konfigurasi akun, bukan kode). Hubungi iPaymu untuk mendaftarkan area pickup.
 
 ```typescript
 const client = buayar.getIpaymuClient();

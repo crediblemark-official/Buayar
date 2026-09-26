@@ -1,12 +1,17 @@
 /**
- * Real API Test terhadap DOKU Sandbox menggunakan kredensial aktif:
- * Client-Id: BRN-0268-1789326133127
- * API Key: doku_key_sandbox_8d5a11d98a0a468b83a58df9dd93ccc8
+ * Real API Test terhadap DOKU Sandbox menggunakan kredensial dari environment variable:
+ * DOKU_CLIENT_ID
+ * DOKU_API_KEY
  */
 
-const CLIENT_ID = process.env.DOKU_CLIENT_ID || "BRN-0268-1789326133127";
-const API_KEY = process.env.DOKU_API_KEY || "doku_key_sandbox_8d5a11d98a0a468b83a58df9dd93ccc8";
+const CLIENT_ID = process.env.DOKU_CLIENT_ID;
+const API_KEY = process.env.DOKU_API_KEY;
 const MCP_URL = process.env.DOKU_MCP_URL || "https://api-sandbox.doku.com/doku-mcp-server/mcp";
+
+if (!CLIENT_ID || !API_KEY) {
+  console.error("❌ DOKU_CLIENT_ID dan DOKU_API_KEY harus disetel di environment variable.");
+  process.exit(1);
+}
 
 async function callDoku(method: string, params: any = {}) {
   const authHeader = "Basic " + Buffer.from(API_KEY + ":").toString("base64");

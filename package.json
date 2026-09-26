@@ -77,6 +77,7 @@
     "init": "node ./dist/cli/index.js init",
     "postinstall": "echo \"🐊 Buayar terpasang! Jalankan \\\"npx buayar init\\\" untuk membuat boilerplate payment yang siap pakai.\"",
     "test": "bun test",
+    "probe": "bun run scripts/probe/all.ts",
     "prepare": "husky"
   },
   "devDependencies": {
