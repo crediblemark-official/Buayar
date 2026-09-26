@@ -77,7 +77,10 @@ export class Buayar {
    * Dapatkan salinan konfigurasi aktif saat ini
    */
   getConfig(): BuayarConfig {
-    return { ...this.config };
+    // `extra` ikut disalin menjadi objek baru. Kalau hanya `{ ...this.config }`,
+    // pemanggil masih memegang reference ke `this.config.extra` dan bisa mengubah
+    // konfigurasi instance dari luar.
+    return { ...this.config, extra: { ...(this.config.extra || {}) } };
   }
 
   /**
@@ -257,75 +260,94 @@ export class Buayar {
     headers?: Record<string, string | string[] | undefined>,
     configOverride?: Partial<ProviderConfig>
   ): Promise<VerifyCallbackResult> {
-    const mergedConfig: ProviderConfig = { ...this.config, ...configOverride };
+    // PENTING: `extra` disalin menjadi objek BARU, bukan hanya di-spread.
+    //
+    // `{ ...this.config }` hanya menyalin reference ke `extra`, sehingga
+    // `mergedConfig.extra` === `this.config.extra`. Semua penulisan header di
+    // bawah (`extra.headers`, `extra.oyUsername`, `extra.signatureHeader`, ...)
+    // lalu menulis ke state instance secara permanen — dan BERTAHAN ke request
+    // berikutnya. Akibatnya:
+    //
+    //   • Request tanpa `x-oy-username` jatuh ke `config.extra.oyUsername`
+    //     milik request SEBELUMNYA (lihat OY!Provider) — fail-closed "header
+    //     absen = tolak" jadi bisa dilewati.
+    //   • `sumopod` punya pola sama via `config.extra.webhookTokenHeader`.
+    //   • `extra.headers` dari request lain bisa dipakai untuk memverifikasi
+    //     signature, termasuk lintas tenant pada aplikasi multi-merchant.
+    //
+    // Per-request merge di bawah membuat `this.config` benar-benar tak tersentuh.
+    const mergedExtra: Record<string, any> = {
+      ...(this.config.extra || {}),
+      ...(configOverride?.extra || {}),
+    };
+    const mergedConfig: ProviderConfig = { ...this.config, ...configOverride, extra: mergedExtra };
 
     if (headers) {
-      if (!mergedConfig.extra) mergedConfig.extra = {};
-      mergedConfig.extra.headers = headers;
+      mergedExtra.headers = headers;
 
       // Stripe
       const stripeSig = headers["stripe-signature"] || headers["Stripe-Signature"];
       if (stripeSig) {
-        mergedConfig.extra.signatureHeader = Array.isArray(stripeSig) ? stripeSig[0] : stripeSig;
+        mergedExtra.signatureHeader = Array.isArray(stripeSig) ? stripeSig[0] : stripeSig;
       }
       // Checkout.com
       const ckoSig = headers["cko-signature"] || headers["Cko-Signature"];
       if (ckoSig) {
-        mergedConfig.extra.signatureHeader = Array.isArray(ckoSig) ? ckoSig[0] : ckoSig;
+        mergedExtra.signatureHeader = Array.isArray(ckoSig) ? ckoSig[0] : ckoSig;
       }
       // Razorpay
       const rzpSig = headers["x-razorpay-signature"] || headers["X-Razorpay-Signature"];
       if (rzpSig) {
-        mergedConfig.extra.signatureHeader = Array.isArray(rzpSig) ? rzpSig[0] : rzpSig;
+        mergedExtra.signatureHeader = Array.isArray(rzpSig) ? rzpSig[0] : rzpSig;
       }
       // Square
       const squareSig = headers["x-square-hmacsha256-signature"] || headers["x-square-signature"];
       if (squareSig) {
-        mergedConfig.extra.signatureHeader = Array.isArray(squareSig) ? squareSig[0] : squareSig;
+        mergedExtra.signatureHeader = Array.isArray(squareSig) ? squareSig[0] : squareSig;
       }
       // PayU
       const payuSig = headers["openpayu-signature"] || headers["OpenPayU-Signature"];
       if (payuSig) {
-        mergedConfig.extra.signatureHeader = Array.isArray(payuSig) ? payuSig[0] : payuSig;
+        mergedExtra.signatureHeader = Array.isArray(payuSig) ? payuSig[0] : payuSig;
       }
       // Braintree
       const btSig = headers["bt_signature"] || (payload && typeof payload === "object" ? payload.bt_signature : undefined);
       const btPayload = headers["bt_payload"] || (payload && typeof payload === "object" ? payload.bt_payload : undefined);
       if (btSig && btPayload) {
-        mergedConfig.extra.btSignature = Array.isArray(btSig) ? btSig[0] : btSig;
-        mergedConfig.extra.btPayload = Array.isArray(btPayload) ? btPayload[0] : btPayload;
+        mergedExtra.btSignature = Array.isArray(btSig) ? btSig[0] : btSig;
+        mergedExtra.btPayload = Array.isArray(btPayload) ? btPayload[0] : btPayload;
       }
       // Xendit
       const xenditToken = headers["x-callback-token"] || headers["X-Callback-Token"];
       if (xenditToken) {
-        mergedConfig.extra.callbackToken = Array.isArray(xenditToken) ? xenditToken[0] : xenditToken;
+        mergedExtra.callbackToken = Array.isArray(xenditToken) ? xenditToken[0] : xenditToken;
       }
       // DOKU
       const dokuSig = headers["signature"] || headers["Signature"];
       if (dokuSig) {
-        mergedConfig.extra.dokuSignature = Array.isArray(dokuSig) ? dokuSig[0] : dokuSig;
+        mergedExtra.dokuSignature = Array.isArray(dokuSig) ? dokuSig[0] : dokuSig;
       }
       // Midtrans BI-SNAP (signature asimetris: X-SIGNATURE + X-TIMESTAMP)
       const mtSnapSig = headers["x-signature"] || headers["X-SIGNATURE"];
       const mtSnapTs = headers["x-timestamp"] || headers["X-TIMESTAMP"];
       if (mtSnapSig && mtSnapTs) {
-        mergedConfig.extra.snapSignature = Array.isArray(mtSnapSig) ? mtSnapSig[0] : mtSnapSig;
-        mergedConfig.extra.snapTimestamp = Array.isArray(mtSnapTs) ? mtSnapTs[0] : mtSnapTs;
+        mergedExtra.snapSignature = Array.isArray(mtSnapSig) ? mtSnapSig[0] : mtSnapSig;
+        mergedExtra.snapTimestamp = Array.isArray(mtSnapTs) ? mtSnapTs[0] : mtSnapTs;
       }
       // OY!
       const oyUser = headers["x-oy-username"] || headers["X-Oy-Username"];
       if (oyUser) {
-        mergedConfig.extra.oyUsername = Array.isArray(oyUser) ? oyUser[0] : oyUser;
+        mergedExtra.oyUsername = Array.isArray(oyUser) ? oyUser[0] : oyUser;
       }
       // SumoPod
       const svixId = headers["svix-id"] || headers["Svix-Id"];
       const svixTimestamp = headers["svix-timestamp"] || headers["Svix-Timestamp"];
       const svixSignature = headers["svix-signature"] || headers["Svix-Signature"];
       const sumopodToken = headers["x-webhook-token"] || headers["X-Webhook-Token"];
-      if (svixId) mergedConfig.extra.svixId = Array.isArray(svixId) ? svixId[0] : svixId;
-      if (svixTimestamp) mergedConfig.extra.svixTimestamp = Array.isArray(svixTimestamp) ? svixTimestamp[0] : svixTimestamp;
-      if (svixSignature) mergedConfig.extra.svixSignature = Array.isArray(svixSignature) ? svixSignature[0] : svixSignature;
-      if (sumopodToken) mergedConfig.extra.webhookTokenHeader = Array.isArray(sumopodToken) ? sumopodToken[0] : sumopodToken;
+      if (svixId) mergedExtra.svixId = Array.isArray(svixId) ? svixId[0] : svixId;
+      if (svixTimestamp) mergedExtra.svixTimestamp = Array.isArray(svixTimestamp) ? svixTimestamp[0] : svixTimestamp;
+      if (svixSignature) mergedExtra.svixSignature = Array.isArray(svixSignature) ? svixSignature[0] : svixSignature;
+      if (sumopodToken) mergedExtra.webhookTokenHeader = Array.isArray(sumopodToken) ? sumopodToken[0] : sumopodToken;
     }
 
     const overrideProvider = (configOverride as any)?.provider;
