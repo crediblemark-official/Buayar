@@ -11,7 +11,7 @@ import {
   PaymentMethod,
 } from "../../types";
 import { verifySquareWebhook } from "./signature";
-import { resolveRawBody, RAW_BODY_REQUIRED_MESSAGE } from "../../utils/rawBody";
+import { resolveRawBody, signedPayload, RAW_BODY_REQUIRED_MESSAGE } from "../../utils/rawBody";
 
 export class SquareProvider extends BasePaymentProvider {
   readonly name = "square";
@@ -126,7 +126,8 @@ export class SquareProvider extends BasePaymentProvider {
     const signatureHeader = config.extra?.signatureHeader || "";
     const notificationUrl = config.callbackUrl || config.extra?.notificationUrl || "";
     const rawBody = resolveRawBody(config, body);
-    const parsedBody = typeof body === "string" ? JSON.parse(body) : body;
+    // Data bisnis WAJIB diturunkan dari byte yang ditandatangani (lihat signedPayload).
+    const parsedBody = signedPayload(body, config);
 
     const isValid = signatureHeader
       ? verifySquareWebhook(rawBody as string, signatureHeader, signatureKey, notificationUrl)

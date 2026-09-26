@@ -194,6 +194,30 @@ export interface ProviderConfig {
   rawBody?: string;
   
   /**
+   * Shared secret yang dikirim provider di header webhook dan dinilai langsung tanpa
+   * hash — dipakai Xendit (`x-callback-token`) dan OY! (`x-oy-username`).
+   *
+   * PENTING: nilai ini BERBEDA dari `secretKey`/`apiKey` di dashboard provider.
+   * Xendit misalnya punya "Verification token" tersendiri; secret key tidak akan
+   * pernah cocok. Karena itu Buayar TIDAK pernah memakai API key sebagai fallback
+   * untuk nilai ini — lebih baik gagal dengan "token belum dikonfigurasi" daripada
+   * gagal dengan "tidak cocok", karena kedua penyebab itu sangat berbeda.
+   *
+   * Dari env: `BUAYAR_WEBHOOK_TOKEN`, `BUAYAR_WEBHOOK_SECRET`,
+   * `XENDIT_WEBHOOK_TOKEN`, `XENDIT_WEBHOOK_VERIFICATION_TOKEN`.
+   */
+  webhookToken?: string;
+  
+  /**
+   * Secret untuk verifikasi HMAC terhadap raw body — dipakai Stripe, Checkout.com,
+   * Razorpay, dan SumoPod. Berbeda dari `webhookToken` yang dinilai plainly.
+   *
+   * Dari env: `BUAYAR_WEBHOOK_SECRET`, `STRIPE_WEBHOOK_SECRET`,
+   * `CHECKOUTCOM_WEBHOOK_SECRET`, `RAZORPAY_WEBHOOK_SECRET`, `SUMOPOD_WEBHOOK_SECRET`.
+   */
+  webhookSecret?: string;
+  
+  /**
    * Mengaktifkan mode simulasi kontrak tanpa network request ke gateway asli.
    * Cocok untuk development lokal dan testing CI sebelum approval sandbox.
    */

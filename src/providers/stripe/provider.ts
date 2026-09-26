@@ -12,6 +12,7 @@ import {
 } from "../../types";
 import { toStripePaymentMethod } from "../../core/canonical";
 import { serializeStripeParams, verifyStripeWebhook } from "./signature";
+import { signedPayload } from "../../utils/rawBody";
 
 export class StripeProvider extends BasePaymentProvider {
   readonly name = "stripe";
@@ -162,10 +163,14 @@ export class StripeProvider extends BasePaymentProvider {
     const webhookSecret = config.extra?.webhookSecret || config.secretKey || "";
     const signatureHeader = config.extra?.signatureHeader || "";
 
+    // Verifikasi TETAP memakai `body` apa adanya: verifyStripeWebhook melakukan
+    // serialisasi internal atas argumen itu, dan itu yang harus diverifikasi.
     const isValid = verifyStripeWebhook(body, signatureHeader, webhookSecret);
 
-    const eventType = body.type || "";
-    const obj = body.data?.object || body;
+    // Data bisnis WAJIB diturunkan dari byte yang sama dengan yang diverifikasi.
+    const payload = signedPayload(body, config);
+    const eventType = payload.type || "";
+    const obj = payload.data?.object || payload;
 
     const orderId = obj.metadata?.order_id || obj.client_reference_id || obj.id || "";
     const amount = obj.amount_total || obj.amount || 0;

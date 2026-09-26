@@ -11,7 +11,7 @@ import {
   PaymentMethod,
 } from "../../types";
 import { buildRazorpayBasicAuth, verifyRazorpayWebhook } from "./signature";
-import { resolveRawBody, RAW_BODY_REQUIRED_MESSAGE } from "../../utils/rawBody";
+import { resolveRawBody, signedPayload, RAW_BODY_REQUIRED_MESSAGE } from "../../utils/rawBody";
 
 export class RazorpayProvider extends BasePaymentProvider {
   readonly name = "razorpay";
@@ -106,7 +106,8 @@ export class RazorpayProvider extends BasePaymentProvider {
     const webhookSecret = config.extra?.webhookSecret || config.secretKey || "";
     const signatureHeader = config.extra?.signatureHeader || "";
     const rawBody = resolveRawBody(config, body);
-    const parsedBody = typeof body === "string" ? JSON.parse(body) : body;
+    // Data bisnis WAJIB diturunkan dari byte yang ditandatangani (lihat signedPayload).
+    const parsedBody = signedPayload(body, config);
 
     const isValid = signatureHeader
       ? verifyRazorpayWebhook(rawBody as string, signatureHeader, webhookSecret)

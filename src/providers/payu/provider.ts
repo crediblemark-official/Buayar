@@ -11,7 +11,7 @@ import {
   PaymentMethod,
 } from "../../types";
 import { verifyPayuWebhook, buildPayuBasicAuth } from "./signature";
-import { resolveRawBody, RAW_BODY_REQUIRED_MESSAGE } from "../../utils/rawBody";
+import { resolveRawBody, signedPayload, RAW_BODY_REQUIRED_MESSAGE } from "../../utils/rawBody";
 import { CANONICAL_TO_PAYU, resolvePaymentMethodCode } from "../../core/canonical";
 
 export class PayuProvider extends BasePaymentProvider {
@@ -146,7 +146,8 @@ export class PayuProvider extends BasePaymentProvider {
     const md5Key = config.extra?.md5Key || config.apiKey || config.secretKey || "";
     const signatureHeader = config.extra?.signatureHeader || "";
     const rawBody = resolveRawBody(config, body);
-    const parsedBody = typeof body === "string" ? JSON.parse(body) : body;
+    // Data bisnis WAJIB diturunkan dari byte yang ditandatangani (lihat signedPayload).
+    const parsedBody = signedPayload(body, config);
 
     const isValid = signatureHeader
       ? verifyPayuWebhook(rawBody as string, signatureHeader, md5Key)

@@ -24,6 +24,7 @@ import {
 import { toDokuPaymentMethod } from "../../core/canonical";
 import { CANONICAL_TO_DOKU } from "../../core/canonical";
 import { generateDokuHeaders, verifyDokuWebhookSignature } from "./signature";
+import { signedPayload, resolveRawBody, RAW_BODY_REQUIRED_MESSAGE } from "../../utils/rawBody";
 import { sha256 } from "../../utils/crypto";
 import { SnapClient } from "../../clients/snap";
 import { DokuClient } from "../../clients/doku";
@@ -699,23 +700,32 @@ export class DokuProvider extends BasePaymentProvider {
     const signature = headers["signature"] || headers["Signature"] || config.extra?.dokuSignature || config.extra?.signatureHeader;
     const clientId = config.merchantCode || config.clientKey || "";
 
+    // DOKU menandatangani Digest atas byte yang benar-benar dikirim. Kalau kita
+    // re-serialize dengan JSON.stringify, urutan key/spasi/escape bisa berbeda dari
+    // byte aslinya — dan penyerang yang menyusun payload-nya sendiri bisa membuatnya
+    // cocok kembali. Jadi raw body WAJIB ada; tidak ada → tolak, jangan diterka.
+    const rawBody = resolveRawBody(config, body);
+
     // SECURITY: default false — tanpa signature/header, webhook ditolak.
     let isValid = false;
-    if (signature || (headers && (headers["request-id"] || headers["Request-Id"]))) {
-      // Sertakan rawBody bila tersedia agar Digest dihitung dari byte asli
-      // (JSON.stringify atas objek hasil parse tidak akurat).
-      isValid = verifyDokuWebhookSignature(headers, body, clientId, secretKey, undefined, config.rawBody);
+    if (rawBody !== undefined && (signature || (headers && (headers["request-id"] || headers["Request-Id"])))) {
+      isValid = verifyDokuWebhookSignature(headers, rawBody, clientId, secretKey, undefined, rawBody);
     }
 
-    const rawStatus = (body.transaction?.status || body.status || "").toUpperCase();
+    // Data bisnis WAJIB diturunkan dari byte yang ditandatangani. Kalau tidak,
+    // penyerang bisa mengirim rawBody asli (signature cocok) sambil menyodorkan
+    // `body` lain berisi orderId/amount/status pilihan mereka sendiri.
+    const parsed = signedPayload(body, config);
+
+    const rawStatus = (parsed.transaction?.status || parsed.status || "").toUpperCase();
 
     const isPaid = isValid && (rawStatus === "SUCCESS" || rawStatus === "PAID" || rawStatus === "SETTLED");
     const isPending = isValid && rawStatus === "PENDING";
     const isExpired = isValid && rawStatus === "EXPIRED";
     const isFailed = !isValid || rawStatus === "FAILED" || (!isPaid && !isPending && !isExpired);
 
-    const orderId = body.order?.invoice_number || body.invoice_number || body.order_id || "";
-    const amount = body.order?.amount || body.amount || 0;
+    const orderId = parsed.order?.invoice_number || parsed.invoice_number || parsed.order_id || "";
+    const amount = parsed.order?.amount || parsed.amount || 0;
 
     const status: "paid" | "pending" | "failed" | "expired" = !isValid
       ? "failed"
@@ -738,7 +748,12 @@ export class DokuProvider extends BasePaymentProvider {
       isFailed,
       isExpired,
       statusCode: rawStatus,
-      rawPayload: body,
+      rawPayload: parsed,
+      error: isValid
+        ? undefined
+        : rawBody === undefined
+          ? RAW_BODY_REQUIRED_MESSAGE
+          : "Invalid or missing DOKU webhook signature.",
     };
   }
 
@@ -759,21 +774,29 @@ export class DokuProvider extends BasePaymentProvider {
       "/api/payment/webhook"
     ) as string;
 
+    // SNAP menandatangani SHA-256 dari body JSON yang sudah di-minify. Rekonstruksi
+    // dari objek hasil parse tidak selalu identik dengan byte yang dikirim (escape
+    // Unicode, format angka, urutan key numerik), jadi raw body WAJIB ada.
+    const rawBody = resolveRawBody(config, body);
+
     // SECURITY: default false — tanpa signature/secret, webhook ditolak.
     let isValid = false;
     const incomingSig = (
       headers["x-signature"] || headers["X-SIGNATURE"] || headers["signature"] || headers["Signature"] || ""
     ) as string;
-    if (incomingSig && clientSecret) {
-      isValid = verifySnapWebhookSignature(headers, body, clientSecret, endpointUrl);
+    if (rawBody !== undefined && incomingSig && clientSecret) {
+      isValid = verifySnapWebhookSignature(headers, rawBody, clientSecret, endpointUrl);
     }
 
+    // Data bisnis diturunkan dari byte yang sama dengan yang ditandatangani.
+    const parsed = signedPayload(body, config);
+
     // Status: payment notification diterima → PAID. field status eksplisit bila ada.
-    const explicitStatus = String(body.transactionStatus || body.status || body.latestTransactionStatus || "").toUpperCase();
+    const explicitStatus = String(parsed.transactionStatus || parsed.status || parsed.latestTransactionStatus || "").toUpperCase();
     const isPaid =
       isValid && (
         explicitStatus === "SUCCESS" || explicitStatus === "PAID" || explicitStatus === "SETTLED" || explicitStatus === "00" ||
-        (!explicitStatus && Boolean(body.paidAmount?.value ?? body.totalAmount?.value))
+        (!explicitStatus && Boolean(parsed.paidAmount?.value ?? parsed.totalAmount?.value))
       );
     const isPending = isValid && (explicitStatus === "PENDING" || explicitStatus === "11" || explicitStatus === "ONGOING");
     const isExpired = isValid && explicitStatus === "EXPIRED";
@@ -781,10 +804,10 @@ export class DokuProvider extends BasePaymentProvider {
       (Boolean(explicitStatus) && !isPaid && !isPending && explicitStatus !== "00");
 
     const orderId =
-      body.trxId || body.partnerReferenceNo || body.originalPartnerReferenceNo ||
-      body.order?.invoice_number || body.invoice_number || body.order_id || "";
+      parsed.trxId || parsed.partnerReferenceNo || parsed.originalPartnerReferenceNo ||
+      parsed.order?.invoice_number || parsed.invoice_number || parsed.order_id || "";
 
-    const paidValue = body.paidAmount?.value ?? body.totalAmount?.value ?? body.amount?.value ?? body.amount ?? 0;
+    const paidValue = parsed.paidAmount?.value ?? parsed.totalAmount?.value ?? parsed.amount?.value ?? parsed.amount ?? 0;
 
     const status: "paid" | "pending" | "failed" | "expired" = !isValid
       ? "failed"
@@ -807,7 +830,12 @@ export class DokuProvider extends BasePaymentProvider {
       isFailed,
       isExpired,
       statusCode: explicitStatus || "SUCCESS",
-      rawPayload: body,
+      rawPayload: parsed,
+      error: isValid
+        ? undefined
+        : rawBody === undefined
+          ? RAW_BODY_REQUIRED_MESSAGE
+          : "Invalid or missing DOKU SNAP webhook signature.",
     };
   }
 

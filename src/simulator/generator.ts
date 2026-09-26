@@ -12,7 +12,10 @@ export const DEFAULT_SIMULATOR_SECRETS: Record<string, Record<string, string>> =
   midtrans: { serverKey: "sim_midtrans_server_key" },
   duitku: { merchantCode: "D1234", apiKey: "sim_duitku_api_key" },
   ipaymu: { merchantCode: "0000001234567890", apiKey: "sim_ipaymu_api_key" },
-  xendit: { secretKey: "sim_xendit_webhook_token" },
+  // Xendit punya "Verification token" yang TERPISAH dari secret key di dashboard.
+  // Simulator memakai nilai berbeda untuk keduanya supaya perilaku produksi
+  // (token tidak akan pernah cocok dengan secret key) ikut teruji.
+  xendit: { secretKey: "sim_xendit_secret_key", webhookToken: "sim_xendit_webhook_token" },
   doku: { merchantCode: "BRN-0268-SIMULATOR", secretKey: "SK-SIMULATOR-DOKU-KEY" },
   prismalink: { merchantCode: "PRISMA_SIM", secretKey: "sim_prismalink_secret" },
   faspay: { merchantCode: "sim_faspay_user", clientKey: "sim_faspay_user", apiKey: "sim_faspay_password" },
@@ -144,7 +147,9 @@ export function generateSimulatedWebhook(
     }
 
     case "xendit": {
-      const token = secrets.secretKey || secrets.apiKey || DEFAULT_SIMULATOR_SECRETS.xendit.secretKey;
+      // Hanya `webhookToken` yang boleh jadi token — bukan secret key. Kalau di sini
+      // secret key dipakai, kita tak akan pernah menangkap bug "token salah sumber".
+      const token = secrets.webhookToken || DEFAULT_SIMULATOR_SECRETS.xendit.webhookToken;
       headers["x-callback-token"] = params.tampered ? "invalid_xendit_token" : token;
 
       body = {

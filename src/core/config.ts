@@ -231,9 +231,25 @@ export function resolveConfigFromEnv(customConfig?: BuayarConfig): BuayarConfig 
   const publicKey = customConfig?.publicKey || firstDefined(env, ["BUAYAR_PUBLIC_KEY", "PG_PUBLIC_KEY", "PUBLIC_KEY"]) || cfg.clientKey;
   const privateKey = customConfig?.privateKey || firstDefined(env, ["BUAYAR_PRIVATE_KEY", "PG_PRIVATE_KEY", "PRIVATE_KEY"]) || cfg.apiKey;
 
+  // Nama env yang berisi "webhook token" (shared secret yang dikirim PG di header).
+  // Xendit menamai variabelnya `*_WEBHOOK_VERIFICATION_TOKEN`; `BUAYAR_WEBHOOK_SECRET`
+  // adalah nama universal yang dipakai README untuk Xendit, jadi keduanya diterima.
+  //
+  // PENTING: jangan pernah memakai API key/secret key sebagai fallback webhook token.
+  // Keduanya memang nilai berbeda secara kriptografis, sehingga hasilnya selalu
+  // "tidak cocok" — bukan hanya tidak berguna, tapi juga menutupi penyebab sebenarnya
+  // ("token belum dikonfigurasi") di balik pesan error "tidak cocok".
+  const webhookTokenEnv =
+    (env.SUMOPOD_SANDBOX === 'true' ? env.SUMOPOD_SANDBOX_WEBHOOK_TOKEN : env.SUMOPOD_PRODUCTION_WEBHOOK_TOKEN) ||
+    env.SUMOPOD_WEBHOOK_TOKEN ||
+    env.XENDIT_WEBHOOK_TOKEN ||
+    env.XENDIT_WEBHOOK_VERIFICATION_TOKEN ||
+    env.BUAYAR_WEBHOOK_TOKEN ||
+    env.BUAYAR_WEBHOOK_SECRET;
+
   const extra = {
-    webhookToken: (customConfig as any)?.webhookToken || (provider === "xendit" ? (customConfig?.secretKey || customConfig?.apiKey) : undefined) || (env.SUMOPOD_SANDBOX === 'true' ? env.SUMOPOD_SANDBOX_WEBHOOK_TOKEN : env.SUMOPOD_PRODUCTION_WEBHOOK_TOKEN) || env.SUMOPOD_WEBHOOK_TOKEN || env.XENDIT_WEBHOOK_TOKEN || env.BUAYAR_WEBHOOK_TOKEN,
-    webhookSecret: (customConfig as any)?.webhookSecret || customConfig?.secretKey || (env.SUMOPOD_SANDBOX === 'true' ? env.SUMOPOD_SANDBOX_WEBHOOK_SECRET : env.SUMOPOD_PRODUCTION_WEBHOOK_SECRET) || env.SUMOPOD_WEBHOOK_SECRET || env.STRIPE_WEBHOOK_SECRET || env.CHECKOUTCOM_WEBHOOK_SECRET || env.RAZORPAY_WEBHOOK_SECRET || env.BUAYAR_WEBHOOK_SECRET,
+    webhookToken: customConfig?.webhookToken || webhookTokenEnv,
+    webhookSecret: customConfig?.webhookSecret || customConfig?.secretKey || (env.SUMOPOD_SANDBOX === 'true' ? env.SUMOPOD_SANDBOX_WEBHOOK_SECRET : env.SUMOPOD_PRODUCTION_WEBHOOK_SECRET) || env.SUMOPOD_WEBHOOK_SECRET || env.STRIPE_WEBHOOK_SECRET || env.CHECKOUTCOM_WEBHOOK_SECRET || env.RAZORPAY_WEBHOOK_SECRET || env.BUAYAR_WEBHOOK_SECRET,
     merchantName: (customConfig as any)?.merchantName || env.FASPAY_MERCHANT_NAME || env.BUAYAR_MERCHANT_NAME,
     userId: (customConfig as any)?.userId || env.FASPAY_USER_ID,
     iMid: (customConfig as any)?.iMid || (customConfig as any)?.imid || env.NICEPAY_IMID,

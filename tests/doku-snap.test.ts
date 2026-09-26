@@ -137,10 +137,12 @@ describe("DOKU SNAP Integration", () => {
       extra: { snap: true, notificationPath: endpointUrl },
     });
 
+    // SNAP menandatangani SHA-256 dari body JSON yang sudah di-minify, jadi rawBody
+    // wajib diteruskan agar digest dihitung atas byte yang sama dengan yang ditandatangani.
     const res = await buayar.verifyWebhook(payload, {
       "x-signature": signature,
       "x-timestamp": timestamp,
-    });
+    }, { rawBody: JSON.stringify(payload) });
 
     expect(res.isValid).toBe(true);
     expect(res.isPaid).toBe(true);

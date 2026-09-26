@@ -11,7 +11,7 @@ import {
   PaymentMethod,
 } from "../../types";
 import { verifySumopodSvixSignature, verifySumopodToken } from "./signature";
-import { resolveRawBody, RAW_BODY_REQUIRED_MESSAGE } from "../../utils/rawBody";
+import { resolveRawBody, signedPayload, RAW_BODY_REQUIRED_MESSAGE } from "../../utils/rawBody";
 
 export class SumopodProvider extends BasePaymentProvider {
   readonly name = "sumopod";
@@ -111,7 +111,8 @@ export class SumopodProvider extends BasePaymentProvider {
     const rawBody = resolveRawBody(config, body);
     let parsedBody: any;
     try {
-      parsedBody = typeof body === "string" ? JSON.parse(body) : body;
+      // Data bisnis WAJIB diturunkan dari byte yang ditandatangani (lihat signedPayload).
+      parsedBody = signedPayload(body, config);
     } catch {
       parsedBody = {};
     }

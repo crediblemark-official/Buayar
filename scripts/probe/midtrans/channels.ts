@@ -19,9 +19,9 @@
  *   PROBE_ONLY=bca_va,qris PROBE_AMOUNT=1000 bun run scripts/probe-midtrans-channels.ts
  */
 
-import { MidtransProvider } from "../../src/providers/midtrans/provider";
-import { hintMidtransProbeError } from "../../src/providers/midtrans/methods";
-import type { ProviderConfig } from "../../src/types";
+import { MidtransProvider } from "../../../src/providers/midtrans/provider";
+import { hintMidtransProbeError } from "../../../src/providers/midtrans/methods";
+import type { ProviderConfig } from "../../../src/types";
 import { emitProbeJson, summarize } from "../lib";
 
 const API_KEY = (process.env.MIDTRANS_SERVER_KEY || process.env.BUAYAR_API_KEY || "").trim();

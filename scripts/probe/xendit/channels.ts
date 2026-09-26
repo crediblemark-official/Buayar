@@ -23,8 +23,8 @@
  *   PROBE_API_VERSION=v2 bun run scripts/probe-xendit-channels.ts   # jalur legacy v2
  */
 
-import { XenditProvider } from "../../src/providers/xendit/provider";
-import type { ProviderConfig } from "../../src/types";
+import { XenditProvider } from "../../../src/providers/xendit/provider";
+import type { ProviderConfig } from "../../../src/types";
 import { emitProbeJson, summarize } from "../lib";
 
 const API_KEY = (process.env.XENDIT_SECRET_KEY || process.env.BUAYAR_API_KEY || "").trim();

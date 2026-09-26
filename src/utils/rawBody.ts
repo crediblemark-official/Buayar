@@ -33,3 +33,33 @@ export function resolveRawBody(config: any, fallbackBody?: any): string | undefi
   if (typeof fallbackBody === "string") return fallbackBody;
   return undefined;
 }
+
+/**
+ * Payload yang DIPAKAI untuk logika bisnis (status, orderId, amount).
+ *
+ * Ini adalah pasangan counterpart dari `resolveRawBody`, dan keduanya harus
+ * dipakai BERSAMA. Alasannya satu aturan sederhana:
+ *
+ *   **Tandatangani(byte) → parse(byte) → pakai untuk bisnis.**
+ *
+ * Kalau signature dihitung atas `rawBody` tapi data bisnis diambil dari `body`
+ * yang terpisah, keduanya bisa berbeda tanpa terdeteksi. Akibatnya penyerang
+ * bisa mengirim rawBody asli yang sah (signature lolos) sambil menyodorkan
+ * `body` lain — orderId, amount, dan status berubah sepenuhnya, dan
+ * verifikasi tetap bilang "valid".
+ *
+ * Karena itu: kalau `rawBody` tersedia, payload untuk logika bisnis WAJIB
+ * di-parse dari `rawBody` itu, bukan dari argumen `body`.
+ */
+export function signedPayload(body: any, config: any): any {
+  const raw = resolveRawBody(config, body);
+  if (raw === undefined) return body;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    // Body tidak bisa di-parse sebagai JSON. Signature dihitung atas byte ini juga
+    // tidak mungkin cocok dengan payload JSON, jadi verification akan gagal di
+    // signature check. Kembalikan `body` agar pesannya tetap masuk akal.
+    return body;
+  }
+}

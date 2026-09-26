@@ -1,4 +1,4 @@
-import { Buayar } from "../src";
+import { Buayar } from "../../../src";
 
 const CLIENT_ID = process.env.DOKU_CLIENT_ID;
 const SECRET_KEY = process.env.DOKU_SECRET_KEY;

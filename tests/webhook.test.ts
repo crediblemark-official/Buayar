@@ -202,14 +202,17 @@ describe("Universal Webhook Verification & Normalization", () => {
     const component = `Client-Id:${clientId}\nRequest-Id:${reqId}\nRequest-Timestamp:${reqTimestamp}\nRequest-Target:${requestTarget}\nDigest:${digest}`;
     const validSig = `HMACSHA256=${crypto.createHmac("sha256", secretKey).update(component).digest("base64")}`;
 
-    // Valid DOKU signature
+    // Valid DOKU signature.
+    // rawBody WAJIB dikirim: DOKU menandatangani Digest atas byte yang benar-benar
+    // dikirim, dan verifier harus menghitung Digest atas byte yang sama persis.
     const validRes = await buayar.verifyWebhook(payload, {
       "client-id": clientId,
       "request-id": reqId,
       "request-timestamp": reqTimestamp,
       "request-target": requestTarget,
+      "digest": crypto.createHash("sha256").update(rawBody).digest("base64"),
       "signature": validSig,
-    });
+    }, { rawBody });
     expect(validRes.isValid).toBe(true);
     expect(validRes.isPaid).toBe(true);
 
@@ -219,8 +222,9 @@ describe("Universal Webhook Verification & Normalization", () => {
       "request-id": reqId,
       "request-timestamp": reqTimestamp,
       "request-target": requestTarget,
+      "digest": crypto.createHash("sha256").update(rawBody).digest("base64"),
       "signature": "HMACSHA256=invalid-base64-signature",
-    });
+    }, { rawBody });
     expect(invalidRes.isValid).toBe(false);
   });
 

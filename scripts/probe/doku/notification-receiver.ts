@@ -19,7 +19,7 @@
 
 import { createServer } from "http";
 import { appendFileSync, readFileSync, existsSync } from "fs";
-import { Buayar, generateSnapSymmetricSignature } from "../src";
+import { Buayar, generateSnapSymmetricSignature } from "../../../src";
 
 const PORT = Number(process.env.PORT || 4571);
 const CLIENT_ID = (process.env.DOKU_CLIENT_ID || "").trim();

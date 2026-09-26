@@ -11,6 +11,7 @@ import {
   PaymentMethod,
 } from "../../types";
 import { buildBraintreeBasicAuth, verifyBraintreeWebhook } from "./signature";
+import { signedPayload } from "../../utils/rawBody";
 
 export class BraintreeProvider extends BasePaymentProvider {
   readonly name = "braintree";
@@ -116,7 +117,8 @@ export class BraintreeProvider extends BasePaymentProvider {
       ? verifyBraintreeWebhook(btSignature, btPayload, privateKey)
       : false;
 
-    const parsedBody = typeof body === "string" ? JSON.parse(body) : body;
+    // Data bisnis WAJIB diturunkan dari byte yang ditandatangani (lihat signedPayload).
+    const parsedBody = signedPayload(body, config);
     const subject = parsedBody?.subject || parsedBody;
     const transaction = subject?.transaction || subject?.disbursement || parsedBody;
     const kind = parsedBody?.kind || parsedBody?.event || "";

@@ -22,9 +22,9 @@
  *   PROBE_ALIASES=1 bun run scripts/probe-ipaymu-channels.ts   # uji alias (rpx, kredivo)
  */
 
-import { IpaymuProvider } from "../../src/providers/ipaymu/provider";
-import { toIpaymuPaymentMethod } from "../../src/core/canonical";
-import type { ProviderConfig } from "../../src/types";
+import { IpaymuProvider } from "../../../src/providers/ipaymu/provider";
+import { toIpaymuPaymentMethod } from "../../../src/core/canonical";
+import type { ProviderConfig } from "../../../src/types";
 import { emitProbeJson, summarize } from "../lib";
 
 const VA = (process.env.IPAYMU_VA || process.env.IPAYMU_MERCHANT_CODE || process.env.BUAYAR_MERCHANT_CODE || "").trim();
