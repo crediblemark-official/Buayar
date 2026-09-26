@@ -39,9 +39,11 @@ export class HttpTimeoutError extends Error {
 
   constructor(url: string, timeoutMs: number) {
     super(
-      `Permintaan ke ${safeUrl(url)} melewati batas waktu ${timeoutMs}ms. ` +
-        `Gateway tidak merespons. Naikkan timeout lewat config.extra.requestTimeoutMs ` +
-        `bila inialedakan yang wajar, atau periksa status layanan provider.`,
+      `Permintaan ke ${safeUrl(url)} melewati batas waktu ${timeoutMs}ms dan ` +
+        `dibatalkan. Gateway tidak merespons -- permintaan ini TIDAK sampai diproses, ` +
+        `jadi jangan dianggap berhasil. Kalau ini kejadian yang wajar, naikkan batas ` +
+        `waktu lewat env BUAYAR_REQUEST_TIMEOUT_MS; kalau tidak, periksa status ` +
+        `layanan provider.`,
     );
     this.name = "HttpTimeoutError";
     this.url = url;

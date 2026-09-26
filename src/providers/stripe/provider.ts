@@ -14,6 +14,7 @@ import { toStripePaymentMethod } from "../../core/canonical";
 import { serializeStripeParams, verifyStripeWebhook } from "./signature";
 import { signedPayload } from "../../utils/rawBody";
 import { httpFetch } from "../../utils/http";
+import { assertKeyMatchesEnvironment, STRIPE_KEY_RULE } from "../../utils/environment";
 
 export class StripeProvider extends BasePaymentProvider {
   readonly name = "stripe";
@@ -25,6 +26,9 @@ export class StripeProvider extends BasePaymentProvider {
   async createInvoice(params: CreateInvoiceParams, config: ProviderConfig): Promise<InvoiceResponse> {
     const { orderId, amount, productDetails, customer, returnUrl } = params;
     const secretKey = config.apiKey || config.serverKey || config.secretKey || "";
+    // Stripe memakai satu host untuk test & live; yang membedakan hanya kunci.
+    // Tanpa cek ini, `sandbox: true` + kunci `sk_live_` akan menagih kartu asli.
+    assertKeyMatchesEnvironment("Stripe", secretKey, config.sandbox, STRIPE_KEY_RULE);
 
     const integerAmount = Math.round(amount);
     const stripeMethod = toStripePaymentMethod(params.paymentMethod);
@@ -295,6 +299,9 @@ export class StripeProvider extends BasePaymentProvider {
   async checkTransaction(params: CheckTransactionParams, config: ProviderConfig): Promise<CheckTransactionResult> {
     const { merchantOrderId } = params;
     const secretKey = config.apiKey || config.serverKey || config.secretKey || "";
+    // Stripe memakai satu host untuk test & live; yang membedakan hanya kunci.
+    // Tanpa cek ini, `sandbox: true` + kunci `sk_live_` akan menagih kartu asli.
+    assertKeyMatchesEnvironment("Stripe", secretKey, config.sandbox, STRIPE_KEY_RULE);
     const baseUrl = this.getBaseUrl();
 
     let endpoint = `/checkout/sessions/${encodeURIComponent(merchantOrderId)}`;

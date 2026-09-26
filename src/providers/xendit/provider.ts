@@ -13,6 +13,7 @@ import {
 import { toXenditPaymentMethod } from "../../core/canonical";
 import { getXenditAuthHeader, verifyXenditWebhookToken } from "./signature";
 import { httpFetch } from "../../utils/http";
+import { assertKeyMatchesEnvironment, XENDIT_KEY_RULE } from "../../utils/environment";
 
 /**
  * Normalisasi nomor telepon ke E.164 (Xendit mewajibkan format ini).
@@ -38,6 +39,9 @@ export class XenditProvider extends BasePaymentProvider {
   async createInvoice(params: CreateInvoiceParams, config: ProviderConfig): Promise<InvoiceResponse> {
     const { orderId, amount, productDetails, customer, returnUrl } = params;
     const apiKey = config.apiKey || config.serverKey || config.secretKey || "";
+    // Xendit memakai satu host (`api.xendit.co`) untuk test & live; yang
+    // membedakan hanya kunci `xnd_development_` vs `xnd_production_`.
+    assertKeyMatchesEnvironment("Xendit", apiKey, config.sandbox, XENDIT_KEY_RULE);
     const integerAmount = Math.round(amount);
 
     const xenditMethod = toXenditPaymentMethod(params.paymentMethod);
@@ -571,6 +575,9 @@ export class XenditProvider extends BasePaymentProvider {
     ];
 
     const apiKey = config.apiKey || config.serverKey || config.secretKey || "";
+    // Xendit memakai satu host (`api.xendit.co`) untuk test & live; yang
+    // membedakan hanya kunci `xnd_development_` vs `xnd_production_`.
+    assertKeyMatchesEnvironment("Xendit", apiKey, config.sandbox, XENDIT_KEY_RULE);
     if (apiKey) {
       try {
         const authHeader = getXenditAuthHeader(apiKey);
@@ -710,6 +717,9 @@ export class XenditProvider extends BasePaymentProvider {
   async checkTransaction(params: CheckTransactionParams, config: ProviderConfig): Promise<CheckTransactionResult> {
     const { merchantOrderId } = params;
     const apiKey = config.apiKey || config.serverKey || config.secretKey || "";
+    // Xendit memakai satu host (`api.xendit.co`) untuk test & live; yang
+    // membedakan hanya kunci `xnd_development_` vs `xnd_production_`.
+    assertKeyMatchesEnvironment("Xendit", apiKey, config.sandbox, XENDIT_KEY_RULE);
     const authHeader = getXenditAuthHeader(apiKey);
 
     try {

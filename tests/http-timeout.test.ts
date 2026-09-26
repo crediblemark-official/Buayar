@@ -78,6 +78,31 @@ describe("httpFetch — batas waktu", () => {
     expect(REQUEST_TIMEOUT_MS).toBe(DEFAULT_TIMEOUT_MS);
   });
 
+  it("pesan error menunjuk knob yang benar-benar ada", async () => {
+    // Regression: pesan error pernah menyebut `config.extra.requestTimeoutMs`,
+    // opsi yang tidak pernah ada di mana pun di src/. Petunjuk yang salah
+    // lebih buruk daripada tidak ada petunjuk sama sekali.
+    hangingFetch();
+    try {
+      await httpFetch("https://api.example.com/pay", { timeoutMs: 20 });
+      throw new Error("seharusnya menolak");
+    } catch (e: any) {
+      expect(e.message).toContain("BUAYAR_REQUEST_TIMEOUT_MS");
+      expect(e.message).not.toContain("requestTimeoutMs");
+    }
+  });
+
+  it("pesan error menegaskan request-nya tidak diproses", async () => {
+    // Merchant yang melihat "sukses" setelah 30 detik-detik akan melempar barang.
+    hangingFetch();
+    try {
+      await httpFetch("https://api.example.com/pay", { timeoutMs: 20 });
+      throw new Error("se_should_reject");
+    } catch (e: any) {
+      expect(e.message).toContain("TIDAK sampai diproses");
+    }
+  });
+
   it("timeoutMs khusus per-request menggallery default", async () => {
     hangingFetch();
     const mulai = Date.now();
