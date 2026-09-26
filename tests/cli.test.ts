@@ -67,6 +67,56 @@ describe("buildScaffold", () => {
     expect(nextTpl).toContain("await request.text()");
     expect(nextTpl).toContain("handleWebhook(payload, headers, rawBody)");
   });
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Dua cacat di route webhook hasil scaffold, keduanya dibuktikan dengan
+  // menjalankan route sungguhan di atas Express (bukan hanya dibaca).
+  //
+  // (1) `payload = rawBody ? JSON.parse(rawBody) : {}` tanpa try/catch.
+  //     Body rusak -> SyntaxError -> 500. Dan karena endpoint webhook itu
+  //     publik, siapa pun bisa memicuinya dengan body sampah. Worse: gateway
+  //     mengulang pengiriman selama berhari-hari kalau jawabannya 5xx, jadi
+  //     satu request rusak bisatoh jadi badai retry.
+  //
+  // (2) Hanya `express.raw({ type: "application/json" })` yang dipasang.
+  //     iPaymu mengirim `application/x-www-form-urlencoded`, dan untuk content
+  //     type itu TIDAK ADA parser yang jalan -> `req.body` jadi `undefined`.
+  //     Akibatnya route hasil scaffold menolak 100% webhook iPaymu asli:
+  //     diverifikasi 400 "Invalid signature" padahal signature-nya benar.
+  // ─────────────────────────────────────────────────────────────────────────
+
+  const ROUTE_TEMPLATES: Array<[string, () => string]> = [
+    ["express", () => getRouteTemplate("express")],
+    ["hono", () => getRouteTemplate("hono")],
+    ["nextjs", () => buildScaffold("stripe", "nextjs")["src/app/api/payment/webhook/route.ts"]],
+  ];
+
+  for (const [framework, ambil] of ROUTE_TEMPLATES) {
+    it(`[${framework}] tidak lagi memakai JSON.parse tanpa penjaga`, () => {
+      // Pola ternary yang melempar SyntaxError ke luar route.
+      expect(ambil()).not.toMatch(/\?\s*JSON\.parse\(/);
+    });
+
+    it(`[${framework}] menangani JSON rusak dengan 400, bukan 500`, () => {
+      const tpl = ambil();
+      expect(tpl).toContain("Malformed JSON body");
+      expect(tpl).toMatch(/catch/);
+      // 400 = "tidak akan pernah berhasil kalau dikirim ulang".
+      expect(tpl).toMatch(/status: 400|, 400\)|400\)/);
+    });
+
+    it(`[${framework}] punya jalur untuk form-urlencoded (iPaymu)`, () => {
+      expect(ambil()).toContain("application/x-www-form-urlencoded");
+    });
+  }
+
+  it("express memasang parser urlencoded selain raw", () => {
+    expect(getRouteTemplate("express")).toContain("express.urlencoded({ extended: false })");
+  });
+
+  it("express menolak body kosong dengan 400, bukan lolos diam-diam", () => {
+    expect(getRouteTemplate("express")).toContain("Empty request body");
+  });
 });
 
 describe("scaffold", () => {

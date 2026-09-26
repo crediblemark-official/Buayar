@@ -213,15 +213,42 @@ paymentRoutes.get("/status/:orderId", async (req, res) => {
 // POST /api/payment/webhook — notifikasi dari payment gateway
 //
 // PENTING: \`express.raw()\` WAJIB di route ini (dan TIDAK boleh dipakai di route lain).
+// \`express.urlencoded()\` juga dipasang karena iPaymu mengirim form-urlencoded.
 // Stripe, Checkout.com, Razorpay, Square, PayU, Braintree, DOKU Snap, dan SumoPod
 // menandatangani byte persis yang mereka kirim. Kalau body di-parse dulu oleh
 // express.json(), signature check SELALU gagal.
 paymentRoutes.post(
   "/webhook",
   express.raw({ type: "application/json" }),
+  express.urlencoded({ extended: false }),
   async (req, res) => {
-    const rawBody = Buffer.isBuffer(req.body) ? req.body.toString("utf8") : String(req.body ?? "");
-    const payload = rawBody ? JSON.parse(rawBody) : {};
+    let payload: any = {};
+    let rawBody: string | undefined;
+
+    if (Buffer.isBuffer(req.body)) {
+      // JSON arrives sebagai Buffer supaya byte yang ditandatangani provider
+      // tetap utuh.
+      rawBody = req.body.toString("utf8");
+      if (rawBody.trim()) {
+        try {
+          payload = JSON.parse(rawBody);
+        } catch {
+          // Penting: 500 di sini berarti gateway menganggap gagal lalu
+          // mengulang pengiriman berhari-hari, dan siapa pun bisa memicuinya
+          // dengan body sampah karena endpoint webhook itu publik.
+          // 400 = "tidak akan pernah berhasil kalau dikirim ulang".
+          return res.status(400).json({ error: "Malformed JSON body" });
+        }
+      }
+    } else if (req.body && typeof req.body === "object") {
+      // Sudah di-parse oleh express.urlencoded. iPaymu mengirim
+      // application/x-www-form-urlencoded dan signature-nya dihitung dari field
+      // yang ter-parse, jadi di sini yang dibutuhkan objek, bukan raw text.
+      payload = req.body;
+    } else {
+      return res.status(400).json({ error: "Empty request body" });
+    }
+
     const verification = await paymentService.handleWebhook(payload, req.headers as any, rawBody);
     return verification.isValid
       ? res.status(200).json({ status: "OK" })
@@ -267,9 +294,30 @@ paymentRoutes.get("/status/:orderId", async (c) => {
 
 paymentRoutes.post("/webhook", async (c) => {
   // WAJIB baca sebagai text, BUKAN c.req.json(): provider menandatangani byte mentah.
-  const rawBody = await c.req.text();
-  const payload = rawBody ? JSON.parse(rawBody) : {};
+  // Jangan tambahkan body parser lain di route ini.
+  const contentType = c.req.header("content-type") || "";
   const headers = c.req.raw.headers;
+  let payload: any = {};
+  let rawBody: string | undefined;
+
+  if (contentType.includes("application/x-www-form-urlencoded")) {
+    // iPaymu mengirim form-urlencoded dan signature-nya dihitung dari field yang
+    // sudah ter-parse, jadi di sini yang dibutuhkan objek, bukan raw text.
+    payload = await c.req.parseBody();
+  } else {
+    rawBody = await c.req.text();
+    if (rawBody.trim()) {
+      try {
+        payload = JSON.parse(rawBody);
+      } catch {
+        // 500 di sini berarti gateway mengulang pengiriman berhari-hari, dan
+        // siapa pun bisa memicuinya dengan body sampah karena endpoint ini
+        // publik. 400 = "tidak akan pernah berhasil kalau dikirim ulang".
+        return c.json({ error: "Malformed JSON body" }, 400);
+      }
+    }
+  }
+
   const verification = await paymentService.handleWebhook(
     payload,
     Object.fromEntries(headers) as any,
@@ -299,12 +347,33 @@ import { paymentService } from "@/payment/service";
 export async function POST(request: Request) {
   // WAJIB baca sebagai text, BUKAN request.json(): provider menandatangani byte mentah.
   // Jangan tambahkan body parser di route ini.
-  const rawBody = await request.text();
-  const payload = rawBody ? JSON.parse(rawBody) : {};
+  const contentType = request.headers.get("content-type") || "";
   const headers: Record<string, string | string[] | undefined> = {};
   request.headers.forEach((value, key) => {
     headers[key] = value;
   });
+
+  let payload: any = {};
+  let rawBody: string | undefined;
+
+  if (contentType.includes("application/x-www-form-urlencoded")) {
+    // iPaymu mengirim form-urlencoded dan signature-nya dihitung dari field yang
+    // sudah ter-parse, jadi di sini yang dibutuhkan objek, bukan raw text.
+    const form = await request.formData();
+    payload = Object.fromEntries(form.entries());
+  } else {
+    rawBody = await request.text();
+    if (rawBody.trim()) {
+      try {
+        payload = JSON.parse(rawBody);
+      } catch {
+        // 500 di sini berarti gateway mengulang pengiriman berhari-hari, dan
+        // siapa pun bisa memicuinya dengan body sampah karena endpoint ini
+        // publik. 400 = "tidak akan pernah berhasil kalau dikirim ulang".
+        return NextResponse.json({ error: "Malformed JSON body" }, { status: 400 });
+      }
+    }
+  }
 
   const verification = await paymentService.handleWebhook(payload, headers, rawBody);
 
