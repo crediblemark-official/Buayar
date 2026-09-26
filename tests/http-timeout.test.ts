@@ -103,7 +103,7 @@ describe("httpFetch — batas waktu", () => {
     }
   });
 
-  it("timeoutMs khusus per-request menggallery default", async () => {
+  it("timeoutMs khusus per-request menggantikan default", async () => {
     hangingFetch();
     const mulai = Date.now();
     await expect(

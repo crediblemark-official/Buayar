@@ -42,7 +42,7 @@ adalah pengukuran objektif apakah optionality itu benar-benar ada di dalam kode.
 | # | Kriteria | Status | Severity | Estimasi |
 |---|----------|--------|----------|----------|
 | K1 | Ganti PG = ganti env var, tanpa sentuh kode | ✅ Terpenuhi | P1 | M |
-| K2 | Compiler menangkap payment method non-portable | ✅ Terpenuhi | P1 | S |
+| K2 | Compiler menangkap payment method non-portable | ✅ Terpenuhi di `main` — ⚠️ **belum ada di release** | P1 | S |
 | K3 | Webhook diverifikasi ketat di semua PG | ✅ Terpenuhi | **P0** | S–M |
 | K4 | Bisa test penuh tanpa account approved | ✅ Terpenuhi | P1 | **XL** |
 | K5 | Pre-flight warning jika method tidak didukung | ✅ Terpenuhi | P1 | M |
@@ -325,7 +325,7 @@ hal lain*.
 | 0 | **Perbaiki 3 template CLI agar kirim raw bytes** | K7 | **S** | Paling merusak & paling murah. 3 baris template ini yang membuat produk tidak berfungsi di 8/20 provider |
 | 1 | Kill 3 fail-open + pasang verifier PayPal yang sudah ada | K3 | **S** | Murah, risiko rendah, polanya sudah terbukti di 17 provider lain |
 | 2 | Hapus fallback senyap, hidupkan autodetect | K6 | **M** | Menutup kelas bug "bicara ke PG yang salah" |
-| 3 | Kunci `CanonicalPaymentMethod` (hapus `\| string`) | K2 | **S** | Mengubah janji K2 jadi ditegakkan compiler. Murah, dampak besar |
+| 3 | ~~Kunci `CanonicalPaymentMethod` (hapus `\| string`)~~ | K2 | **S** | ✅ Sudah di `main` (`62f8e56`) — tinggal diputuskan cara rilisnya |
 | 4 | Validasi capability pre-flight | K5 | M | Memakai pola `unsupported()` yang sudah ada |
 | 5 | Kontrak raw-body tunggal di kontrak provider | K3/K1 | M | Menyelesaikan K1 & K3 sekaligus |
 | 6 | Bersihkan cabang provider + escape hatch | K1 | M | Menuntaskan kriteria switching |
@@ -646,7 +646,7 @@ mengembalikannya. Keduanya sudah dipulihkan, dan `tests/test-hygiene.test.ts` me
 | Item | Status |
 |---|---|
 | Rotasi kredensial DOKU + purge Git history | 🔴 **blokir di sisi Anda** — lihat §4a |
-| K2 `paymentMethod?: … \| string` → hapus `\| string` | ⏸️ breaking change, menunggu konfirmasi |
+| K2 `paymentMethod?: … \| string` → hapus `\| string` | ⏸️ sudah di `main`, **belum ada di release** — `v0.8.10` masih punya `\| string`; tunggu keputusan cara rilis |
 | A-2 tiga konvensi satuan amount dalam satu kontrak | ⏳ belum |
 | A-4 PayU melewati canonical mapping | ⏳ belum |
 | A-5 fallback statis tanpa penanda sumber | ⏳ belum |
@@ -703,7 +703,13 @@ Library boleh diklaim memenuhi janji *"daftar ke beberapa PG, koding sekali, go-
 yang pertama disetujui"* bila **ketujuh** ini terpenuhi:
 
 - [x] **K1** — 20 provider lolos smoke test yang dikonfigurasi **hanya** via env var
-- [x] **K2** — `tsc` menolak kode payment method non-portable
+- [x] **K2** — `tsc` menolak kode payment method non-portable. ⚠️ Tapi perubahan ini
+      ada di `main` sejak `62f8e56` dan **tidak ada di tag mana pun** — `v0.8.10`
+      (terbaru) masih punya `paymentMethod?: CanonicalPaymentMethod | string`. Jadi ini
+      belum terpublikasi; yang sudah ada di `main` adalah
+      `PaymentMethodInput = CanonicalPaymentMethod | RawProviderMethod`, dengan escape hatch
+      `{ raw, providerOnly: true }` sebagai pengganti string polos.
+      Yang tersisa cuma satu keputusan: pairekan ini dengan versi mayor atau minor.
 - [x] **K3** — 20/20 `verifyCallback` fail-closed; tidak ada `isValid: true` tanpa bukti signature
 - [x] **K4** — integrasi baru bisa diselesaikan & diuji production-grade tanpa akun sandbox
 - [x] **K5** — method yang tidak didukung ditolak **sebelum** request, dengan pesan jelas

@@ -4,7 +4,7 @@ import { Buayar, resolveConfigFromEnv } from "../src";
 // Test ini mengosongkan SELURUH process.env supaya resolusi config terisolasi
 // dari environment mesin. Ada harga yang harus dibayar: tanpa pemulihan,
 // PATH/HOME/NODE_ENV ikut hilang permanen untuk seluruh sisa suite, dan test
-// yang menyusul jadi salahreads dari env kosong alih-alih gagal loudly.
+// yang menyusul jadi salah baca dari env kosong, bukan gagal dengan jujur.
 // Diperbaiki dengan menyimpan salinan lalu memulihkannya tiap test.
 const ENV_AWAL = { ...process.env };
 
