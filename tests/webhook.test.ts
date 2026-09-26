@@ -65,14 +65,26 @@ describe("Universal Webhook Verification & Normalization", () => {
     });
 
     const result = await buayar.verifyWebhook(webhookPayload);
+
+    // Signature sah, tapi TIDAK berarti terbayar.
+    //
+    // Rumus signature Duitku hanya MD5(merchantCode + amount + merchantOrderId
+    // + apiKey) — `resultCode` tidak ikut ditandatangani. Jadi `resultCode: "00"`
+    // di atas adalah field yang bebas ubah oleh penyerang, dan library tidak
+    // boleh memakainya untuk menyatakan order lunas. Tendensi lama test ini
+    // mengunci `status: "paid"` persis dari field itu, yang membuat celah ini
+    // terkunci oleh test.
     expect(result.isValid).toBe(true);
     expect(result.provider).toBe("duitku");
     expect(result.orderId).toBe(merchantOrderId);
     expect(result.amount).toBe(250000);
-    expect(result.status).toBe("paid");
-    expect(result.isPaid).toBe(true);
-    expect(result.isPending).toBe(false);
+    expect(result.status).toBe("pending");
+    expect(result.isPaid).toBe(false);
+    expect(result.isPending).toBe(true);
     expect(result.isFailed).toBe(false);
+    expect(result.isExpired).toBe(false);
+    expect(result.paymentUnconfirmed).toBe(true);
+    expect(result.unconfirmedReason).toContain("resultCode");
   });
 
   it("should verify and normalize iPaymu webhook notification", async () => {

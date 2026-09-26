@@ -60,6 +60,15 @@ const ALL: ProviderSpec[] = [
       Boolean(e.DOKU_SECRET_KEY || e.BUAYAR_API_KEY),
     missingHint: "DOKU_CLIENT_ID + DOKU_SECRET_KEY",
   },
+  {
+    id: "duitku",
+    label: "Duitku",
+    script: "duitku/channels.ts",
+    hasCredentials: (e) =>
+      Boolean(e.DUITKU_MERCHANT_CODE || e.PAYMENT_MERCHANT_CODE) &&
+      Boolean(e.DUITKU_API_KEY || e.PAYMENT_API_KEY),
+    missingHint: "DUITKU_MERCHANT_CODE + DUITKU_API_KEY",
+  },
 ];
 
 function parseTargets(): ProviderSpec[] {

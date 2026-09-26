@@ -625,6 +625,68 @@ environment yang sudah dikosongkan file lain. `tests/oy.test.ts` juga menghapus 
 mengembalikannya. Keduanya sudah dipulihkan, dan `tests/test-hygiene.test.ts` memindai
 `tests/*.ts` untuk menahan pola itu kembali.
 
+### S-10 · 🔴 Duitku menandai order belum dibayar sebagai lunas
+
+Duitku adalah satu-satunya provider yang **signature callback-nya tidak mencakup field yang
+menentukan status**. Rumus resmi Duitku:
+
+```
+MD5(merchantCode + amount + merchantOrderId + apiKey)
+```
+
+`resultCode` — satu-satunya penentu status — tidak ada di string itu. Kode lama terjemahkan
+begitu saja:
+
+```ts
+const isPaid = isValid && body.resultCode === "00";
+```
+
+Jadi `isPaid: true` dibangun dari field yang bebas diubah penyerang. Penyerang **tidak butuh API
+key**: dia butuh satu signature sah untuk `(merchantCode, amount, merchantOrderId)` miliknya
+sendiri, yang diperoleh dari satu callback saja untuk order itu — lalu cukup mengubah
+`resultCode`-nya jadi `"00"`.
+
+Dibuktikan live terhadap invoice sandbox Duitku sungguhan (order dibuat, **tidak pernah
+dibayar**, lalu diklaim lunas):
+
+| Sumber | `isValid` | `isPaid` | `status` |
+|---|---|---|---|
+| Library (kode lama) | `true` | **`true`** | **`paid`** |
+| Duitku server-to-server | — | `false` | `400` |
+
+Dua bug lain ikut terbongkar di sesi yang sama, keduanya juga punya bukti live:
+
+- **`isExpired` menyalin `isFailed`.** `isExpired: isValid && resultCode !== "00"` identik
+  dengan `isFailed`, jadi setiap pembayaran yang ditolak sekaligus dilabeli "kedaluwarsa".
+  Dokumentasi resmi Duitku menyebut `02` sebagai **"Failed/Expired"** sekaligus — keduanya memang
+  tidak bisa dibedakan dari kode status. `checkTransaction` punya bug kembar di baris yang sama
+  (`isExpired: isFailed`).
+- **`checkTransaction` melaporkan "gagal" untuk order yang tidak bisa dicari.** Order yang dibuat
+  lewat POP (`createInvoice`) **tidak pernah** tercatat di endpoint `transactionStatus` — dibuktikan
+  live: order POP sah selalu dijawab `Transaction not found`, sedangkan order Direct Inquiry di
+  endpoint yang sama jalan normal. Kode lama menandai `isFailed: true` di situ, jadi merchant yang
+  polling order POP akan melihat setiap order "gagal" lalu membatalkannya. False negative yang
+  mahal: order yang masih bisa dibayar justru dibuang.
+
+Perbaikannya **fail-closed, sesuai pilihan produk**: signature yang sah tetap dilaporkan
+`isValid: true` (memang sah), tapi tidak pernah diterjemahkan jadi `paid`. Status defaultnya
+`pending` dengan penanda baru `paymentUnconfirmed: true` + `unconfirmedReason`, dan hanya bisa
+dinaikkan ke `paid` lewat jawaban server-to-server Duitku. Jalur konfirmasi itu **persis yang
+disarankan dokumentasi resmi Duitku sendiri** — *"insert a transaction check when you receive a
+callback so that the payment status is guaranteed"* — dan diaktifkan lewat opt-in
+`extra: { confirmDuitkuCallback: true }`.
+
+Dua detail yang menentukan benar/tidaknya fail-closed ini:
+
+- **Kegagalan konfirmasi tidak pernah jadi `failed`.** Kalau tanya ke Duitku gagal (jaringan,
+  timeout, order tidak ada), status tetap `pending`. `failed` punya akibat samping yang mahal —
+  merchant membatalkan order yang sebenarnya masih berjalan.
+- **"Tidak ditemukan" dipisahkan dari "gagal".** Ada penanda `orderNotFound: true` supaya merchant
+  bisa membedakan order yang hilang dari order yang tidak bisa dicek. `statusCode: "02"` yang
+  otentik dari Duitku **tetap** dilaporkan `isFailed: true` — perbaikannya tidak berlebihan.
+
+Ini perubahan perilaku yang dilihat merchant, jadi ikut naik ke **0.9.0** bersama K2.
+
 ### Verifikasi
 
 - **Probe live** `scripts/probe/webhook-signature-live.ts` — 14 skenario signature atas 4
@@ -632,13 +694,19 @@ mengembalikannya. Keduanya sudah dipulihkan, dan `tests/test-hygiene.test.ts` me
   dan token/signature salah.
 - **Probe live channel** — Xendit **11/11**, Midtrans **16/19** (gagal: `ovo`, `dana`,
   `linkaja` — pre-existing, akun belum mengaktifkan kanal), DOKU **11/21** (7 sisanya
-  `mcpOnly`, butuh kredensial MCP), iPaymu **13/19**. Semua angka ini **tidak berubah**
-  sebelum dan sesudah S-1…S-9 — tidak ada perbaikan yang mengorbankan kanal yang sudah jalan.
+  `mcpOnly`, butuh kredensial MCP), iPaymu **13/19**, Duitku **24/27** (gagal: `ft`, `dn`,
+  `lq` — kanal belum aktif di akun ini). Semua angka ini **tidak berubah**
+  sebelum dan sesudah S-1…S-10 — tidak ada perbaikan yang mengorbankan kanal yang sudah jalan.
+- **Probe live Duitku** `scripts/probe/duitku/channels.ts` — pertama untuk provider ini. Selain
+  matriks kanal, probe ini memverifikasi integritas callback dengan kredensial asli: order
+  dibuat, tidak dibayar, lalu diklaim `resultCode: "00"` dengan signature sah → library melaporkan
+  `isPaid: false, paymentUnconfirmed: true` sementara Duitku menjawab `01` (pending).
 - **Regresi offline** — `webhook-integrity`, `webhook-security`, `environment-guard`,
-  `http-timeout`, `unified-operations`, `cli`, `probe-safety`, `test-hygiene`. Setiap test
-  baru diverifikasi **gagal pada kode lama** dan hijau pada kode baru, supaya tidak ada yang
-  mengunci perilaku tidak aman tanpa terdeteksi.
-- Suite penuh **489/489**, `tsc --noEmit` bersih, `tsc -p tsconfig.scripts.json` bersih.
+  `http-timeout`, `unified-operations`, `cli`, `probe-safety`, `test-hygiene`,
+  `duitku-callback-integrity`. Setiap test baru diverifikasi **gagal pada kode lama** dan hijau
+  pada kode baru, supaya tidak ada yang mengunci perilaku tidak aman tanpa terdeteksi. Untuk
+  Duitku: **14 dari 16** regresi gagal pada kode lama.
+- Suite penuh **505/505**, `tsc --noEmit` bersih, `tsc -p tsconfig.scripts.json` bersih.
   Kedua-duanya dijalankan pre-commit.
 
 ### Yang BELUM dikerjakan
@@ -646,7 +714,7 @@ mengembalikannya. Keduanya sudah dipulihkan, dan `tests/test-hygiene.test.ts` me
 | Item | Status |
 |---|---|
 | Rotasi kredensial DOKU + purge Git history | 🔴 **blokir di sisi Anda** — lihat §4a |
-| K2 `paymentMethod?: … \| string` → hapus `\| string` | ⏸️ sudah di `main`, **belum ada di release** — `v0.8.10` masih punya `\| string`; tunggu keputusan cara rilis |
+| K2 `paymentMethod?: … \| string` → hapus `\| string` | ⏸️ sudah di `main`, **belum ada di release** — `v0.8.10` masih punya `\| string`; versi dinaikkan ke `0.9.0`, publish ke npm tetap aksi Anda |
 | A-2 tiga konvensi satuan amount dalam satu kontrak | ⏳ belum |
 | A-4 PayU melewati canonical mapping | ⏳ belum |
 | A-5 fallback statis tanpa penanda sumber | ⏳ belum |
@@ -656,7 +724,7 @@ mengembalikannya. Keduanya sudah dipulihkan, dan `tests/test-hygiene.test.ts` me
 Sudah selesai dan tidak lagi jadi backlog: A-1 (heuristik nominal Faspay — ternyata diskriminator
 kontraknya `payment_total`, bukan tebakan 100x), A-3 (nonce contoh — kini di-guard
 `config.sandbox`), timeout/abort di semua `fetch` (S-7), probe destruktif (S-9), dan seluruh
-temuan §3c S-1…S-9.
+temuan §3c S-1…S-10.
 
 ---
 

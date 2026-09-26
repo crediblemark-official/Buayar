@@ -151,6 +151,20 @@ export interface VerifyCallbackResult {
   isExpired: boolean;
   /** Kode status asli dari provider */
   statusCode?: string;
+  /**
+   * True ketika callback-nya otentik, tetapi status pembayarannya TIDAK bisa
+   * dibuktikan dari callback itu sendiri.
+   *
+   * Muncul hanya pada provider yang signature callback-nya tidak mencakup field
+   * penentu status — sehingga payload yang sampai ke merchant sudah
+   * bertanda tangan sah, tapi isinya masih bisa diubah penyerang. Karena itu
+   * `isPaid` dipaksa false sampai dicek ke provider lewat server-to-server.
+   *
+   * Lihat `unconfirmedReason` untuk penjelasannya.
+   */
+  paymentUnconfirmed?: boolean;
+  /** Kenapa status pembayaran tidak bisa dikonfirmasi, dalam bahasa manusia. */
+  unconfirmedReason?: string;
   /** Waktu transaksi dicatat */
   transactionTime?: Date | string;
   /** Raw payload callback asli dari webhook */
@@ -351,6 +365,15 @@ export interface CheckTransactionResult {
   amount: number;
   /** "00" = success/paid, "01" = pending, "02" = failed/expired */
   statusCode: string;
+  /**
+   * True ketika provider tidak punya catatan untuk order ini.
+   *
+   * PENTING: ini BUKAN berarti pembayaran gagal. Provider bisa aja tidak
+   * menyimpan order tersebut di endpoint yang dipakai — jadi order yang sah
+   * tetap bisa muncul "tidak ditemukan". Menandai `isFailed` di sini akan
+   * membuat merchant membatalkan order yang sebenarnya masih berjalan.
+   */
+  orderNotFound?: boolean;
   status: "paid" | "pending" | "failed" | "expired";
   isPaid: boolean;
   isPending: boolean;

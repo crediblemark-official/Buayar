@@ -108,6 +108,14 @@ describe("K4 — Simulator & Sandbox Contract Testing", () => {
   });
 
   describe("Webhook Contract Replay across all 20 providers", () => {
+    // Pengecualian yang sahih: Duitku menandatangani callback dengan
+    // MD5(merchantCode + amount + merchantOrderId + apiKey), sehingga
+    // `resultCode` yang menentukan status TIDAK ikut tercakup. Callback-nya
+    // otentik, tapi tidak bisa membuktikan pembayaran. Semua provider lain
+    // menandatangani field statusnya, jadi "paid" sah dibaca langsung dari
+    // callback.
+    const STATUS_TIDAK_TERTANDATANGANI = new Set(["duitku"]);
+
     for (const provider of ALL_PROVIDERS) {
       it(`[${provider}] produces valid, cryptographically verifiable webhook for 'paid' status`, async () => {
         const buayar = new Buayar({
@@ -133,6 +141,16 @@ describe("K4 — Simulator & Sandbox Contract Testing", () => {
         );
 
         expect(verified.isValid).toBe(true);
+
+        if (STATUS_TIDAK_TERTANDATANGANI.has(provider)) {
+          // see docs/ACCEPTANCE-SWITCHING-FREE.md — status tidak bisa diambil
+          // dari callback, jadi harus pending sampai dicek ke Duitku.
+          expect(verified.isPaid).toBe(false);
+          expect(verified.isPending).toBe(true);
+          expect(verified.paymentUnconfirmed).toBe(true);
+          return;
+        }
+
         expect(verified.isPaid).toBe(true);
         expect(verified.isPending).toBe(false);
         expect(verified.isFailed).toBe(false);

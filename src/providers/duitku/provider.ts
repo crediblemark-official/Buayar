@@ -145,21 +145,90 @@ export class DuitkuProvider extends BasePaymentProvider {
     const amount = body.amount || "";
 
     const isValid = verifyDuitkuCallbackSignature(body, apiKey);
-    const isPaid = isValid && body.resultCode === "00";
-    const isFailed = !isValid || body.resultCode !== "00";
+    const resultCode = typeof body.resultCode === "string" ? body.resultCode : undefined;
 
-    return {
-      isValid,
+    // Signature tidak sah -> tidak ada satu pun field yang bisa dipercaya.
+    if (!isValid) {
+      return {
+        isValid: false,
+        provider: "duitku",
+        orderId: merchantOrderId,
+        amount: amount ? Number(amount) : 0,
+        status: "failed",
+        isPaid: false,
+        isPending: false,
+        isFailed: true,
+        isExpired: false,
+        statusCode: resultCode,
+        rawPayload: body,
+        error: "Signature callback Duitku tidak cocok.",
+      };
+    }
+
+    // Signature SAH, tapi itu hanya membuktikan tiga field: merchantCode, amount,
+    // merchantOrderId. `resultCode` — satu-satunya penentu status — TIDAK ikut
+    // ditandatangani (rumus resmi Duitku: MD5(merchantCode + amount +
+    // merchantOrderId + apiKey)). Artinya penyerang cukup mengambil satu callback
+    // bertanda tangan sah untuk order miliknya sendiri, lalu mengubah
+    // `resultCode` menjadi "00" untuk menandai order yang tidak dibayar sebagai
+    // lunas. Ditunjukkan live terhadap invoice sandbox sungguhan.
+    //
+    // Jadi signature yang sah TIDAK boleh diterjemahkan jadi "paid". Status
+    // defaultnya "pending", dan hanya bisa dinaikkan ke "paid" lewat jawaban
+    // server-to-server dari Duitku.
+    const dasar: VerifyCallbackResult = {
+      isValid: true,
       provider: "duitku",
       orderId: merchantOrderId,
       amount: amount ? Number(amount) : 0,
-      status: isValid ? (isPaid ? "paid" : "failed") : "failed",
-      isPaid,
-      isPending: false,
-      isFailed,
-      isExpired: isValid && body.resultCode !== "00",
-      statusCode: body.resultCode,
+      status: "pending",
+      isPaid: false,
+      isPending: true,
+      isFailed: false,
+      // Duitku memakai "02" untuk Failed DAN Expired sekaligus, jadi dari
+      // callback tidak bisa dibedakan mana yang mana. Menandai keduanya
+      // `isExpired: true` adalah tebakan.
+      isExpired: false,
+      statusCode: resultCode,
+      paymentUnconfirmed: true,
       rawPayload: body,
+      unconfirmedReason:
+        "Signature Duitku hanya mencakup merchantCode + amount + merchantOrderId, " +
+        "tidak mencakup resultCode. Status jadi belum bisa dibuktikan dari callback ini.",
+    };
+
+    if (config.extra?.confirmDuitkuCallback !== true) {
+      return dasar;
+    }
+
+    // Opt-in: tanya Duitku langsung. Ini persis yang disarankan dokumentasi
+    // resmi Duitku sendiri — "insert a transaction check when you receive a
+    // callback so that the payment status is guaranteed."
+    const konfirmasi = await this.checkTransaction({ merchantOrderId }, config);
+
+    // Konfirmasi yang GAGAL (jaringan, timeout, order tidak ada di endpoint)
+    // tidak boleh mengubah status jadi "failed": kita jadi tidak tahu apa pun,
+    // dan "failed" adalah keputusan yang berakibat samping mahal. Tetap pending.
+    if (!konfirmasi.success) {
+      return {
+        ...dasar,
+        unconfirmedReason: `${dasar.unconfirmedReason} Konfirmasi ke Duitku juga gagal: ${
+          konfirmasi.statusMessage || konfirmasi.error || "alasan tidak diketahui"
+        }`,
+      };
+    }
+
+    return {
+      ...dasar,
+      status: konfirmasi.status,
+      isPaid: konfirmasi.isPaid,
+      isPending: konfirmasi.isPending,
+      isFailed: konfirmasi.isFailed,
+      isExpired: konfirmasi.isExpired,
+      amount: konfirmasi.amount || dasar.amount,
+      statusCode: konfirmasi.statusCode || resultCode,
+      paymentUnconfirmed: false,
+      unconfirmedReason: undefined,
     };
   }
 
@@ -296,6 +365,16 @@ export class DuitkuProvider extends BasePaymentProvider {
       } catch (e) {}
 
       if (!response.ok || !data) {
+        // "Tidak ditemukan" sama sekali berbeda dari "pembayaran gagal".
+        // Duitku menjawab "Transaction not found" untuk order POP
+        // (createInvoice) yang memang tidak pernah tercatat di endpoint ini —
+        // dibuktikan live: order POP sah tapi statusnya selalu not found,
+        // sedangkan order Direct Inquiry di endpoint yang sama jalan normal.
+        // Menandai `isFailed` di sini membuat merchant membatalkan order yang
+        // sebenarnya masih bisa dibayar.
+        const pesan = data?.Message || text || `HTTP error! Status: ${response.status}`;
+        const tidakDitemukan = /(transaction|order)\s+not found/i.test(String(pesan));
+
         return {
           success: false,
           provider: "duitku",
@@ -303,13 +382,21 @@ export class DuitkuProvider extends BasePaymentProvider {
           reference: "",
           amount: 0,
           statusCode: response.status.toString(),
-          status: "failed",
+          // Status TIDAK pernah "failed" dari jalur ini. Kegagalan saat
+          // menanyakan status bukan bukti bahwa pembayaran gagal, dan
+          // "failed" punya akibat samping: merchant membatalkan order.
+          status: "pending",
           isPaid: false,
-          isPending: false,
-          isFailed: true,
+          isPending: true,
+          isFailed: false,
           isExpired: false,
-          statusMessage: data?.Message || `HTTP error! Status: ${response.status}`,
-          error: data?.Message || `HTTP error! Status: ${response.status}`,
+          orderNotFound: tidakDitemukan,
+          statusMessage: tidakDitemukan
+            ? `Duitku tidak punya catatan untuk order ini (${pesan}). Order yang dibuat lewat ` +
+              "POP (createInvoice) memang tidak tercatat di endpoint transactionStatus — " +
+              "status order POP tidak bisa dikonfirmasi lewat API."
+            : `Pengecekan status gagal: ${pesan}`,
+          error: tidakDitemukan ? `Order tidak ditemukan di Duitku: ${pesan}` : pesan,
           rawResponse: data,
         };
       }
@@ -334,7 +421,12 @@ export class DuitkuProvider extends BasePaymentProvider {
         isPaid,
         isPending,
         isFailed,
-        isExpired: isFailed,
+        // "02" berarti Failed/Expired sekaligus menurut dokumentasi resmi
+        // Duitku. Keduanya tidak bisa dibedakan dari kode status, jadi
+        // `isExpired` dibiarkan false: Kabar "belum berhasil" sudah
+        // tertangani `isFailed`, sedangkan menebak "expired"
+        // akan menampilkan layar kedaluwarsa untuk pembayaran yang ditolak.
+        isExpired: false,
         statusMessage: data.statusMessage || "",
         rawResponse: data,
       };

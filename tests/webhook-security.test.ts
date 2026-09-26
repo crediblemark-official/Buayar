@@ -50,7 +50,9 @@ const LOOKS_PAID: Record<string, any> = {
   braintree: { kind: "transaction_settled", subject: { transaction: { id: "t1", orderId: "FORGED-8", amount: "10.00", status: "settled" } } },
   checkoutcom: { type: "payment_captured", data: { id: "p1", reference: "FORGED-9", amount: 1000, approved: true } },
   midtrans: { transaction_status: "capture", signature_key: "x", order_id: "FORGED-10", gross_amount: "1000" },
-  duitku: { resultCode: "00", merchantOrderId: "FORGED-11", totalAmount: "1000" },
+  // Duitku memakai `amount`, bukan `totalAmount` — `totalAmount` itu field PayU.
+  // Dengan `amount`, payload ini persis bentuk callback Duitku yang sebenarnya.
+  duitku: { resultCode: "00", merchantOrderId: "FORGED-11", amount: "1000" },
   ipaymu: { status: "1", trx_id: "t1", reference_id: "FORGED-12" },
   xendit: { id: "x1", status: "PAID", external_id: "FORGED-13" },
   doku: { result: "success", order_id: "FORGED-14", status: "success" },
