@@ -6,7 +6,7 @@
 > ⚠️ Catatan: audit awal bersifat read-only, tapi **temuan K3 sudah turun menjadi
 > perbaikan kode** — lihat [§3c. Pass Perbaikan Keamanan](#3c-pass-perbaikan-keamanan).
 > Klaim "✅ Terpenuhi" di bawah merujuk pada kondisi **setelah** pass tersebut, dan
-> angka test sudah diperbarui ke **434/434**.
+> angka test sudah diperbarui ke **489/489**.
 
 ---
 
@@ -49,7 +49,7 @@ adalah pengukuran objektif apakah optionality itu benar-benar ada di dalam kode.
 | K6 | Autodetect tanpa fallback senyap | ✅ Terpenuhi | **P0** | M |
 | K7 | Scaffold CLI menghasilkan kode yang bisa diverifikasi | ✅ Terpenuhi | **P0** | **S** |
 
-**Ringkasan: 7 dari 7 kriteria terpenuhi (434/434 tests passing).**
+**Ringkasan: 7 dari 7 kriteria terpenuhi (489/489 tests passing).**
 
 Tiga P0: **K7, K3, K6.** K4 adalah gap terbesar dan sekaligus pembeda produk yang paling
 sulit ditiru pesaing.
@@ -406,9 +406,9 @@ diverifikasi lokal (fail-open, raw-body, normalisasi), klaim "fixed" bisa diuji 
 
 Audit K3 di atas menemukan pola yang lebih luas daripada yang tertulis di dokumen: **webhook
 yang gagal diverifikasi tetap dilaporkan `isPaid: true`**. Karena itu dokumen ini lalu
-diperbaiki — bukan hanya dokumen, tapi kodenya. Lima bug, semuanya ditemukan lewat probe
-dengan **kredensial sandbox asli** (Midtrans, DOKU, iPaymu, Xendit) dan diverifikasi ulang
-setelah tiap perbaikan.
+diperbaiki — bukan hanya dokumen, tapi kodenya. Sembilan bug, semuanya ditemukan lewat
+probe dengan **kredensial sandbox asli** (Midtrans, DOKU, iPaymu, Xendit) dan diverifikasi
+ulang setelah tiap perbaikan.
 
 ### S-1 · 🔴 `rawBody` / `body` desync — 8 provider
 
@@ -488,15 +488,158 @@ pernah cocok dengan verification token, jadi ia hanya menutupi penyebab sebenarn
 `as any`). Simulator Xendit juga diubah memakai verification token terpisah dari secret key,
 supaya bug ini tidak tertutupi.
 
+### S-6 · 🔴 `sandbox: true` bukan sakelar keamanan di Xendit & Stripe
+
+Most provider memisahkan test dan live lewat hostname, jadi `sandbox: true` sudah cukup
+menentukan tujuan jaringan. Dua pengecualian, dan keduanya justru paling berbahaya:
+
+| Provider | Host | Pemisah test ↔ live |
+|---|---|---|
+| Xendit | `api.xendit.co` (satu) | `xnd_development_…` vs `xnd_production_…` |
+| Stripe | `api.stripe.com` (satu) | `sk_test_…` vs `sk_live_…` |
+
+Untuk keduanya, `sandbox: true` **tidak mengubah satu byte pun** dari request yang dikirim.
+`grep` prefix di `src/` pun nihil: tidak ada validasi sama sekali. Bentuk kegagalan yang
+dituju:
+
+```js
+new Buayar({ provider: "stripe", apiKey: "sk_live_…", sandbox: true });
+```
+
+Merchant mengira sedang menguji. Yang terjadi: kartu sungguhan ditagih, order diterima,
+webhook terkirim. Tidak ada error, tidak ada warning, tidak ada jejak. Tagihan tetap masuk
+dan notifikasi tetap jalan, jadi hampir mustahil ditemukan nanti hari — dan `sandbox: true`
+yang ada di config membuatnya terlihat seperti sudah aman.
+
+`src/utils/environment.ts` menolak konfigurasi yang bertentangan **sebelum request apa pun
+keluar** (regresi membuktikan `requestDikirim === 0`). Dua keputusan desain:
+
+1. Prefix dikenali & bertentangan → tolak keras. Prefix **tidak** dikenali → biarkan lewat.
+   Kunci dari proxy/reseller/self-hosted gateway tidak punya prefix baku; menolaknya akan
+   mematikan integrasi yang sah. Yang salah di sini adalah prefix yang jelas-jelas milik
+   environment lain, bukan bentuk kuncinya.
+2. Guard melempar exception, bukan mengembalikan `{ success: false }` — konsisten dengan
+   pre-flight K5. Kesalahan konfigurasi berlaku untuk **setiap** request berikutnya; kalau
+   dibungkus jadi `success: false`, pemanggil yang cuma memeras status HTTP buatan sendiri
+   akan tetap menganggap transaksi berjalan, dan untuk `sk_live_` itu berarti menagih kartu
+   sungguhan berulang kali.
+
+Efek samping yang desirable: facade ternyata default `sandbox` ke `true`, jadi
+`new Buayar({ provider, apiKey: "sk_live_…" })` tanpa flag eksplisit juga ditolak.
+
+### S-7 · 🟠 117 panggilan jaringan tanpa timeout
+
+Dari 117 call site `fetch` di 42 file, **satu** punya timeout (`doku/mcp.ts`). Sisanya
+gantung tanpa batas. Di serverless (Vercel/Lambda) handler dipaksa jalan sampai batas
+platform dan tetap ditagih; di Node.js yang berjalan lama, socket dan koneksi ke PG
+tertahan sampai pool habis, lalu request yang sah ikut gagal.
+
+Gejalanya sudah nyata, bukan teori: dua kanal iPaymu (`cstore/indomaret`, `va/danamon`)
+**menggantung lebih dari 120 detik** — diuji dengan batas 120s dan tetap tidak selesai.
+Jadi ini request yang memang tidak pernah selesai, bukan upstream yang lambat.
+
+`src/utils/http.ts` — `httpFetch()` yang memasang `AbortController` dengan batas seragam
+(default 30s, `BUAYAR_REQUEST_TIMEOUT_MS` untuk merchant dengan gateway lambat) dan melempar `HttpTimeoutError`.
+Helper memanggil `globalThis.fetch`, bukan `fetch` polos — kalau tidak, mock di test akan
+ditembus dan 40+ test existing diam-diam kehilangan mock-nya. Kegagalan lain (DNS, socket,
+abort dari pemanggil) diteruskan apa adanya, **tidak** disamarkan jadi timeout: salah label
+jauh lebih mahal saat debug. Query string dan userinfo dibuang dari pesan error supaya API
+key tidak bocor ke log.
+
+### S-8 · 🔴 Scaffold menghasilkan webhook yang 500 dan menolak 100% iPaymu
+
+Dua cacat di route webhook hasil `buayar init`, di ketiga template (Express, Hono, Next.js).
+Keduanya ditemukan dengan **menjalankan** route sungguhan di atas Express, bukan dengan
+membaca kode — kalau hanya dibaca, keduanya terlihat wajar.
+
+1. `payload = rawBody ? JSON.parse(rawBody) : {}` tanpa `try/catch`. Body rusak →
+   `SyntaxError` → **HTTP 500**. Endpoint webhook itu publik, jadi siapa pun (bot, scanner)
+   bisa memicuinya dengan body sampah tanpa kredensial apa pun. Yang lebih mahal: gateway
+   mengulang pengiriman berhari-hari kalau jawabannya 5xx, jadi satu request rusak bisa
+   jadi badai retry.
+2. Hanya `express.raw({ type: "application/json" })` yang dipasang. iPaymu mengirim
+   `application/x-www-form-urlencoded`, dan untuk content type itu **tidak ada parser yang
+   jalan** → `req.body` = `undefined` (dibuktikan langsung). Akibatnya route hasil scaffold
+   **menolak 100% webhook iPaymu asli**: signature yang benar tetap dijawab 400 "Invalid
+   signature". Salah baca ini muncul sebagai "kredensial saya salah", dan merchant akan
+   berputar-putar memeriksa API key yang sebenarnya benar.
+
+Bukti end-to-end (route Express sungguhan + signature iPaymu hasil hitungan HMAC):
+
+| Skenario | Sebelum | Sesudah |
+|---|---|---|
+| signature iPaymu benar | 400 | **200** `{"status":"OK"}` |
+| signature dipalsukan | 400 | 400 |
+| JSON rusak | **500** | 400 |
+| body kosong | 400 | 400 |
+| tanpa content-type | 400 | 400 |
+
+K7 ("scaffold menghasilkan kode yang bisa diverifikasi") tidak bisa dianggap terpenuhi
+sebelum ini: merchant iPaymu yang memakai scaffold tidak akan pernah menerima satu pun
+webhook.
+
+### S-9 · 🟠 Probe bisa menembak akun produksi, dan tidak pernah di-type-check
+
+Probe adalah skrip yang **mengubah state**: Midtrans dan iPaymu membuat puluhan transaksi
+lalu membatalkannya. Tapi `sandbox` hanya sebuah default `true` — begitu ada yang menyetel
+`MIDTRANS_SANDBOX=false`, probe berjalan terhadap akun merchant yang sungguhan: puluhan
+transaksi nyata di dashboard produksi, kanal e-wallet memicu notifikasi ke nomor pelanggan,
+lalu semuanya dibatalkan sehingga laporan bulanan ikut kotor. Kerugiannya tidak bisa ditarik
+kembali. Tidak ada satu pun probe yang punya guard.
+
+`assertProbeTargetsSandbox()` di `scripts/probe/lib.ts`, dipasang di keempat probe,
+fail-closed sebelum request pertama. Bypass eksplisit (`PROBE_ALLOW_PRODUCTION=1`)
+disediakan **dan pesannya menyebutkan cara itu** — penolakan tanpa jalan keluar hanya
+mendorong orang mencari jalan liar.
+
+Cek prefix kredensial hanya dipasang untuk Xendit. Untuk Midtrans sempat hampir dipasang
+daftar putih `"SB-Mid-"`, tapi kredensial sandbox yang dipakai tim ini **tidak** mengikuti
+pola itu, jadi daftar putih akan memblokir probe yang selama ini bekerja. Guard yang salah
+posisi lebih berbahaya daripada tidak ada guard: orang terbiasa memakai bypass, lalu bypass
+itulah yang membuat probe produksi sungguhan lolos tanpa disadari. Ada regresi yang mengunci
+kegagalan ini.
+
+Konsekuensi yang lebih luas: `tsconfig.json` hanya mencakup `src/` dan `tests/`, jadi
+`scripts/` **tidak pernah** di-type-check — padahal build memakai `tsup`, `tsc` di sana cuma
+untuk type-check. Akibatnya:
+
+- `scripts/probe/xendit/channels.ts` memakai `sandbox: SANDBOX` tanpa variabel itu pernah
+  dideklarasikan → `ReferenceError` setiap kali probe dijalankan.
+- `mcp-tools-list.ts` dan `mcp-e2e.ts` adalah skrip global tanpa `export {}`, sehingga
+  top-level `await` ditolak dan `const focus` bentrok dengan global `focus` dari type DOM.
+- Empat probe mengirim `paymentMethod` sebagai string polos, padahal tipe publiknya
+  `PaymentMethodInput = CanonicalPaymentMethod | RawProviderMethod`. Sekarang memakai escape
+  hatch resmi `{ raw, providerOnly: true }` — memang cara yang benar untuk kanal
+  non-kanonik seperti `cstore/indomaret`.
+
+`tsconfig.scripts.json` terpisah dengan `module: ESNext`: probe dijalankan Bun (ESM) sementara
+tsconfig utama memakai NodeNext tanpa `type: module` (CJS). Menyamakan keduanya akan
+mengendurkan `moduleResolution` type-check utama juga. Pre-commit hook sekarang menjalankan
+keduanya.
+
+Terakhir, ini terungkap karena test baru pertama kali benar-benar butuh `$PATH`:
+`tests/config.test.ts` menghapus **seluruh** `process.env` di `beforeEach` dan tidak pernah
+memulihkannya. Setelah suite berjalan hanya 4 variabel tersisa dan `PATH` bernilai
+`undefined` — jadi test yang menyusul gagal bukan karena bug-nya, tapi karena melihat
+environment yang sudah dikosongkan file lain. `tests/oy.test.ts` juga menghapus var OY tanpa
+mengembalikannya. Keduanya sudah dipulihkan, dan `tests/test-hygiene.test.ts` memindai
+`tests/*.ts` untuk menahan pola itu kembali.
+
 ### Verifikasi
 
 - **Probe live** `scripts/probe/webhook-signature-live.ts` — 14 skenario signature atas 4
   provider dengan kredensial sandbox asli: **14/14 lolos**, termasuk kasus body dipalsukan
   dan token/signature salah.
-- **Regresi offline** `tests/webhook-integrity.test.ts` + `tests/webhook-security.test.ts` —
-  setiap test di dalamnya diverifikasi **gagal pada kode lama** dan hijau pada kode baru,
-  supaya tidak ada yang mengunci perilaku tidak aman tanpa terdeteksi.
-- Suite penuh **434/434**, `tsc --noEmit` bersih.
+- **Probe live channel** — Xendit **11/11**, Midtrans **16/19** (gagal: `ovo`, `dana`,
+  `linkaja` — pre-existing, akun belum mengaktifkan kanal), DOKU **11/21** (7 sisanya
+  `mcpOnly`, butuh kredensial MCP), iPaymu **13/19**. Semua angka ini **tidak berubah**
+  sebelum dan sesudah S-1…S-9 — tidak ada perbaikan yang mengorbankan kanal yang sudah jalan.
+- **Regresi offline** — `webhook-integrity`, `webhook-security`, `environment-guard`,
+  `http-timeout`, `unified-operations`, `cli`, `probe-safety`, `test-hygiene`. Setiap test
+  baru diverifikasi **gagal pada kode lama** dan hijau pada kode baru, supaya tidak ada yang
+  mengunci perilaku tidak aman tanpa terdeteksi.
+- Suite penuh **489/489**, `tsc --noEmit` bersih, `tsc -p tsconfig.scripts.json` bersih.
+  Kedua-duanya dijalankan pre-commit.
 
 ### Yang BELUM dikerjakan
 
@@ -504,8 +647,16 @@ supaya bug ini tidak tertutupi.
 |---|---|
 | Rotasi kredensial DOKU + purge Git history | 🔴 **blokir di sisi Anda** — lihat §4a |
 | K2 `paymentMethod?: … \| string` → hapus `\| string` | ⏸️ breaking change, menunggu konfirmasi |
-| Timeout/abort di semua `fetch` (2 timeout iPaymu 20s saat probe) | ⏳ belum |
-| A-1 heuristik nominal Faspay, A-3 nonce contoh, A-4 PayU lewati canonical | ⏳ belum |
+| A-2 tiga konvensi satuan amount dalam satu kontrak | ⏳ belum |
+| A-4 PayU melewati canonical mapping | ⏳ belum |
+| A-5 fallback statis tanpa penanda sumber | ⏳ belum |
+| A-6 CI tidak punya contract gate | ⏳ belum |
+| A-7 dokumentasi tidak sinkron | ⏳ belum |
+
+Sudah selesai dan tidak lagi jadi backlog: A-1 (heuristik nominal Faspay — ternyata diskriminator
+kontraknya `payment_total`, bukan tebakan 100x), A-3 (nonce contoh — kini di-guard
+`config.sandbox`), timeout/abort di semua `fetch` (S-7), probe destruktif (S-9), dan seluruh
+temuan §3c S-1…S-9.
 
 ---
 
@@ -527,12 +678,17 @@ Ditemukan saat pass verifikasi kredensial sandbox (2026-09-26):
 | DOKU Client ID | 13 call site di `tests/` + `scripts/probe/doku/` | ✅ sudah dibersihkan dari HEAD |
 | Midtrans / iPaymu / Xendit | — | ✅ bersih dari history |
 
-- [x] Client ID DOKU dibersihkan dari HEAD (literal diganti konstanta dummy yang jelas,
-      probe tidak lagi punya fallback — berhenti dengan pesan bila env kosong)
+- [x] Client ID DOKU dibersihkan dari HEAD — literal diganti konstanta dummy yang jelas
+      (`DOKU_TEST_SNAP_CLIENT_ID`, `DOKU_TEST_MERCHANT_CODE`), dan probe tidak lagi punya
+      fallback credential: ia berhenti dengan pesan bila env kosong, bukan menebak. Selftest
+      probe memverifikasi dua arah: signature sah → 200 + `isValid: true`, signature dipalsukan
+      → 200 + `isValid: false`.
+- [x] `.gitignore` menutup `sandbox.md`, `env.local`, `.env`, `.env.*`, plus artefak runtime
+      probe DOKU (`doku-va-manual-state.json`, `doku-notifications.log`, `receiver.*`, `tunnel.*`)
 - [ ] **Rotasi kredensial DOKU di dashboard** — ini yang sebenarnya menutup risiko;
-     Membersihkan source code tidak gripped apa pun
+      membersihkan source code tidak gripped apa pun. Secret Key dan API Key
+      masih terekspos di history repo publik sampai langkah ini dilakukan.
 - [ ] **Rewrite/purge Git history** (`git filter-repo` / BGF) untuk Secret Key + API Key
-- [ ] `.gitignore` untuk `scripts/*.local.ts`
 
 **b) `docs/AUDIT-BUG-DAN-PREMATURE.md` sudah usang**
 
