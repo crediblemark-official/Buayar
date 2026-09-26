@@ -125,4 +125,10 @@ export const CONTRACT_FIXTURES: Record<string, Record<SimulationStatus, any>> = 
     failed: { event_type: "payment.failed", status: "failed" },
     expired: { event_type: "payment.expired", status: "expired" },
   },
+  xenith: {
+    paid: { status: "SUCCESS" },
+    pending: { status: "PENDING" },
+    failed: { status: "FAILED" },
+    expired: { status: "EXPIRED" },
+  },
 };

@@ -3,6 +3,7 @@ import {
   CANONICAL_TO_XENDIT, CANONICAL_TO_DOKU, CANONICAL_TO_PRISMALINK,
   CANONICAL_TO_FASPAY, CANONICAL_TO_FINPAY, CANONICAL_TO_NICEPAY,
   CANONICAL_TO_OY, CANONICAL_TO_STRIPE, CANONICAL_TO_SUMOPOD,
+  CANONICAL_TO_XENITH,
 } from "./canonical";
 
 export interface ProviderCapability {
@@ -101,6 +102,7 @@ export class ProviderRegistry {
       if (h["x-signature"] && (h["x-partner-id"] || h["x-external-id"])) return "doku";
       if (h["svix-signature"] || h["svix-id"]) return "sumopod";
       if (h["x-webhook-token"]) return "sumopod";
+      if (h["x-xenith-signature"] || h["x-xenith-timestamp"]) return "xenith";
       if (h["paypal-transmission-id"] || h["paypal-transmission-sig"]) return "paypal";
     }
 
@@ -120,6 +122,7 @@ export class ProviderRegistry {
     if (p.object === "event" || (p.type && p.data?.object && p.api_version)) return "stripe";
     if (p.event && p.payload?.payment?.entity) return "razorpay";
     if (p.event_type && p.data?.payment_id) return "sumopod";
+    if (p.schemaVersion && p.data?.id && (p.data?.paymentAmount || p.data?.initiatedAmount || p.data?.sentAmount)) return "xenith";
     if (
       (p.external_id && (p.status || p.paid_amount || p.payment_method || p.payment_channel || p.id)) ||
       p.event?.startsWith("payment.") ||
@@ -162,6 +165,7 @@ const ENV_KEYS: Record<string, string[]> = {
   braintree:    ["BRAINTREE_MERCHANT_ID", "BRAINTREE_PUBLIC_KEY", "BRAINTREE_PRIVATE_KEY"],
   twocheckout:  ["TWOCHECKOUT_MERCHANT_CODE", "TWOCHECKOUT_SECRET_KEY", "TWOCHECKOUT_SECRET_WORD"],
   sumopod:      ["SUMOPOD_API_KEY", "SUMOPOD_WEBHOOK_SECRET"],
+  xenith:       ["XENITH_ACCESS_KEY", "XENITH_SECRET_KEY", "XENITH_WEBHOOK_SECRET"],
 };
 
 // Metode kanonik per provider (layout dari core/canonical + static internasional).
@@ -178,6 +182,7 @@ const WORKING_METHODS: Record<string, string[]> = {
   oy: Object.keys(CANONICAL_TO_OY),
   stripe: Object.keys(CANONICAL_TO_STRIPE),
   sumopod: Object.keys(CANONICAL_TO_SUMOPOD),
+  xenith: Object.keys(CANONICAL_TO_XENITH),
   paypal: ["credit_card", "paylater", "paypal", "bank_transfer"],
   adyen: ["credit_card", "paypal", "qris", "apple_pay", "google_pay", "klarna", "sepa"],
   checkoutcom: ["credit_card", "paypal", "apple_pay", "google_pay", "klarna", "sofort", "bank_transfer"],
@@ -210,6 +215,7 @@ const OPERATIONS: Record<string, { refund: boolean; checkBalance: boolean; disbu
   braintree: { refund: true, checkBalance: false, disburse: false },
   twocheckout: { refund: true, checkBalance: false, disburse: false },
   sumopod: { refund: false, checkBalance: false, disburse: false },
+  xenith: { refund: false, checkBalance: true, disburse: true },
 };
 
 export function buildDefaultDescriptors(): ProviderDescriptor[] {

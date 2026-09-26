@@ -31,7 +31,7 @@
 
 - 🔄 **Zero-Code PG Switcher** — Swap providers via `.env` only. No code refactoring needed.
 - 🧪 **Zero-Approval Contract Simulator** — Develop and test production-grade integration without waiting 3–6 weeks for merchant account approvals. Enable via `BUAYAR_SIMULATE=1` or `buayar.simulator`.
-- 🛡️ **Fail-Closed Webhook Verifier (20/20)** — Universal callback endpoint that rejects invalid or unsigned webhooks across all 20 providers with raw-byte streaming support.
+- 🛡️ **Fail-Closed Webhook Verifier (21/21)** — Universal callback endpoint that rejects invalid or unsigned webhooks across all 21 providers with raw-byte streaming support.
 - 🔒 **Compiler-Enforced Portability** — Canonical payment methods (`bca_va`, `qris`, `gopay`, etc.) are type-safe; provider-internal codes are caught at compile time.
 - ⚡ **Pre-Flight Capability Verification** — Validates payment method support before network requests are dispatched, returning actionable errors.
 - ⚡ **Semi & Full Integration**:
@@ -46,41 +46,42 @@
 
 > 📄 Each provider has its own implementation doc — files, operations, credentials, endpoints & live verification status — in [`docs/providers/<provider>/README.md`](docs/providers/README.md).
 
-#### 🇮🇩 Indonesian (11)
+#### 🇮🇩 Indonesian & Regional (12)
 
 | Provider | Status | Redirect | Direct API | Webhook | Client |
 |---|:---:|:---:|:---:|:---:|:---:|
-| [Midtrans](docs/providers/midtrans/README.md) | Contract Tested | ✅ Snap | ✅ Core API + BI-SNAP | SHA-512 | `MidtransClient` |
-| [Duitku](docs/providers/duitku/README.md) | Contract Tested | ✅ | ✅ | MD5 | `DuitkuClient` |
-| [iPaymu](docs/providers/ipaymu/README.md) | Live & Contract Tested | ✅ | ✅ | HMAC-SHA256 | `IpaymuClient` |
-| [Xendit](docs/providers/xendit/README.md) | Contract Tested | ✅ Invoice v2 | ✅ Payments v3 | Token | `XenditClient` |
-| [DOKU Jokul](docs/providers/doku/README.md) | Contract Tested | ✅ v1 | ✅ v2 | HMAC-SHA256 | `DokuClient` |
-| [PrismaLink](docs/providers/prismalink/README.md) | Contract Tested | ✅ | ✅ | SHA-256 | `PrismalinkClient` |
-| [Faspay](docs/providers/faspay/README.md) | Contract Tested | ✅ | ✅ | SHA1(MD5) | `FaspayClient` |
-| [Finpay](docs/providers/finpay/README.md) | Contract Tested | ✅ | ✅ | HMAC-SHA512 | `FinpayClient` |
-| [Nicepay](docs/providers/nicepay/README.md) | Contract Tested | ✅ | ✅ | SHA-256 | `NicepayClient` |
-| [OY! Bisnis](docs/providers/oy/README.md) | Contract Tested | ✅ | ✅ | Header Auth | `OyClient` |
-| [SumoPod](docs/providers/sumopod/README.md) | Live & Contract Tested | ✅ Payments v1 | ✅ QRIS API | Svix / Token | `SumopodClient` |
+| [Midtrans](docs/providers/midtrans/README.md) | ✅ **Live Sandbox Tested** | ✅ Snap | ✅ Core API + BI-SNAP | SHA-512 | `MidtransClient` |
+| [Duitku](docs/providers/duitku/README.md) | ✅ **Live Sandbox Tested** | ✅ POP | ✅ Direct Inquiry | MD5 / HMAC | `DuitkuClient` |
+| [iPaymu](docs/providers/ipaymu/README.md) | ✅ **Live Sandbox Tested** | ✅ Redirect | ✅ Direct Payment | HMAC-SHA256 | `IpaymuClient` |
+| [Xendit](docs/providers/xendit/README.md) | ✅ **Live Sandbox Tested** | ✅ Sessions v3 | ✅ Payments v3 | Token | `XenditClient` |
+| [DOKU Jokul](docs/providers/doku/README.md) | ✅ **Live Sandbox Tested** | ✅ Checkout v2 | ✅ Direct v2 + SNAP | HMAC-SHA256 | `DokuClient` |
+| [SumoPod](docs/providers/sumopod/README.md) | ✅ **Live Tested** | ✅ Payments v1 | ✅ QRIS API | Svix / Token | `SumopodClient` |
+| [Xenith](docs/providers/xenith/README.md) | ✅ **Live Sandbox Tested** | ✅ Hosted Link | ✅ Direct Pay In (VA/QRIS) | HMAC-SHA256 | `XenithClient` |
+| [Nicepay](docs/providers/nicepay/README.md) | ⏳ **Untested Live** *(Simulator Only)* | ✅ | ✅ | SHA-256 | `NicepayClient` |
+| [Faspay](docs/providers/faspay/README.md) | ⏳ **Untested Live** *(Simulator Only)* | ✅ | ✅ | SHA1(MD5) | `FaspayClient` |
+| [OY! Bisnis](docs/providers/oy/README.md) | ⏳ **Untested Live** *(Simulator Only)* | ✅ | ✅ | Header Auth | `OyClient` |
+| [PrismaLink](docs/providers/prismalink/README.md) | ⏸️ **Untested** *(Docs Blocked)* | ✅ | ✅ | SHA-256 | `PrismalinkClient` |
+| [Finpay](docs/providers/finpay/README.md) | ⏸️ **Untested** *(Docs Blocked)* | ✅ | ✅ | HMAC-SHA512 | `FinpayClient` |
 
 #### 🌍 International (9)
 
 | Provider | Status | Redirect | Direct API | Webhook | Client |
 |---|:---:|:---:|:---:|:---:|:---:|
-| [Stripe](docs/providers/stripe/README.md) | Contract Tested | ✅ Checkout Sessions | ✅ Payment Intents | HMAC-SHA256 | `StripeClient` |
-| [PayPal](docs/providers/paypal/README.md) | Contract Tested | ✅ Orders v2 | ✅ Capture | OAuth2 | `PaypalClient` |
-| [Adyen](docs/providers/adyen/README.md) | Contract Tested | ✅ Sessions v68 | ✅ Payments v68 | HMAC-SHA256 | `AdyenClient` |
-| [Checkout.com](docs/providers/checkoutcom/README.md) | Contract Tested | ✅ Payment Links | ✅ Payments API | HMAC-SHA256 | `CheckoutComClient` |
-| [Razorpay](docs/providers/razorpay/README.md) | Contract Tested | ✅ Payment Links | ✅ Orders API | HMAC-SHA256 | `RazorpayClient` |
-| [Square](docs/providers/square/README.md) | Contract Tested | ✅ Payment Links | ✅ Payments API | HMAC-SHA256 | `SquareClient` |
-| [PayU](docs/providers/payu/README.md) | Contract Tested | ✅ Orders v2.1 | ✅ Pay Methods | MD5/SHA-256 | `PayuClient` |
-| [Braintree](docs/providers/braintree/README.md) | Contract Tested | ✅ Drop-in UI Token | ✅ Transaction API | SHA1 HMAC | `BraintreeClient` |
-| [2Checkout](docs/providers/twocheckout/README.md) | Contract Tested | ✅ REST v6.0 | ✅ REST v6.0 | IPN MD5 | `TwoCheckoutClient` |
+| [Stripe](docs/providers/stripe/README.md) | ⏳ **Untested Live** *(Simulator Only)* | ✅ Checkout Sessions | ✅ Payment Intents | HMAC-SHA256 | `StripeClient` |
+| [PayPal](docs/providers/paypal/README.md) | ⏳ **Untested Live** *(Simulator Only)* | ✅ Orders v2 | ✅ Capture | OAuth2 | `PaypalClient` |
+| [Adyen](docs/providers/adyen/README.md) | ⏳ **Untested Live** *(Simulator Only)* | ✅ Sessions v68 | ✅ Payments v68 | HMAC-SHA256 | `AdyenClient` |
+| [Checkout.com](docs/providers/checkoutcom/README.md) | ⏳ **Untested Live** *(Simulator Only)* | ✅ Payment Links | ✅ Payments API | HMAC-SHA256 | `CheckoutComClient` |
+| [Razorpay](docs/providers/razorpay/README.md) | ⏳ **Untested Live** *(Simulator Only)* | ✅ Payment Links | ✅ Orders API | HMAC-SHA256 | `RazorpayClient` |
+| [Square](docs/providers/square/README.md) | ⏳ **Untested Live** *(Simulator Only)* | ✅ Payment Links | ✅ Payments API | HMAC-SHA256 | `SquareClient` |
+| [PayU](docs/providers/payu/README.md) | ⏳ **Untested Live** *(Simulator Only)* | ✅ Orders v2.1 | ✅ Pay Methods | MD5/SHA-256 | `PayuClient` |
+| [Braintree](docs/providers/braintree/README.md) | ⏳ **Untested Live** *(Simulator Only)* | ✅ Drop-in UI Token | ✅ Transaction API | SHA1 HMAC | `BraintreeClient` |
+| [2Checkout](docs/providers/twocheckout/README.md) | ⏳ **Untested Live** *(Simulator Only)* | ✅ REST v6.0 | ✅ REST v6.0 | IPN MD5 | `TwoCheckoutClient` |
 
 ### ⚙️ Environment Variables
 
 #### Universal (Recommended)
 ```env
-# (optional) Active provider: any of the 20 supported names
+# (optional) Active provider: any of the 21 supported names
 # If empty, the provider is AUTO-DETECTED from filled credentials.
 BUAYAR_PROVIDER=midtrans
 
@@ -103,7 +104,7 @@ Check what a provider actually supports — no docs digging:
 ```ts
 import { buayar } from "@crediblemark/buayar";
 
-buayar.listProviders();                    // all 20 registered providers
+buayar.listProviders();                    // all 21 registered providers
 buayar.detectProviderFromEnv(process.env); // guess active provider from .env
 buayar.detectProviderFromPayload(payload); // guess provider from webhook payload
 buayar.getCapabilities("duitku");
@@ -123,6 +124,7 @@ You don't need provider-specific variable names. Simply use unified **`BUAYAR_*`
 | **iPaymu** | `ipaymu` | API Key | Virtual Account (VA) | *(not needed)* |
 | **Xendit** | `xendit` | Secret Key | *(optional)* | Webhook Token (`BUAYAR_WEBHOOK_SECRET`) |
 | **DOKU Jokul** | `doku` | Secret Key | Client ID / Merchant ID | Client ID |
+| **Xenith** | `xenith` | Access Key (`ak-...`) | *(not needed)* | Secret Key (`sk-...`) / `BUAYAR_WEBHOOK_SECRET` |
 | **PrismaLink** | `prismalink` | Secret Key | Merchant ID | *(not needed)* |
 | **Faspay** | `faspay` | Password | Merchant ID | User ID |
 | **Finpay** | `finpay` | Merchant Key | Merchant ID | *(not needed)* |

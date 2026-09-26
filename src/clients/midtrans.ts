@@ -164,6 +164,17 @@ export class MidtransClient {
         } catch (err) {}
         if (response.ok) return data || text;
       } catch (irisErr) {}
+      // Endpoint saldo Midtrans (Core API `/v1/balance` maupun Iris
+      // `/iris/api/v1/balance`) hanya tersedia untuk akun produksi. Di sandbox
+      // keduanya menjawab 404, dan pesan mentahnya tidak menjelaskan apa pun.
+      // Diverifikasi live 2026-09-26: sandbox → `404 {"error_messages":["Not
+      // found"]}` di kedua endpoint.
+      if (this.sandbox) {
+        throw new Error(
+          "Midtrans hanya menyediakan API saldo untuk akun produksi; endpoint /v1/balance dan " +
+            `Iris /iris/api/v1/balance menjawab 404 di sandbox. Galat asli: ${e.message}`
+        );
+      }
       throw e;
     }
   }

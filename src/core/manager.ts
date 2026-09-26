@@ -19,6 +19,7 @@ import { PayuProvider } from "../providers/payu/provider";
 import { BraintreeProvider } from "../providers/braintree/provider";
 import { TwoCheckoutProvider } from "../providers/twocheckout/provider";
 import { SumopodProvider } from "../providers/sumopod/provider";
+import { XenithProvider } from "../providers/xenith/provider";
 import { MidtransClient } from "../clients/midtrans";
 import { DuitkuClient } from "../clients/duitku";
 import { IpaymuClient } from "../clients/ipaymu";
@@ -39,6 +40,7 @@ import { PayuClient } from "../clients/payu";
 import { BraintreeClient } from "../clients/braintree";
 import { TwoCheckoutClient } from "../clients/twocheckout";
 import { SumopodClient } from "../clients/sumopod";
+import { XenithClient } from "../clients/xenith";
 import {
   CreateInvoiceParams,
   InvoiceResponse,
@@ -84,6 +86,7 @@ export class PaymentManager {
     this.registerProvider(new BraintreeProvider());
     this.registerProvider(new TwoCheckoutProvider());
     this.registerProvider(new SumopodProvider());
+    this.registerProvider(new XenithProvider());
   }
 
   registerProvider(provider: BasePaymentProvider) {
@@ -267,6 +270,14 @@ export class PaymentManager {
     return new SumopodClient(config);
   }
 
+  getXenithProvider(): XenithProvider {
+    return this.getProvider("xenith") as XenithProvider;
+  }
+
+  getXenithClient(config: ProviderConfig): XenithClient {
+    return new XenithClient(config);
+  }
+
   // ─── Unified Operations ──────────────────────────────────────────────────
 
   async createInvoice(
@@ -302,11 +313,17 @@ export class PaymentManager {
       }
     }
 
+    const normalizedParams: CreateInvoiceParams = {
+      ...params,
+      productDetails: params.productDetails || params.description || "Payment",
+      description: params.description || params.productDetails || "Payment",
+    };
+
     if (config.simulate) {
-      return simulatorEngine.createInvoice(providerName, params, config);
+      return simulatorEngine.createInvoice(providerName, normalizedParams, config);
     }
 
-    return provider.createInvoice(params, config);
+    return provider.createInvoice(normalizedParams, config);
   }
 
   async verifyCallback(
@@ -511,6 +528,24 @@ export class PaymentManager {
           currency = raw?.balance_money?.currency;
           break;
         }
+        case "xenith": {
+          raw = await this.getXenithClient(config).getBalances();
+          const items: any[] = raw?.data || (Array.isArray(raw) ? raw : []);
+          const idr = items.find((i: any) => String(i.currency).toUpperCase() === "IDR") || items[0];
+          balance = idr ? parseFloat(idr.availableBalance ?? "0") : undefined;
+          currency = idr?.currency || "IDR";
+          return {
+            success: true,
+            supported: true,
+            provider: "xenith",
+            balance,
+            pendingBalance: idr ? parseFloat(idr.pendingBalance ?? "0") : 0,
+            heldBalance: idr ? parseFloat(idr.heldBalance ?? "0") + parseFloat(idr.frozenBalance ?? "0") : 0,
+            totalBalance: idr ? parseFloat(idr.totalBalance ?? "0") : 0,
+            currency,
+            rawResponse: raw,
+          };
+        }
         default:
           return this.unsupported(false, name, "checkBalance");
       }
@@ -533,14 +568,27 @@ export class PaymentManager {
     try {
       switch (name) {
         case "duitku": {
-          const data = await this.getDuitkuClient(config).disburse({
+          const hasil = await this.getDuitkuClient(config).disburse({
             bankCode: params.bankCode,
             bankAccount: params.accountNumber,
             amount: params.amount,
             purpose: params.description || "Disbursement",
-            merchantOrderId: params.externalId,
+            disburseId: params.providerParams?.disburseId,
+            accountHolderName: params.providerParams?.accountHolderName,
+            custRefNumber: params.providerParams?.custRefNumber,
           });
-          return { success: data?.statusCode === "00", supported: true, provider: name, reference: params.externalId, status: data?.statusMessage, rawResponse: data };
+          // `responseCode: "00"` dari Duitku berarti transfer DISETUJUI, bukan
+          // uang sudah sampai. Status akhirnya hanya diketahui lewat
+          // inquiry status, jadi yang dikembalikan tetap PENDING.
+          return {
+            success: hasil.success,
+            supported: true,
+            provider: name,
+            reference: hasil.disburseId || params.externalId,
+            status: hasil.success ? "PENDING" : "FAILED",
+            error: hasil.error,
+            rawResponse: hasil.rawResponse,
+          };
         }
         case "xendit": {
           const data = await this.getXenditClient(config).createDisbursement({
@@ -565,6 +613,31 @@ export class PaymentManager {
         }
         case "doku": {
           return await this.getDokuProvider().disburse(params, config);
+        }
+        case "xenith": {
+          const data = await this.getXenithClient(config).createPayout({
+            initiatedAmount: Math.round(params.amount),
+            currency: (params.providerParams?.currency || "IDR").toUpperCase(),
+            destinationPayoutMethod: "BANK_TRANSFER",
+            destinationPayoutChannel: params.bankCode.toUpperCase(),
+            destinationPayoutAccount: params.accountNumber,
+            destinationPayoutAccountName: params.accountHolderName || "Beneficiary",
+            referenceCode: params.externalId,
+            customerReference: params.externalId,
+            description: params.description || `Disbursement for ${params.externalId}`,
+            callbackUrl: config.callbackUrl || "https://example.com/payout-callback",
+          });
+          const resData = data?.data || data;
+          const statusRaw = String(resData?.status || "").toUpperCase();
+          const status = statusRaw === "SUCCESS" || statusRaw === "COMPLETED" ? "SUCCESS" : statusRaw === "FAILED" ? "FAILED" : "PENDING";
+          return {
+            success: true,
+            supported: true,
+            provider: "xenith",
+            reference: resData?.id || params.externalId,
+            status,
+            rawResponse: data,
+          };
         }
         default:
           return this.unsupported(false, name, "disburse");

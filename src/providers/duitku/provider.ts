@@ -31,7 +31,8 @@ export class DuitkuProvider extends BasePaymentProvider {
   }
 
   async createInvoice(params: CreateInvoiceParams, config: ProviderConfig): Promise<InvoiceResponse> {
-    const { orderId, amount, productDetails, customer, returnUrl, callbackUrl } = params;
+    const { orderId, amount, customer, returnUrl, callbackUrl } = params;
+    const productDetails = params.productDetails || params.description || "Payment";
     const merchantCode = config.merchantCode || "";
     const apiKey = config.apiKey || "";
     const sandbox = !!config.sandbox;

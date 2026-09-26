@@ -127,8 +127,8 @@ describe("Autodetect & Dynamic Provider Registry", () => {
       expect(b.supportsMethod("paypal", "midtrans")).toBe(false);
     });
 
-    it("listProviders() memuat 20 provider bawaan", () => {
-      expect(buayar().listProviders().length).toBe(20);
+    it("listProviders() memuat 21 provider bawaan", () => {
+      expect(buayar().listProviders().length).toBe(21);
     });
 
     it("registerProviderDescriptor menambahkan provider kustom", () => {

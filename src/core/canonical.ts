@@ -575,6 +575,72 @@ export function toSumopodPaymentMethod(code?: string): string | undefined {
   return code;
 }
 
+export const CANONICAL_TO_XENITH: Record<string, string> = {
+  bca_va: "BCA.VA",
+  mandiri_va: "MDR.VA",
+  bni_va: "BNI.VA",
+  bri_va: "BRI.VA",
+  permata_va: "PTB.VA",
+  cimb_va: "CIMBN.VA",
+  danamon_va: "BDMN.VA",
+  maybank_va: "BMI.VA",
+  bag_va: "BAG.VA",
+  bss_va: "BSS.VA",
+  qris: "QRIS",
+  gopay_qris: "QRIS",
+  shopeepay_qris: "QRIS",
+  nobu_qris: "QRIS",
+  dana: "DANA",
+  ovo: "OVO",
+};
+
+export const XENITH_TO_CANONICAL: Record<string, string> = {
+  "BCA.VA": "bca_va",
+  "MDR.VA": "mandiri_va",
+  "BNI.VA": "bni_va",
+  "BRI.VA": "bri_va",
+  "PTB.VA": "permata_va",
+  "CIMBN.VA": "cimb_va",
+  "BDMN.VA": "danamon_va",
+  "BMI.VA": "maybank_va",
+  "BAG.VA": "bag_va",
+  "BSS.VA": "bss_va",
+  "QRIS": "qris",
+  "DANA": "dana",
+  "OVO": "ovo",
+};
+
+export function toXenithPaymentMethod(code?: string): string | undefined {
+  if (!code) return undefined;
+  const lower = code.toLowerCase().trim();
+  if (CANONICAL_TO_XENITH[lower]) {
+    return CANONICAL_TO_XENITH[lower];
+  }
+  return code;
+}
+
+export const CANONICAL_TO_XENITH_PAYOUT: Record<string, string> = {
+  bca: "CENAIDJA",
+  mandiri: "BMRIIDJA",
+  bni: "BNINIDJA",
+  bri: "BRINIDJA",
+  permata: "BBBAIDJA",
+  cimb: "BNIAIDJA",
+  danamon: "BDINIDJA",
+  bsi: "BSMDIDJA",
+  seabank: "SSPIIDJA",
+  btn: "BBTNIDJA",
+  panin: "PINBIDJA",
+  maybank: "MBBEIDJA",
+  btpn: "SUNIIDJA",
+  neo: "YUDBIDJ1",
+};
+
+export function toXenithPayoutChannel(bankCode: string): string {
+  const lower = bankCode.toLowerCase().trim();
+  return CANONICAL_TO_XENITH_PAYOUT[lower] || bankCode.toUpperCase();
+}
+
 export const CANONICAL_TO_PAYU: Record<string, string> = {
   credit_card: "c",
   blik: "blik",
@@ -607,6 +673,10 @@ export function toCanonicalPaymentMethod(provider: string, code?: string): strin
 
   if (provider.toLowerCase() === "sumopod" && SUMOPOD_TO_CANONICAL[upper]) {
     return SUMOPOD_TO_CANONICAL[upper];
+  }
+
+  if (provider.toLowerCase() === "xenith" && XENITH_TO_CANONICAL[upper]) {
+    return XENITH_TO_CANONICAL[upper];
   }
 
   if (provider.toLowerCase() === "payu" && PAYU_TO_CANONICAL[lower]) {

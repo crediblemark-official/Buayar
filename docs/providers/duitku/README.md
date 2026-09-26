@@ -1,6 +1,6 @@
 # Duitku — Implementasi Buayar
 
-> Audit fidelity: item **DU-1** — lihat [`docs/REVIEW-PG-FIDELITY.md` §5](../../REVIEW-PG-FIDELITY.md).
+> Status: ✅ **LIVE SANDBOX TESTED** (POP, Direct VA BCA, Direct QRIS, checkTransaction) · Audit fidelity: item **DU-1** — lihat [`docs/REVIEW-PG-FIDELITY.md` §5](../../REVIEW-PG-FIDELITY.md).
 
 ## File
 

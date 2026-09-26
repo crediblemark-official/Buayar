@@ -20,6 +20,7 @@ import { FinpayProvider } from "../src/providers/finpay/provider";
 import { NicepayProvider } from "../src/providers/nicepay/provider";
 import { AdyenProvider } from "../src/providers/adyen/provider";
 import { TwoCheckoutProvider } from "../src/providers/twocheckout/provider";
+import { XenithProvider } from "../src/providers/xenith/provider";
 
 /**
  * SECURITY REGRESSION SUITE — fail-closed untuk SEMUA provider.
@@ -62,6 +63,7 @@ const LOOKS_PAID: Record<string, any> = {
   nicepay: { resultCd: "0000", orderId: "FORGED-18", status: "PAID" },
   adyen: { eventCode: "AUTHORISATION", success: "true", merchantReference: "FORGED-19" },
   twocheckout: { ORDERSTATUS: "COMPLETE", ORDERID: "FORGED-20" },
+  xenith: { schemaVersion: "1.0.1", timestamp: "2026-09-26T10:00:00Z", data: { id: "payin-1", referenceCode: "FORGED-21", status: "SUCCESS", paymentAmount: "10000" } },
 };
 
 const CASES: Array<[string, any]> = [
@@ -85,11 +87,12 @@ const CASES: Array<[string, any]> = [
   ["nicepay", new NicepayProvider()],
   ["adyen", new AdyenProvider()],
   ["twocheckout", new TwoCheckoutProvider()],
+  ["xenith", new XenithProvider()],
 ];
 
-describe("SECURITY — fail-closed di 20/20 provider", () => {
-  it("menguji tepat 20 provider", () => {
-    expect(CASES.length).toBe(20);
+describe("SECURITY — fail-closed di 21/21 provider", () => {
+  it("menguji tepat 21 provider", () => {
+    expect(CASES.length).toBe(21);
   });
 
   for (const [name, provider] of CASES) {

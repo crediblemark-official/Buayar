@@ -715,7 +715,7 @@ export class XenditProvider extends BasePaymentProvider {
   }
 
   async checkTransaction(params: CheckTransactionParams, config: ProviderConfig): Promise<CheckTransactionResult> {
-    const { merchantOrderId } = params;
+    const { merchantOrderId, transactionId } = params;
     const apiKey = config.apiKey || config.serverKey || config.secretKey || "";
     // Xendit memakai satu host (`api.xendit.co`) untuk test & live; yang
     // membedakan hanya kunci `xnd_development_` vs `xnd_production_`.
@@ -724,8 +724,11 @@ export class XenditProvider extends BasePaymentProvider {
 
     try {
       // Payment Sessions (`ps-...`) adalah jalur semi-integrasi saat ini.
-      if (merchantOrderId.startsWith("ps-")) {
-        const sessionRes = await httpFetch(`${this.getBaseUrl()}/sessions/${merchantOrderId}`, {
+      const sessionId =
+        (transactionId && transactionId.startsWith("ps-") ? transactionId : "") ||
+        (merchantOrderId && merchantOrderId.startsWith("ps-") ? merchantOrderId : "");
+      if (sessionId) {
+        const sessionRes = await httpFetch(`${this.getBaseUrl()}/sessions/${sessionId}`, {
           method: "GET",
           headers: { "Authorization": authHeader },
         });
@@ -738,7 +741,7 @@ export class XenditProvider extends BasePaymentProvider {
             success: true,
             provider: "xendit",
             orderId: session.reference_id || merchantOrderId,
-            reference: session.payment_session_id || merchantOrderId,
+            reference: session.payment_session_id || sessionId,
             amount: Number(session.amount || 0),
             statusCode: sessionStatus,
             status: paid ? "paid" : expired ? "expired" : "pending",

@@ -1,5 +1,7 @@
 # Razorpay — Implementasi Buayar
 
+> ⚠️ **Status Pengujian:** ⏳ **BELUM TESTED LIVE (Contract / Simulator Only)** — Implementasi telah lulus contract simulator, namun belum pernah diuji langsung ke server sandbox/test mode Razorpay nyata karena menunggu tersedianya kredensial.
+
 > Provider internasional — struktur diaudit sekilas (level gelombang 3); fokus fidelity utama proyek adalah provider Indonesia.
 
 ## File

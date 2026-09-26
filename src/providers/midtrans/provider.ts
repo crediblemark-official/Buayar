@@ -72,7 +72,8 @@ export class MidtransProvider extends BasePaymentProvider {
   }
 
   async createInvoice(params: CreateInvoiceParams, config: ProviderConfig): Promise<InvoiceResponse> {
-    const { orderId, amount, productDetails, customer, returnUrl } = params;
+    const { orderId, amount, customer, returnUrl } = params;
+    const productDetails = params.productDetails || params.description || "Payment";
     const sandbox = !!config.sandbox;
     const integerAmount = Math.round(amount);
     const methodCode = resolvePaymentMethodCode(params.paymentMethod);

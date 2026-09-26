@@ -1,5 +1,6 @@
 # PayPal — Implementasi Buayar
 
+> ⚠️ **Status Pengujian:** ⏳ **BELUM TESTED LIVE (Contract / Simulator Only)** — Implementasi Orders v2 telah lulus contract simulator, namun belum pernah diuji langsung ke server sandbox PayPal nyata karena menunggu input kredensial Client ID & Secret.
 > Provider internasional — struktur diaudit sekilas (level gelombang 3); fokus fidelity utama proyek adalah provider Indonesia.
 
 ## File

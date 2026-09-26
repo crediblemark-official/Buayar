@@ -68,7 +68,8 @@ export function buildCoreChargePayload(
   config: ProviderConfig,
   integerAmount: number
 ): { payload?: any; error?: string } {
-  const { orderId, productDetails, customer, returnUrl } = params;
+  const { orderId, customer, returnUrl } = params;
+  const productDetails = params.productDetails || params.description || "Payment";
 
   const payload: any = {
     transaction_details: {

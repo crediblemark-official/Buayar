@@ -25,7 +25,8 @@ export class OyProvider extends BasePaymentProvider {
   }
 
   async createInvoice(params: CreateInvoiceParams, config: ProviderConfig): Promise<InvoiceResponse> {
-    const { orderId, amount, productDetails, customer, returnUrl } = params;
+    const { orderId, amount, customer, returnUrl } = params;
+    const productDetails = params.productDetails || params.description || "Payment";
     const username = config.clientKey || config.merchantCode || config.merchantId || "";
     const apiKey = config.apiKey || config.serverKey || config.secretKey || "";
     const sandbox = !!config.sandbox;

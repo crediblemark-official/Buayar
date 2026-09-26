@@ -76,29 +76,46 @@ describe("Duitku Provider & Client Integration", () => {
     }
   });
 
-  it("should check merchant balance and inquiry bank account via DuitkuClient", async () => {
+  it("should check disbursement balance and run the two-step inquiry/transfer Duitku flow", async () => {
+    const dipanggil: Array<{ url: string; body: any }> = [];
     const originalFetch = globalThis.fetch;
     (globalThis as any).fetch = async (url: any, options: any) => {
-      if (url.includes("checkBalance")) {
+      const body = JSON.parse(options.body);
+      dipanggil.push({ url, body });
+      if (url.includes("/api/disbursement/checkbalance")) {
         return {
           ok: true,
           status: 200,
           text: async () => JSON.stringify({
+            userId: 3551,
+            balance: 15000000,
+            effectiveBalance: 14900000,
             responseCode: "00",
-            responseMessage: "SUCCESS",
-            balance: "15000000",
+            responseDesc: "Success",
           }),
         } as any;
       }
-      if (url.includes("inquiry")) {
+      if (url.includes("/api/disbursement/inquirysandbox")) {
         return {
           ok: true,
           status: 200,
           text: async () => JSON.stringify({
-            responseCode: "00",
             accountName: "BUDI SANTOSO",
-            bankCode: "BCA",
-            bankAccount: "1234567890",
+            custRefNumber: "000000001278",
+            disburseId: 12345,
+            responseCode: "00",
+            responseDesc: "Success",
+          }),
+        } as any;
+      }
+      if (url.includes("/api/disbursement/transfersandbox")) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () => JSON.stringify({
+            custRefNumber: "000000001278",
+            responseCode: "00",
+            responseDesc: "Success",
           }),
         } as any;
       }
@@ -111,15 +128,41 @@ describe("Duitku Provider & Client Integration", () => {
         merchantCode: "D1234",
         apiKey: "duitku-key",
         sandbox: true,
+        disbursementUserId: 3551,
+        disbursementEmail: "merchant@contoh.id",
+        disbursementSecretKey: "a".repeat(64),
       });
 
       const duitkuClient = buayar.getDuitkuClient();
       const balanceResult = await duitkuClient.checkBalance();
       expect(balanceResult.success).toBe(true);
       expect(balanceResult.balance).toBe(15000000);
+      expect(balanceResult.effectiveBalance).toBe(14900000);
 
-      const inquiryResult = await duitkuClient.inquiryBankAccount("BCA", "1234567890");
-      expect(inquiryResult.accountName).toBe("BUDI SANTOSO");
+      const inquiryResult = await duitkuClient.inquiryBankAccount({
+        bankCode: "014",
+        bankAccount: "8760673566",
+        amount: 50000,
+      });
+      expect(inquiryResult.disburseId).toBe("12345");
+      expect(inquiryResult.accountHolderName).toBe("BUDI SANTOSO");
+
+      // Alur dua langkah: transfer harus menyusul inquiry dan memakai
+      // disburseId yang dikembalikan inquiry.
+      const transfer = await duitkuClient.disburse({
+        bankCode: "014",
+        bankAccount: "8760673566",
+        amount: 50000,
+        purpose: "Gaji",
+      });
+      expect(transfer.success).toBe(true);
+      expect(transfer.step).toBe("transfer");
+
+      const transferCall = dipanggil.find((c) => c.url.includes("transfersandbox"));
+      expect(transferCall).toBeDefined();
+      expect(transferCall!.body.disburseId).toBe("12345");
+      expect(transferCall!.body.accountName).toBe("BUDI SANTOSO");
+      expect(transferCall!.body.custRefNumber).toBe("000000001278");
     } finally {
       globalThis.fetch = originalFetch;
     }

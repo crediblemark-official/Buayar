@@ -45,6 +45,7 @@ import { PayuClient } from "../clients/payu";
 import { BraintreeClient } from "../clients/braintree";
 import { TwoCheckoutClient } from "../clients/twocheckout";
 import { SumopodClient } from "../clients/sumopod";
+import { XenithClient } from "../clients/xenith";
 import { BasePaymentProvider } from "../providers/base";
 import { resolveConfigFromEnv } from "./config";
 import { simulator, BuayarSimulator } from "../simulator";
@@ -348,6 +349,11 @@ export class Buayar {
       if (svixTimestamp) mergedExtra.svixTimestamp = Array.isArray(svixTimestamp) ? svixTimestamp[0] : svixTimestamp;
       if (svixSignature) mergedExtra.svixSignature = Array.isArray(svixSignature) ? svixSignature[0] : svixSignature;
       if (sumopodToken) mergedExtra.webhookTokenHeader = Array.isArray(sumopodToken) ? sumopodToken[0] : sumopodToken;
+      // Xenith
+      const xenithSig = headers["x-xenith-signature"] || headers["X-Xenith-Signature"];
+      const xenithTs = headers["x-xenith-timestamp"] || headers["X-Xenith-Timestamp"];
+      if (xenithSig) mergedExtra.xenithSignature = Array.isArray(xenithSig) ? xenithSig[0] : xenithSig;
+      if (xenithTs) mergedExtra.xenithTimestamp = Array.isArray(xenithTs) ? xenithTs[0] : xenithTs;
     }
 
     const overrideProvider = (configOverride as any)?.provider;
@@ -602,6 +608,93 @@ export class Buayar {
 
   getSumopodClient(configOverride?: Partial<ProviderConfig>): SumopodClient {
     return new SumopodClient({ ...this.config, ...configOverride });
+  }
+
+  getXenithClient(configOverride?: Partial<ProviderConfig>): XenithClient {
+    return new XenithClient({ ...this.config, ...configOverride });
+  }
+
+  // ─── Xenith-Specific Extended API ──────────────────────────────────────────
+
+  /**
+   * Batch Disbursement Xenith — kirim banyak payout sekaligus.
+   * Setiap item di-submit secara serial dan hasilnya dikembalikan dalam satu array.
+   */
+  async batchDisburse(
+    items: Array<{
+      externalId: string;
+      bankCode: string;
+      accountNumber: string;
+      accountHolderName?: string;
+      amount: number;
+      description?: string;
+    }>,
+    configOverride?: Partial<ProviderConfig>
+  ) {
+    const config: ProviderConfig = { ...this.config, ...configOverride };
+    return this.manager.getXenithProvider().batchDisburse(items, config);
+  }
+
+  /**
+   * List semua transaksi Xenith dalam satu feed cursor-paginated
+   * Mencakup: PAY_IN, PAY_OUT, SETTLEMENT, TOP_UP, PAY_IN_CREDIT, BALANCE_ADJUSTMENT, PAYMENT_LINK
+   * Catatan: tidak mendukung filter `order` — gunakan createdTimeGte/Lte untuk filter rentang waktu
+   */
+  async listXenithTransactions(
+    params?: { limit?: number; cursor?: string; createdTimeGte?: string; createdTimeLte?: string },
+    configOverride?: Partial<ProviderConfig>
+  ) {
+    const config: ProviderConfig = { ...this.config, ...configOverride };
+    return this.manager.getXenithProvider().listTransactions(params || {}, config);
+  }
+
+  /**
+   * List Pay Out Xenith dengan paginasi cursor
+   */
+  async listXenithPayOuts(
+    params?: { limit?: number; order?: "ASC" | "DESC"; cursor?: string; status?: string },
+    configOverride?: Partial<ProviderConfig>
+  ) {
+    const config: ProviderConfig = { ...this.config, ...configOverride };
+    return this.manager.getXenithProvider().listPayOuts(params || {}, config);
+  }
+
+  /**
+   * List Pay In Xenith dengan paginasi cursor
+   */
+  async listXenithPayIns(
+    params?: { limit?: number; order?: "ASC" | "DESC"; cursor?: string; status?: string },
+    configOverride?: Partial<ProviderConfig>
+  ) {
+    const config: ProviderConfig = { ...this.config, ...configOverride };
+    return this.manager.getXenithProvider().listPayIns(params || {}, config);
+  }
+
+  /**
+   * List Payment Link Xenith dengan paginasi cursor
+   */
+  async listXenithPaymentLinks(
+    params?: { limit?: number; order?: "ASC" | "DESC"; cursor?: string; status?: string },
+    configOverride?: Partial<ProviderConfig>
+  ) {
+    const config: ProviderConfig = { ...this.config, ...configOverride };
+    return this.manager.getXenithProvider().listPaymentLinks(params || {}, config);
+  }
+
+  /**
+   * Expire (batalkan) Payment Link Xenith yang masih aktif
+   */
+  async expireXenithPaymentLink(id: string, configOverride?: Partial<ProviderConfig>) {
+    const config: ProviderConfig = { ...this.config, ...configOverride };
+    return this.manager.getXenithProvider().expirePaymentLink(id, config);
+  }
+
+  /**
+   * Dapatkan detail Pay Out Xenith berdasarkan ID
+   */
+  async getXenithPayOut(id: string, configOverride?: Partial<ProviderConfig>) {
+    const config: ProviderConfig = { ...this.config, ...configOverride };
+    return this.manager.getXenithProvider().getPayOut(id, config);
   }
 }
 

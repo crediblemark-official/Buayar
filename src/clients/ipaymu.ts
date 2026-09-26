@@ -59,6 +59,11 @@ export class IpaymuClient {
 
   /**
    * Cek saldo merchant iPaymu
+   *
+   * `MerchantBalance` yang bernilai 0 itu sah, dan harus dikembalikan sebagai
+   * `0`. Versi sebelumnya memakai `data.Data?.MerchantBalance ? … : undefined`,
+   * sehingga saldo nol ikut bernilai falsy dan dikembalikan `undefined` —
+   * pemanggil lalu mengira saldo tidak terbaca. Diperiksa dengan `!= null`.
    */
   async checkBalance(): Promise<{ success: boolean; balance?: number; rawResponse: any; error?: string }> {
     try {
@@ -66,7 +71,7 @@ export class IpaymuClient {
       const data = await this.request("POST", "/balance", payload);
 
       const success = data.Status === 200 || data.status === 200;
-      const balance = data.Data?.MerchantBalance ? Number(data.Data.MerchantBalance) : undefined;
+      const balance = data.Data?.MerchantBalance != null ? Number(data.Data.MerchantBalance) : undefined;
 
       return {
         success,
@@ -77,7 +82,7 @@ export class IpaymuClient {
       return {
         success: false,
         rawResponse: null,
-        error: e.message || "Failed to check iPaymu balance",
+        error: e.message || "Gagal mengecek saldo iPaymu",
       };
     }
   }

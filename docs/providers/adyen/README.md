@@ -1,5 +1,6 @@
 # Adyen — Implementasi Buayar
 
+> ⚠️ **Status Pengujian:** ⏳ **BELUM TESTED LIVE (Contract / Simulator Only)** — Implementasi Adyen Checkout telah lulus contract simulator, namun belum pernah diuji langsung ke server test Adyen nyata karena menunggu input kredensial test account.
 > Provider internasional — struktur diaudit sekilas (level gelombang 3); fokus fidelity utama proyek adalah provider Indonesia.
 
 ## File

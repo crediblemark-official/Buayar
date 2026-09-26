@@ -1,6 +1,6 @@
 # SumoPod — Implementasi Buayar
 
-> Provider internasional (induk SumoPay/Midtrans reseller) — struktur diaudit sekilas; ada dokumen terpisah: [`docs/sumopod.md`](../sumopod.md).
+> Status: ✅ **LIVE TESTED** · Payment Link & QRIS Gateway resmi SumoPod (`api-pay.sumopod.com`) — terintegrasi dengan verifikasi webhook Svix / X-Webhook-Token. Panduan lengkap: [`docs/sumopod.md`](../sumopod.md).
 
 ## File
 

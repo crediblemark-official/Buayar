@@ -37,6 +37,8 @@ export * from "./providers/oy/provider";
 export * from "./providers/oy/signature";
 export * from "./providers/sumopod/provider";
 export * from "./providers/sumopod/signature";
+export * from "./providers/xenith/provider";
+export * from "./providers/xenith/signature";
 
 // ─── International Providers ─────────────────────────────────────────────
 export * from "./providers/stripe/provider";
@@ -71,6 +73,7 @@ export * from "./clients/finpay";
 export * from "./clients/nicepay";
 export * from "./clients/oy";
 export * from "./clients/sumopod";
+export * from "./clients/xenith";
 
 // ─── International Clients ───────────────────────────────────────────────
 export * from "./clients/stripe";

@@ -1,5 +1,6 @@
 # Stripe — Implementasi Buayar
 
+> ⚠️ **Status Pengujian:** ⏳ **BELUM TESTED LIVE (Contract / Simulator Only)** — Implementasi telah lulus contract simulator, namun belum pernah diuji langsung ke server test mode Stripe nyata karena menunggu input kredensial (`sk_test_...`).
 > Provider internasional — struktur diaudit sekilas (level gelombang 3); fokus fidelity utama proyek adalah provider Indonesia.
 
 ## File

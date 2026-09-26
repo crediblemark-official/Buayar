@@ -61,6 +61,13 @@ export class XenditClient {
   /**
    * Cek Saldo Merchant Xendit
    */
+  /**
+   * Cek saldo merchant Xendit (`GET /balance?account_type=…`).
+   *
+   * Endpoint ini butuh API key dengan izin "Balance Read". Tanpa izin itu Xendit
+   * menjawab `The API key is forbidden to perform this request` — pesan resmi
+   * dari Xendit yang ditambahkan di sini supaya langsung bisa ditindaklanjuti.
+   */
   async checkBalance(accountType: "CASH" | "HOLDING" | "TAX" = "CASH"): Promise<{ success: boolean; balance?: number; rawResponse: any; error?: string }> {
     try {
       const data = await this.request("GET", `/balance?account_type=${accountType}`);
@@ -70,10 +77,13 @@ export class XenditClient {
         rawResponse: data,
       };
     } catch (e: any) {
+      const pesan = e.message || "Gagal mengecek saldo Xendit";
       return {
         success: false,
         rawResponse: null,
-        error: e.message || "Failed to check Xendit balance",
+        error: /forbidden/i.test(pesan)
+          ? `${pesan} — endpoint /balance butuh API key dengan izin "Balance Read"; tambahkan izin itu di dashboard Xendit.`
+          : pesan,
       };
     }
   }

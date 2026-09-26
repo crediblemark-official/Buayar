@@ -107,7 +107,8 @@ export class DokuProvider extends BasePaymentProvider {
   }
 
   async createInvoice(params: CreateInvoiceParams, config: ProviderConfig): Promise<InvoiceResponse> {
-    const { orderId, amount, productDetails, customer, returnUrl } = params;
+    const { orderId, amount, customer, returnUrl } = params;
+    const productDetails = params.productDetails || params.description || "Payment";
     const clientId = config.merchantCode || config.merchantId || config.clientKey || "";
     const secretKey = config.apiKey || config.serverKey || config.secretKey || "";
     const sandbox = !!config.sandbox;
@@ -1433,15 +1434,23 @@ export class DokuProvider extends BasePaymentProvider {
   async validateBankAccount(params: ValidateBankAccountParams, config: ProviderConfig): Promise<ValidateBankAccountResult> {
     try {
       const client = new DokuClient(config);
-      const data = await client.validateBankAccount(params);
-      const accountHolderName = data.beneficiary_name || data.account_name || data.name || data.beneficiaryAccountName;
+      // DokuClient sudah fail-closed: melempar bila field wajib kurang atau
+      // DOKU tidak mengembalikan `sessionId`. Jadi `success: true` di bawah
+      // hanya tercapai bila benar-benar ada sessionId.
+      //
+      // Versi sebelumnya memakai `success: true` tanpa syarat apa pun, jadi
+      // respons 404 "No static resource" pun terbaca sebagai validasi berhasil
+      // — merchant menganggap nama pemilik rekening sudah terkonfirmasi padahal
+      // tidak ada yang diverifikasi.
+      const hasil = await client.validateBankAccount(params);
       return {
         success: true,
         provider: "doku",
         bankCode: params.bankCode,
         accountNumber: params.accountNumber,
-        accountHolderName,
-        rawResponse: data,
+        accountHolderName: hasil.accountHolderName,
+        sessionId: hasil.sessionId,
+        rawResponse: hasil.rawResponse,
       };
     } catch (e: any) {
       return {
@@ -1450,7 +1459,7 @@ export class DokuProvider extends BasePaymentProvider {
         bankCode: params.bankCode,
         accountNumber: params.accountNumber,
         rawResponse: null,
-        error: e.message || "Failed to validate bank account in DOKU",
+        error: e.message || "Gagal memvalidasi rekening bank di DOKU",
       };
     }
   }
@@ -1500,7 +1509,8 @@ export class DokuProvider extends BasePaymentProvider {
         success: false,
         supported: true,
         provider: "doku",
-        rawResponse: null,
+        status: "FAILED",
+        rawResponse: e?.raw ?? null,
         error: e.message || "DOKU disbursement failed",
       };
     }

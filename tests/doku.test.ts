@@ -1,5 +1,10 @@
 import { describe, expect, it } from "bun:test";
+import { generateKeyPairSync } from "node:crypto";
 import { Buayar } from "../src";
+
+const RSA_TEST_KEY = generateKeyPairSync("rsa", { modulusLength: 2048 }).privateKey
+  .export({ type: "pkcs8", format: "pem" })
+  .toString();
 
 describe("DOKU Provider & Client Integration", () => {
   it("should resolve DOKU config from environment variables", () => {
@@ -274,16 +279,23 @@ describe("DOKU Provider & Client Integration", () => {
 
     (globalThis as any).fetch = async (url: any, options: any) => {
       interceptedUrl = String(url);
+      if (interceptedUrl.includes("/authorization/v1/access-token/b2b")) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () => JSON.stringify({ accessToken: "token-b2b", expiresIn: 900 }),
+        } as any;
+      }
       interceptedBody = JSON.parse(options.body);
 
       return {
         ok: true,
         status: 200,
         text: async () => JSON.stringify({
-          beneficiary_name: "Budi Santoso",
-          beneficiary_bank_code: interceptedBody.beneficiary_bank_code,
-          beneficiary_account_number: interceptedBody.beneficiary_account_number,
-          status: "SUCCESS",
+          responseCode: "2002700",
+          responseMessage: "Success",
+          beneficiaryAccountName: "Budi Santoso",
+          sessionId: "SESS-123456",
         }),
       } as any;
     };
@@ -293,20 +305,25 @@ describe("DOKU Provider & Client Integration", () => {
         provider: "doku",
         merchantCode: "MALL-ID-123",
         apiKey: "SK-secret-123",
+        privateKey: RSA_TEST_KEY,
         sandbox: true,
       });
 
       const res = await buayar.validateBankAccount({
         bankCode: "BCA",
         accountNumber: "1234567890",
+        accountHolderName: "Budi Santoso",
+        amount: 100000,
+        customerNumber: "081234567890",
       });
 
       expect(res.success).toBe(true);
       expect(res.provider).toBe("doku");
       expect(res.accountHolderName).toBe("Budi Santoso");
-      expect(interceptedUrl).toContain("/kirim-doku/v1/account-inquiry");
-      expect(interceptedBody.beneficiary_bank_code).toBe("BCA");
-      expect(interceptedBody.beneficiary_account_number).toBe("1234567890");
+      expect(res.sessionId).toBe("SESS-123456");
+      expect(interceptedUrl).toContain("/snap/v1.1/emoney/bank-account-inquiry");
+      expect(interceptedBody.additionalInfo.beneficiaryBankCode).toBe("BCA");
+      expect(interceptedBody.beneficiaryAccountNumber).toBe("1234567890");
     } finally {
       globalThis.fetch = originalFetch;
     }
@@ -323,26 +340,24 @@ describe("DOKU Provider & Client Integration", () => {
         body: options.body ? JSON.parse(options.body) : undefined,
       });
 
-      if (options.method === "POST") {
+      if (String(url).includes("/authorization/v1/access-token/b2b")) {
         return {
           ok: true,
           status: 200,
-          text: async () => JSON.stringify({
-            status: "SUCCESS",
-            partner_reference_no: "TRX-PAYOUT-001",
-            amount: { value: 500000, currency: "IDR" },
-          }),
-        } as any;
-      } else {
-        return {
-          ok: true,
-          status: 200,
-          text: async () => JSON.stringify({
-            status: "SETTLED",
-            partner_reference_no: "TRX-PAYOUT-001",
-          }),
+          text: async () => JSON.stringify({ accessToken: "token-b2b", expiresIn: 900 }),
         } as any;
       }
+
+      return {
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify({
+          responseCode: "2004300",
+          responseMessage: "Successful",
+          partnerReferenceNo: "TRX-PAYOUT-001",
+          amount: { value: "500000.00", currency: "IDR" },
+        }),
+      } as any;
     };
 
     try {
@@ -350,6 +365,7 @@ describe("DOKU Provider & Client Integration", () => {
         provider: "doku",
         merchantCode: "MALL-ID-123",
         apiKey: "SK-secret-123",
+        privateKey: RSA_TEST_KEY,
         sandbox: true,
       });
 
@@ -360,18 +376,19 @@ describe("DOKU Provider & Client Integration", () => {
         bankCode: "BNI",
         accountNumber: "9876543210",
         accountHolderName: "Siti Aminah",
+        customerNumber: "081234567890",
+        sessionId: "SESS-PRE-INQUIRY",
         amount: 500000,
         description: "Bonus tahunan",
       });
 
-      expect(disburseRes.status).toBe("SUCCESS");
-      expect(disburseRes.partner_reference_no).toBe("TRX-PAYOUT-001");
-      expect(calls[0].url).toContain("/kirim-doku/v1/transfer");
-      expect(calls[0].body.amount.value).toBe(500000);
+      expect(disburseRes.responseCode).toBe("2004300");
+      expect(disburseRes.partnerReferenceNo).toBe("TRX-PAYOUT-001");
+      const transferCall = calls.find(c => c.url.includes("/snap/v1.1/emoney/transfer-bank"));
+      expect(transferCall).toBeDefined();
+      expect(transferCall!.body.amount.value).toBe("500000.00");
 
-      const statusRes = await client.checkPayoutStatus("TRX-PAYOUT-001");
-      expect(statusRes.status).toBe("SETTLED");
-      expect(calls[1].url).toContain("/kirim-doku/v1/transfer/status/TRX-PAYOUT-001");
+      await expect(client.checkPayoutStatus("TRX-PAYOUT-001")).rejects.toThrow(/tidak menyediakan endpoint status/);
     } finally {
       globalThis.fetch = originalFetch;
     }

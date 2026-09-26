@@ -1,6 +1,6 @@
 # Midtrans — Implementasi Buayar
 
-> Audit fidelity: item **M-1 … M-15** — lihat tabel di [`docs/REVIEW-PG-FIDELITY.md` §1](../../REVIEW-PG-FIDELITY.md).
+> Status: ✅ **LIVE SANDBOX TESTED** (Snap Invoice, Core API Direct BCA VA, Direct QRIS, checkTransaction, 16 probe channels) · Audit fidelity: item **M-1 … M-15** — lihat tabel di [`docs/REVIEW-PG-FIDELITY.md` §1](../../REVIEW-PG-FIDELITY.md).
 
 ## File
 

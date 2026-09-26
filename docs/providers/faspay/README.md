@@ -1,5 +1,6 @@
 # Faspay — Implementasi Buayar
 
+> ⚠️ **Status Pengujian:** ⏳ **BELUM TESTED LIVE (Contract / Simulator Only)** — Implementasi debit registration telah sesuai spesifikasi resmi & lulus contract simulator, namun belum pernah ditembakkan ke sandbox Faspay nyata karena menunggu tersedianya kredensial (`FASPAY_MERCHANT_ID`, `FASPAY_USER_ID`, `FASPAY_PASSWORD`).
 > Audit fidelity: item **F-1** (verified, tanpa perubahan) — lihat [`docs/REVIEW-PG-FIDELITY.md` §5](../../REVIEW-PG-FIDELITY.md).
 
 ## File

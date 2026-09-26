@@ -1,5 +1,10 @@
 import { describe, expect, it, afterEach } from "bun:test";
+import { generateKeyPairSync } from "node:crypto";
 import { Buayar } from "../src";
+
+const RSA_TEST_KEY = generateKeyPairSync("rsa", { modulusLength: 2048 }).privateKey
+  .export({ type: "pkcs8", format: "pem" })
+  .toString();
 
 let originalFetch: any;
 
@@ -99,8 +104,20 @@ describe("Unified Operations — Disburse", () => {
   });
 
   it("should disburse via Duitku", async () => {
-    mockFetch(() => ({ statusCode: "00", statusMessage: "Success" }));
-    const buayar = new Buayar({ provider: "duitku", apiKey: "k", merchantCode: "M" });
+    mockFetch((url: any) => {
+      if (String(url).includes("/inquiry")) {
+        return { responseCode: "00", responseDesc: "Success", disburseId: "DISB-DUITKU-002", custRefNumber: "REF-002", accountName: "Budi" };
+      }
+      return { responseCode: "00", responseDesc: "Success" };
+    });
+    const buayar = new Buayar({
+      provider: "duitku",
+      apiKey: "k",
+      merchantCode: "M",
+      disbursementUserId: 3551,
+      disbursementEmail: "merchant@contoh.id",
+      disbursementSecretKey: "a".repeat(64),
+    });
     const result = await buayar.disburse({
       externalId: "DISB-002",
       bankCode: "BCA",
@@ -109,17 +126,26 @@ describe("Unified Operations — Disburse", () => {
     });
     expect(result.supported).toBe(true);
     expect(result.success).toBe(true);
+    expect(result.reference).toBe("DISB-DUITKU-002");
+    expect(result.status).toBe("PENDING");
   });
 
   it("should disburse via DOKU", async () => {
-    mockFetch(() => ({
-      status: "SUCCESS",
-      partner_reference_no: "DISB-DOKU-001",
-    }));
+    mockFetch((url: any) => {
+      if (String(url).includes("/authorization/v1/access-token/b2b")) {
+        return { accessToken: "tok-test", expiresIn: 900 };
+      }
+      return {
+        responseCode: "2004300",
+        responseMessage: "Successful",
+        partnerReferenceNo: "DISB-DOKU-001",
+      };
+    });
     const buayar = new Buayar({
       provider: "doku",
       merchantCode: "MALL-ID-123",
       apiKey: "SK-secret-123",
+      privateKey: RSA_TEST_KEY,
     });
     const result = await buayar.disburse({
       externalId: "DISB-DOKU-001",
@@ -127,27 +153,44 @@ describe("Unified Operations — Disburse", () => {
       accountNumber: "1234567890",
       accountHolderName: "Budi",
       amount: 250000,
+      customerNumber: "081234567890",
+      sessionId: "SESS-DOKU-001",
       description: "Payout gaji",
     });
     expect(result.supported).toBe(true);
     expect(result.success).toBe(true);
     expect(result.provider).toBe("doku");
     expect(result.reference).toBe("DISB-DOKU-001");
+    expect(result.status).toBe("SUCCESS");
   });
 
   describe("DOKU payout (Kirim DOKU) — responseCode-based, fail-closed", () => {
     const payout = (response: any) => {
-      mockFetch(() => response);
+      mockFetch((url: any) => {
+        if (String(url).includes("/authorization/v1/access-token/b2b")) {
+          return { accessToken: "tok-test", expiresIn: 900 };
+        }
+        const code = String(response?.responseCode ?? "");
+        const is4xx = code.startsWith("4");
+        return {
+          ok: !is4xx,
+          status: is4xx ? Number(code.slice(0, 3)) : 200,
+          body: response,
+        };
+      });
       return new Buayar({
         provider: "doku",
         merchantCode: "MALL-ID-123",
         apiKey: "SK-secret-123",
+        privateKey: RSA_TEST_KEY,
       }).disburse({
         externalId: "DISB-DOKU-CODE",
         bankCode: "BCA",
         accountNumber: "1234567890",
         accountHolderName: "Budi",
         amount: 250000,
+        customerNumber: "081234567890",
+        sessionId: "SESS-DOKU-CODE",
         description: "Payout gaji",
       });
     };

@@ -1,6 +1,8 @@
 # Prismalink — Implementasi Buayar
 
-> Status: **⏸ BLOCKED (FP-1)** — dokumentasi resmi tidak ditemukan lewat pencarian; payload/signature **belum dapat divalidasi**. Tidak ada perubahan kode atas kode warisan. Butuh dokumen resmi atau akun merchant Prismalink (VALINK).
+> ⚠️ **Status Pengujian:** ⏳ **BELUM TESTED LIVE (Dokumentasi Tertutup / Butuh Akses Merchant)** — Payload & signature belum dapat diverifikasi secara live karena dokumentasi resmi Prismalink bersifat tertutup.
+
+> Status Audit: **⏸ BLOCKED (FP-1)** — dokumentasi resmi tidak ditemukan lewat pencarian; payload/signature **belum dapat divalidasi**. Tidak ada perubahan kode atas kode warisan. Butuh dokumen resmi atau akun merchant Prismalink (VALINK).
 
 ## File
 

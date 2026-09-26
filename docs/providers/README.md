@@ -23,35 +23,47 @@ scripts/probe/
 ├── ipaymu/channels.ts
 └── xendit/channels.ts
 
-tests/                           # 396 test (bun test), termasuk webhook fail-closed 20/20
+tests/                           # 535 test (bun test), termasuk webhook fail-closed 21/21
 ```
 
 ## Status per provider (rincian → klik nama)
 
+### 🟢 Provider Terverifikasi Live di Sandbox / Production (7)
+Provider yang sudah diuji langsung dengan kredensial sandbox nyata (`sandbox.md`):
+
 | Provider | Audit fidelity | Verifikasi live | Dokumentasi |
 |---|---|---|---|
-| **DOKU (Jokul)** | ✅ D-1…D-17 | ✅ Terdalam: MCP 35 tool, 17 VA, e2e BTN & BNC terbayar | [doku](./doku/README.md) |
-| **Midtrans** | ✅ M-1…M-15 + BI-SNAP | ✅ 16/19 kanal (ovo/dana/linkaja menunggu aktivasi) | [midtrans](./midtrans/README.md) |
-| **Xendit** | ✅ X-1…X-8 | ✅ v3 11/11, v2 11/11 (4 kanal tak tersedia di akun) | [xendit](./xendit/README.md) |
-| **iPaymu** | ✅ I-1…I-9 | ✅ 14/19 kanal (4 partner-side) | [ipaymu](./ipaymu/README.md) |
-| Duitku | ✅ DU-1 | ⏸ belum ada probe live | [duitku](./duitku/README.md) |
-| Nicepay | ✅ N-1/N-2 | ⏸ belum ada probe live | [nicepay](./nicepay/README.md) |
-| Faspay | ✅ F-1 (verified) | ⏸ belum ada probe live | [faspay](./faspay/README.md) |
-| OY! | ⏳ gelombang berikutnya | ⏸ butuh akun sandbox | [oy](./oy/README.md) |
-| Finpay | ⏸ BLOCKED (FP-1) | ⏸ docs resmi tak ditemukan | [finpay](./finpay/README.md) |
-| Prismalink | ⏸ BLOCKED (FP-1) | ⏸ docs resmi tak ditemukan | [prismalink](./prismalink/README.md) |
-| Stripe | 🔎 sekilas (gel. 3) | ⏸ | [stripe](./stripe/README.md) |
-| PayPal | 🔎 sekilas (gel. 3) | ⏸ | [paypal](./paypal/README.md) |
-| Adyen | 🔎 sekilas (gel. 3) | ⏸ | [adyen](./adyen/README.md) |
-| Checkout.com | 🔎 sekilas (gel. 3) | ⏸ | [checkoutcom](./checkoutcom/README.md) |
-| Razorpay | 🔎 sekilas (gel. 3) | ⏸ | [razorpay](./razorpay/README.md) |
-| Square | 🔎 sekilas (gel. 3) | ⏸ | [square](./square/README.md) |
-| PayU | 🔎 sekilas (gel. 3) | ⏸ | [payu](./payu/README.md) |
-| Braintree | 🔎 sekilas (gel. 3) | ⏸ | [braintree](./braintree/README.md) |
-| 2Checkout | 🔎 sekilas (gel. 3) | ⏸ | [twocheckout](./twocheckout/README.md) |
-| SumoPod | 🔎 sekilas (gel. 3) | ⏸ | [sumopod](./sumopod/README.md) + [sumopod.md](../sumopod.md) |
+| **DOKU (Jokul/SNAP)** | ✅ D-1…D-17 | ✅ **TESTED LIVE** (Jokul v2 VA, Direct VA 6 bank, MCP 35 tools, SNAP Kirim DOKU) | [doku](./doku/README.md) |
+| **Midtrans** | ✅ M-1…M-15 + BI-SNAP | ✅ **TESTED LIVE** (16/19 kanal Core API, Direct VA BCA/BNI/BRI/Mandiri/Permata/BSI, QRIS, Snap) | [midtrans](./midtrans/README.md) |
+| **Xendit** | ✅ X-1…X-8 | ✅ **TESTED LIVE** (11/11 kanal v3 & v2, Payment Sessions, Direct VA BCA/BNI/BRI/Mandiri, QRIS) | [xendit](./xendit/README.md) |
+| **iPaymu** | ✅ I-1…I-9 | ✅ **TESTED LIVE** (13/19 kanal Direct Payment, Direct VA BCA/BNI/Mandiri/Permata/CIMB/Muamalat, QRIS) | [ipaymu](./ipaymu/README.md) |
+| **Duitku** | ✅ DU-1 | ✅ **TESTED LIVE** (POP Invoice, Direct Inquiry BCA VA, Direct QRIS, checkTransaction) | [duitku](./duitku/README.md) |
+| **Xenith** | ✅ Spec v1 (OpenAPI) | ✅ **TESTED LIVE** (Hosted Link, Direct Pay In QRIS/VA, Balances, 120 Bank Payouts, Webhook) | [xenith](./xenith/README.md) |
+| **SumoPod** | ✅ Spec v1 | ✅ **TESTED LIVE** (Payments v1 & QRIS API sandbox/live) | [sumopod](./sumopod/README.md) + [sumopod.md](../sumopod.md) |
 
-Legenda: ✅ diperbaiki & dikunci test · 🔎 diaudit sekilas, belum pendalaman per-channel · ⏸ blocked/menunggu akses · ⏳ masuk gelombang berikutnya.
+---
+
+### ⏳ Provider Belum Diuji Live Sandbox / Simulator Only (14)
+Provider yang implementasinya telah selesai & terkunci 535 test unit/simulator, tetapi **belum pernah ditembakkan ke akun sandbox nyata** karena menunggu tersedianya kredensial:
+| Nicepay | ✅ N-1/N-2 | ⏳ **BELUM TESTED LIVE** | Butuh akun sandbox Nicepay (`NICEPAY_IMID`, `NICEPAY_KEY`) | [nicepay](./nicepay/README.md) |
+| Faspay | ✅ F-1 (verified) | ⏳ **BELUM TESTED LIVE** | Butuh akun sandbox Faspay (`FASPAY_MERCHANT_ID`, `FASPAY_USER_ID`, `FASPAY_PASSWORD`) | [faspay](./faspay/README.md) |
+| OY! Bisnis | ⏳ Gelombang 3 | ⏳ **BELUM TESTED LIVE** | Butuh akun sandbox OY! (`OY_USERNAME`, `OY_API_KEY`) | [oy](./oy/README.md) |
+| Finpay | ⏸ BLOCKED (FP-1) | ⏸️ **BELUM TESTED LIVE** | Dokumentasi payload resmi tertutup (butuh dokumen integrasi & akun merchant) | [finpay](./finpay/README.md) |
+| Prismalink | ⏸ BLOCKED (FP-1) | ⏸️ **BELUM TESTED LIVE** | Dokumentasi payload resmi tertutup (butuh dokumen integrasi & akun merchant) | [prismalink](./prismalink/README.md) |
+| Stripe | 🔎 Terintegrasi | ⏳ **BELUM TESTED LIVE** | Butuh API Key sandbox (`sk_test_...`) | [stripe](./stripe/README.md) |
+| PayPal | 🔎 Terintegrasi | ⏳ **BELUM TESTED LIVE** | Butuh PayPal Developer Sandbox Client ID & Secret | [paypal](./paypal/README.md) |
+| Adyen | 🔎 Terintegrasi | ⏳ **BELUM TESTED LIVE** | Butuh Adyen Test Account (`API Key`, `Merchant Account`, `HMAC Key`) | [adyen](./adyen/README.md) |
+| Checkout.com | 🔎 Terintegrasi | ⏳ **BELUM TESTED LIVE** | Butuh Checkout.com Sandbox Secret & Public Key | [checkoutcom](./checkoutcom/README.md) |
+| Razorpay | 🔎 Terintegrasi | ⏳ **BELUM TESTED LIVE** | Butuh Razorpay Test Key ID & Key Secret | [razorpay](./razorpay/README.md) |
+| Square | 🔎 Terintegrasi | ⏳ **BELUM TESTED LIVE** | Butuh Square Sandbox Access Token & App ID | [square](./square/README.md) |
+| PayU | 🔎 Terintegrasi | ⏳ **BELUM TESTED LIVE** | Butuh PayU Sandbox POS ID & MD5 Key | [payu](./payu/README.md) |
+| Braintree | 🔎 Terintegrasi | ⏳ **BELUM TESTED LIVE** | Butuh Braintree Sandbox Merchant ID, Public & Private Key | [braintree](./braintree/README.md) |
+| 2Checkout | 🔎 Terintegrasi | ⏳ **BELUM TESTED LIVE** | Butuh 2Checkout Sandbox Merchant Code & Secret Key | [twocheckout](./twocheckout/README.md) |
+
+Legenda:
+- ✅ **TESTED LIVE**: Telah diverifikasi langsung menghasilkan transaksi nyata di server sandbox provider.
+- ⏳ **BELUM TESTED LIVE**: Kode terimplementasi dan lulus contract simulator, menunggu input kredensial sandbox nyata.
+- ⏸️ **BLOCKED**: Dokumentasi resmi tidak tersedia bebas secara publik; butuh akses merchant langsung untuk validasi payload.
 
 ## Cara membaca dokumentasi tiap provider
 

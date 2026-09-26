@@ -4,8 +4,8 @@ import { Buayar, providerRegistry, DEFAULT_SIMULATOR_SECRETS } from "../src";
 const ALL_PROVIDERS = providerRegistry.names();
 
 describe("K4 — Simulator & Sandbox Contract Testing", () => {
-  it("verifies 20/20 providers are covered", () => {
-    expect(ALL_PROVIDERS.length).toBe(20);
+  it("verifies 21/21 providers are covered", () => {
+    expect(ALL_PROVIDERS.length).toBe(21);
   });
 
   describe("Invoice Creation in Simulate Mode (BUAYAR_SIMULATE=1)", () => {

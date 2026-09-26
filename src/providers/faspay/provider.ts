@@ -24,7 +24,8 @@ export class FaspayProvider extends BasePaymentProvider {
   }
 
   async createInvoice(params: CreateInvoiceParams, config: ProviderConfig): Promise<InvoiceResponse> {
-    const { orderId, amount, productDetails, customer, returnUrl, callbackUrl } = params;
+    const { orderId, amount, customer, returnUrl, callbackUrl } = params;
+    const productDetails = params.productDetails || params.description || "Payment";
     const merchantId = config.merchantCode || config.merchantId || "";
     const userId = config.clientKey || config.extra?.userId || merchantId;
     const password = config.apiKey || config.serverKey || config.secretKey || "";

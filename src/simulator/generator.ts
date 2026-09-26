@@ -32,6 +32,7 @@ export const DEFAULT_SIMULATOR_SECRETS: Record<string, Record<string, string>> =
   braintree: { secretKey: "sim_bt_priv", clientKey: "sim_bt_pub" },
   twocheckout: { apiKey: "sim_2co_secret_word" },
   sumopod: { secretKey: "whsec_MfKQ9r8G1N+Z4QJkL8xU2vW5yA=" },
+  xenith: { secretKey: "sim_xenith_secret_key_123" },
 };
 
 function sha256Hex(str: string): string {
@@ -528,6 +529,39 @@ export function generateSimulatedWebhook(
       headers["svix-id"] = svixId;
       headers["svix-timestamp"] = timestamp;
       headers["svix-signature"] = `v1,${sig}`;
+      break;
+    }
+
+    case "xenith": {
+      const secret = secrets.secretKey || DEFAULT_SIMULATOR_SECRETS.xenith.secretKey;
+      const timestamp = new Date().toISOString();
+      const urlPath = "/v1/webhook";
+
+      body = {
+        schemaVersion: "1.0.1",
+        timestamp,
+        data: {
+          id: "payin-sim-" + params.orderId,
+          initiatedAmount: String(params.amount),
+          paymentAmount: String(params.amount),
+          currency: "IDR",
+          paymentMethod: "VIRTUAL_ACCOUNT",
+          paymentChannel: "BCA.VA",
+          referenceCode: params.orderId,
+          customerReference: params.orderId,
+          customerName: "John Doe",
+          status: fix.status,
+          createdTime: timestamp,
+          updatedTime: timestamp,
+        },
+      };
+      rawBody = JSON.stringify(body);
+      const stringToSign = `POST\\n${urlPath}\\n${rawBody}\\n${timestamp}`;
+      const sig = params.tampered
+        ? "invalid_xenith_sig"
+        : hmacSha256Base64(stringToSign, secret);
+      headers["x-xenith-signature"] = sig;
+      headers["x-xenith-timestamp"] = timestamp;
       break;
     }
 

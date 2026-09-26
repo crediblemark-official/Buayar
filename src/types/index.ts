@@ -11,7 +11,10 @@ export interface CustomerDetails {
 export interface CreateInvoiceParams {
   orderId: string;
   amount: number;
-  productDetails: string;
+  /** Deskripsi singkat atau rincian produk (opsional bila description diisi) */
+  productDetails?: string;
+  /** Alias ramah-pengguna untuk keterangan atau deskripsi pembayaran */
+  description?: string;
   customer: CustomerDetails;
   returnUrl?: string;
   callbackUrl?: string;
@@ -191,7 +194,37 @@ export interface ProviderConfig {
   customBaseUrl?: string;
   callbackUrl?: string;
   returnUrl?: string;
-  
+
+  // ─── Kredensial disbursement (TERPISAH dari kredensial pembayaran) ───────────
+  //
+  // API disbursement memakai identitas dan secret yang BERBEDA dari API
+  // pembayaran. Provider memberi payout credential sendiri, dan nilai itulah
+  // yang masuk ke signature. Karena itu Buayar TIDAK PERNAH memakai `apiKey`
+  // atau `secretKey` pembayaran sebagai fallback: signature yang salah akan
+  // selalu ditolak provider, dan saldo yang terbaca akan selalu nol.
+
+  /**
+   * ID numerik merchant untuk API disbursement.
+   *
+   * Duitku: diberikan Duitku setelah fitur disbursement diaktifkan. Nilai ini
+   * dikirim sebagai field body `userId` dan TIDAK ikut signature.
+   */
+  disbursementUserId?: string | number;
+
+  /**
+   * Email registrasi merchant. Wajib karena ikut seluruh signature disbursement
+   * Duitku.
+   */
+  disbursementEmail?: string;
+
+  /**
+   * Secret key khusus disbursement.
+   *
+   * PENTING: nilai ini bukan `apiKey`/`secretKey` pembayaran. Untuk Duitku
+   * nilainya 64 karakter heksadesimal, sedangkan API key pembayaran 32.
+   */
+  disbursementSecretKey?: string;
+
   /**
    * Raw request body webhook, persis seperti byte yang diterima HTTP (TIDAK di-parse).
    *
@@ -348,13 +381,17 @@ export interface GetPaymentMethodDescriptorsResult {
 
 export interface CheckTransactionParams {
   /**
-   * ID transaksi untuk pengecekan status.
+   * ID transaksi untuk pengecekan status (orderId / merchantOrderId).
    *
    * **iPaymu:** Harus berisi `TransactionId` numerik dari response `createInvoice`
    * (`invoice.reference`), BUKAN `orderId`/`order_number` merchant.
    * Endpoint iPaymu `/api/v2/transaction` hanya menerima ID numerik milik iPaymu.
    */
   merchantOrderId: string;
+  /**
+   * ID transaksi unik dari gateway (mis. session ID 'ps-...' Xendit atau trxId iPaymu).
+   */
+  transactionId?: string;
 }
 
 export interface CheckTransactionResult {
@@ -419,8 +456,14 @@ export interface CheckBalanceResult {
   success: boolean;
   supported: boolean;
   provider?: string;
-  /** Saldo merchant dalam satuan terkecil (minor unit) */
+  /** Saldo tersedia (availableBalance) — siap digunakan untuk payout */
   balance?: number;
+  /** Saldo pending (belum settle) — sudah masuk tapi belum bisa dicairkan */
+  pendingBalance?: number;
+  /** Saldo yang ditahan (held/frozen) */
+  heldBalance?: number;
+  /** Total saldo (available + pending + held) */
+  totalBalance?: number;
   /** Kode mata uang saldo (bila tersedia) */
   currency?: string;
   error?: string;
@@ -440,6 +483,28 @@ export interface DisburseParams {
   amount: number;
   /** Deskripsi / tujuan transfer */
   description?: string;
+
+  /**
+   * Nomor HP pemilik rekening, format 62 atau awalan 0.
+   *
+   * WAJIB untuk DOKU Kirim DOKU: endpoint `bank-account-inquiry` dan
+   * `transfer-bank` sama-sama mewajibkan `customerNumber` dan menolaknya
+   * dengan kode `4004200` bila kosong.
+   */
+  customerNumber?: string;
+
+  /**
+   * `sessionId` dari hasil account inquiry sebelumnya.
+   *
+   * WAJIB untuk DOKU Kirim DOKU: `transfer-bank` menolak transfer tanpa
+   * sessionId karena DOKU mewajibkan inquiry dilakukan lebih dulu. Bila
+   * dikosongkan, Buayar menjalankan inquiry sendiri lalu memakai sessionId
+   * hasilnya.
+   */
+  sessionId?: string;
+
+  /** Param khusus provider, diteruskan apa adanya ke body request. */
+  providerParams?: Record<string, any>;
 }
 
 export interface DisburseResult {
@@ -507,6 +572,27 @@ export interface ValidateBankAccountParams {
   bankCode: string;
   /** Nomor rekening atau nomor akun e-wallet tujuan */
   accountNumber: string;
+  /**
+   * Nama pemilik rekening sesuai yang terdaftar di bank.
+   *
+   * Wajib untuk DOKU Kirim DOKU: field `additionalInfo.beneficiaryAccountName`
+   * adalah salah satu dari tiga field wajib endpoint `bank-account-inquiry`.
+   * DOKU membandingkan nilainya dengan data bank, jadi nama asal-asalan akan
+   * ditolak dengan `4044311`.
+   */
+  accountHolderName?: string;
+  /**
+   * Nominal yang akan ditransfer. Wajib untuk DOKU Kirim DOKU
+   * (`amount` adalah salah satu field wajibnya) dan untuk inquiry Duitku.
+   */
+  amount?: number;
+  /**
+   * Nomor HP pemilik rekening, format 62 atau awalan 0. Wajib untuk DOKU
+   * Kirim DOKU sebagai `customerNumber`.
+   */
+  customerNumber?: string;
+  /** Param khusus provider, diteruskan apa adanya ke body request. */
+  providerParams?: Record<string, any>;
 }
 
 export interface ValidateBankAccountResult {
@@ -516,6 +602,14 @@ export interface ValidateBankAccountResult {
   accountNumber: string;
   /** Nama pemilik rekening resmi yang terdaftar di bank */
   accountHolderName?: string;
+  /**
+   * Token sesi dari provider, wajib untuk langkah transfer berikutnya.
+   *
+   * DOKU Kirim DOKU: `sessionId` dari `bank-account-inquiry`, yang HARUS
+   * dikirim lagi di `transfer-bank`. Duitku: `disburseId` dari inquiry, yang
+   * juga dibutuhkan transfer.
+   */
+  sessionId?: string;
   rawResponse: any;
   error?: string;
 }

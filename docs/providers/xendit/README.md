@@ -1,6 +1,6 @@
 # Xendit — Implementasi Buayar
 
-> Audit fidelity: item **X-1 … X-8** — lihat [`docs/REVIEW-PG-FIDELITY.md` §2](../../REVIEW-PG-FIDELITY.md).
+> Status: ✅ **LIVE SANDBOX TESTED** (Payment Request v3, Direct BCA VA, Direct QRIS, checkTransaction, 11 v3 channels) · Audit fidelity: item **X-1 … X-8** — lihat [`docs/REVIEW-PG-FIDELITY.md` §2](../../REVIEW-PG-FIDELITY.md).
 
 ## File
 

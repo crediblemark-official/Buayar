@@ -1,5 +1,6 @@
 # Nicepay — Implementasi Buayar
 
+> ⚠️ **Status Pengujian:** ⏳ **BELUM TESTED LIVE (Contract / Simulator Only)** — Implementasi direct v2 telah lengkap & lulus contract simulator, namun belum pernah ditembakkan ke sandbox Nicepay nyata karena menunggu tersedianya kredensial (`NICEPAY_IMID`, `NICEPAY_KEY`).
 > Audit fidelity: item **N-1, N-2** — lihat [`docs/REVIEW-PG-FIDELITY.md` §5](../../REVIEW-PG-FIDELITY.md).
 
 ## File

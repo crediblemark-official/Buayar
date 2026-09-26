@@ -130,6 +130,12 @@ const SPECIFIC: Record<string, FieldMap> = {
   sumopod: {
     apiKey: ["SUMOPOD_API_KEY", "SUMOPOD_PRODUCTION_API_KEY", "SUMOPOD_SANDBOX_API_KEY"],
   },
+  xenith: {
+    apiKey: ["XENITH_ACCESS_KEY", "XENITH_API_KEY"],
+    clientKey: ["XENITH_ACCESS_KEY"],
+    secretKey: ["XENITH_SECRET_KEY"],
+    serverKey: ["XENITH_SECRET_KEY"],
+  },
 };
 
 type FieldName = keyof FieldMap;
@@ -174,6 +180,7 @@ function resolveSandbox(env: Record<string, string | undefined>, provider: strin
     twocheckout: ["TWOCHECKOUT_SANDBOX"],
     xendit: ["XENDIT_SANDBOX"],
     sumopod: ["SUMOPOD_SANDBOX"],
+    xenith: ["XENITH_SANDBOX"],
   };
   const specific = firstDefined(env, specificMap[provider]);
   if (specific !== undefined) {
@@ -231,6 +238,22 @@ export function resolveConfigFromEnv(customConfig?: BuayarConfig): BuayarConfig 
   const publicKey = customConfig?.publicKey || firstDefined(env, ["BUAYAR_PUBLIC_KEY", "PG_PUBLIC_KEY", "PUBLIC_KEY"]) || cfg.clientKey;
   const privateKey = customConfig?.privateKey || firstDefined(env, ["BUAYAR_PRIVATE_KEY", "PG_PRIVATE_KEY", "PRIVATE_KEY"]) || cfg.apiKey;
 
+  // 4b. Kredensial disbursement (TERPISAH dari kredensial pembayaran).
+  //
+  // Disbursement memakai identitas dan secret sendiri, jadi TIDAK ada fallback
+  // ke `apiKey`/`secretKey` pembayaran. Tanpa tiga nilai ini, operasi
+  // disbursement menolak dengan pesan yang menyebut field yang kurang — bukan
+  // mengirim signature yang pasti ditolak provider.
+  const disbursementUserId =
+    customConfig?.disbursementUserId ??
+    firstDefined(env, ["BUAYAR_DISBURSEMENT_USER_ID", "DUITKU_DISBURSEMENT_USER_ID"]);
+  const disbursementEmail =
+    customConfig?.disbursementEmail ??
+    firstDefined(env, ["BUAYAR_DISBURSEMENT_EMAIL", "DUITKU_DISBURSEMENT_EMAIL"]);
+  const disbursementSecretKey =
+    customConfig?.disbursementSecretKey ??
+    firstDefined(env, ["BUAYAR_DISBURSEMENT_SECRET_KEY", "DUITKU_DISBURSEMENT_SECRET_KEY"]);
+
   // Nama env yang berisi "webhook token" (shared secret yang dikirim PG di header).
   // Xendit menamai variabelnya `*_WEBHOOK_VERIFICATION_TOKEN`; `BUAYAR_WEBHOOK_SECRET`
   // adalah nama universal yang dipakai README untuk Xendit, jadi keduanya diterima.
@@ -249,7 +272,7 @@ export function resolveConfigFromEnv(customConfig?: BuayarConfig): BuayarConfig 
 
   const extra = {
     webhookToken: customConfig?.webhookToken || webhookTokenEnv,
-    webhookSecret: customConfig?.webhookSecret || customConfig?.secretKey || (env.SUMOPOD_SANDBOX === 'true' ? env.SUMOPOD_SANDBOX_WEBHOOK_SECRET : env.SUMOPOD_PRODUCTION_WEBHOOK_SECRET) || env.SUMOPOD_WEBHOOK_SECRET || env.STRIPE_WEBHOOK_SECRET || env.CHECKOUTCOM_WEBHOOK_SECRET || env.RAZORPAY_WEBHOOK_SECRET || env.BUAYAR_WEBHOOK_SECRET,
+    webhookSecret: customConfig?.webhookSecret || customConfig?.secretKey || (env.SUMOPOD_SANDBOX === 'true' ? env.SUMOPOD_SANDBOX_WEBHOOK_SECRET : env.SUMOPOD_PRODUCTION_WEBHOOK_SECRET) || env.SUMOPOD_WEBHOOK_SECRET || env.XENITH_WEBHOOK_SECRET || env.STRIPE_WEBHOOK_SECRET || env.CHECKOUTCOM_WEBHOOK_SECRET || env.RAZORPAY_WEBHOOK_SECRET || env.BUAYAR_WEBHOOK_SECRET,
     merchantName: (customConfig as any)?.merchantName || env.FASPAY_MERCHANT_NAME || env.BUAYAR_MERCHANT_NAME,
     userId: (customConfig as any)?.userId || env.FASPAY_USER_ID,
     iMid: (customConfig as any)?.iMid || (customConfig as any)?.imid || env.NICEPAY_IMID,
@@ -284,18 +307,23 @@ export function resolveConfigFromEnv(customConfig?: BuayarConfig): BuayarConfig 
   return {
     provider,
     apiKey,
-    serverKey: apiKey || "",
-    secretKey: apiKey || "",
+    serverKey: cfg.serverKey || apiKey || "",
+    secretKey: cfg.secretKey || cfg.serverKey || apiKey || "",
     merchantCode: cfg.merchantCode || "",
     clientKey: cfg.clientKey || "",
     merchantId: cfg.merchantId || "",
     projectId: cfg.projectId || "",
     publicKey,
     privateKey,
+    disbursementUserId,
+    disbursementEmail,
+    disbursementSecretKey,
     sandbox,
     simulate,
     callbackUrl,
     returnUrl,
+    webhookToken: extra.webhookToken,
+    webhookSecret: extra.webhookSecret,
     extra,
   };
 }

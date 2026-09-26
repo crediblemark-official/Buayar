@@ -1,6 +1,6 @@
 # iPaymu — Implementasi Buayar
 
-> Audit fidelity: item **I-1 … I-9** — lihat [`docs/REVIEW-PG-FIDELITY.md` §4](../../REVIEW-PG-FIDELITY.md).
+> Status: ✅ **LIVE SANDBOX TESTED** (Redirect Invoice, Direct BCA VA, Direct QRIS, checkTransaction, 13 probe channels) · Audit fidelity: item **I-1 … I-9** — lihat [`docs/REVIEW-PG-FIDELITY.md` §4](../../REVIEW-PG-FIDELITY.md).
 
 ## File
 

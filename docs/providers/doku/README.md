@@ -1,6 +1,6 @@
 # DOKU (Jokul) — Implementasi Buayar
 
-> Audit fidelity paling dalam: item **D-1 … D-17** — lihat [`docs/REVIEW-PG-FIDELITY.md` §3](../../REVIEW-PG-FIDELITY.md).
+> Status: ✅ **LIVE SANDBOX TESTED** (Jokul Checkout v2, Direct VA BCA/Mandiri/BNI/BSI/Danamon/Permata, checkTransaction) · Audit fidelity paling dalam: item **D-1 … D-17** — lihat [`docs/REVIEW-PG-FIDELITY.md` §3](../../REVIEW-PG-FIDELITY.md).
 
 ## File
 
