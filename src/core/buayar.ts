@@ -357,7 +357,7 @@ export class Buayar {
     }
 
     const overrideProvider = (configOverride as any)?.provider;
-    let providerName = overrideProvider !== undefined && overrideProvider !== ""
+    let providerName = overrideProvider !== undefined
       ? overrideProvider
       : this.provider;
 

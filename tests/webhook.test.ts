@@ -294,7 +294,7 @@ describe("Universal Webhook Verification & Normalization", () => {
     // bersihkan agar autodetect tidak "menebak" provider dari sisa env.
     const savedEnv = { ...process.env };
     for (const k of Object.keys(process.env)) {
-      if (/^(BUAYAR_|PROVIDER_PG|PAYMENT_PROVIDER|.*_(API_KEY|SERVER_KEY|SECRET_KEY|CLIENT_ID|CLIENT_SECRET|MERCHANT|VA|PASSWORD|KEY))$/.test(k)) {
+      if (/^(BUAYAR_|PROVIDER_PG|PG_|PAYMENT_|MIDTRANS_|DUITKU_|IPAYMU_|XENDIT_|DOKU_|PRISMALINK_|FASPAY_|FINPAY_|NICEPAY_|OY_|STRIPE_|PAYPAL_|ADYEN_|CHECKOUTCOM_|RAZORPAY_|SQUARE_|PAYU_|BRAINTREE_|TWOCHECKOUT_|SUMOPOD_|XENITH_|.*_(API_KEY|SERVER_KEY|SECRET_KEY|CLIENT_ID|CLIENT_SECRET|MERCHANT|VA|PASSWORD|KEY|WEBHOOK_SECRET|WEBHOOK_TOKEN|ACCESS_KEY|SECRET_WORD|USERNAME|ACCOUNT|POS_ID|LOCATION_ID))/i.test(k)) {
         delete process.env[k];
       }
     }
