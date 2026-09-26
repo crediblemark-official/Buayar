@@ -1,11 +1,22 @@
-import { describe, expect, it, beforeEach } from "bun:test";
+import { describe, expect, it, beforeEach, afterEach } from "bun:test";
 import { Buayar, resolveConfigFromEnv } from "../src";
+
+// Test ini mengosongkan SELURUH process.env supaya resolusi config terisolasi
+// dari environment mesin. Ada harga yang harus dibayar: tanpa pemulihan,
+// PATH/HOME/NODE_ENV ikut hilang permanen untuk seluruh sisa suite, dan test
+// yang menyusul jadi salahreads dari env kosong alih-alih gagal loudly.
+// Diperbaiki dengan menyimpan salinan lalu memulihkannya tiap test.
+const ENV_AWAL = { ...process.env };
 
 describe("Environment Variable Resolver & Zero-Code Switcher", () => {
   beforeEach(() => {
     for (const key of Object.keys(process.env)) {
       delete process.env[key];
     }
+  });
+
+  afterEach(() => {
+    process.env = { ...ENV_AWAL };
   });
 
   it("should resolve Midtrans credentials from PROVIDER_PG and standard variables", () => {

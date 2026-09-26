@@ -1,1 +1,1 @@
-bun tsc --noEmit && bun test
+bun tsc --noEmit && bun tsc -p tsconfig.scripts.json --noEmit && bun test

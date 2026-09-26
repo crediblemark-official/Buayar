@@ -25,7 +25,7 @@
 import { IpaymuProvider } from "../../../src/providers/ipaymu/provider";
 import { toIpaymuPaymentMethod } from "../../../src/core/canonical";
 import type { ProviderConfig } from "../../../src/types";
-import { emitProbeJson, summarize } from "../lib";
+import { emitProbeJson, summarize, assertProbeTargetsSandbox } from "../lib";
 
 const VA = (process.env.IPAYMU_VA || process.env.IPAYMU_MERCHANT_CODE || process.env.BUAYAR_MERCHANT_CODE || "").trim();
 const API_KEY = (process.env.IPAYMU_API_KEY || process.env.BUAYAR_API_KEY || "").trim();
@@ -55,6 +55,14 @@ if (!VA || !API_KEY) {
   console.error("   Contoh: IPAYMU_VA=0000001995100401 IPAYMU_API_KEY=SANDBOX... bun run scripts/probe-ipaymu-channels.ts");
   process.exit(1);
 }
+
+// iPaymu tidak punya prefix kredensial baku yang bisa dicek, jadi flag
+// sandbox saja yang jadi penentu. Probe ini membuat puluhan transaksi.
+assertProbeTargetsSandbox({
+  provider: "iPaymu",
+  sandbox: SANDBOX,
+  apiKey: API_KEY,
+});
 
 const config: ProviderConfig = {
   provider: "ipaymu",
@@ -177,7 +185,7 @@ async function probeChannel(ch: LiveChannel): Promise<{ channel: LiveChannel; re
           customer: { name: "Buayar Probe", email: "probe@buayar.test", phone: "081234567890" },
           returnUrl: "https://example.com/return",
           callbackUrl: "https://example.com/callback",
-          paymentMethod: ch.canonical,
+          paymentMethod: { raw: ch.canonical, providerOnly: true },
           ...(EXPIRY_HOURS !== undefined ? { extra: { expiredHours: EXPIRY_HOURS } } : {}),
         },
         config
@@ -254,7 +262,7 @@ async function main() {
               customer: { name: "Buayar Probe", email: "probe@buayar.test", phone: "081234567890" },
               returnUrl: "https://example.com/return",
               callbackUrl: "https://example.com/callback",
-              paymentMethod: method,
+              paymentMethod: { raw: method, providerOnly: true },
               ...(EXPIRY_HOURS !== undefined ? { extra: { expiredHours: EXPIRY_HOURS } } : {}),
               providerParams: {
                 paymentMethod: method,

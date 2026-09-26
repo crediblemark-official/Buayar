@@ -22,7 +22,7 @@
 import { MidtransProvider } from "../../../src/providers/midtrans/provider";
 import { hintMidtransProbeError } from "../../../src/providers/midtrans/methods";
 import type { ProviderConfig } from "../../../src/types";
-import { emitProbeJson, summarize } from "../lib";
+import { emitProbeJson, summarize, assertProbeTargetsSandbox } from "../lib";
 
 const API_KEY = (process.env.MIDTRANS_SERVER_KEY || process.env.BUAYAR_API_KEY || "").trim();
 const SANDBOX = (process.env.MIDTRANS_SANDBOX ?? process.env.BUAYAR_SANDBOX ?? "true") !== "false";
@@ -38,6 +38,21 @@ if (!API_KEY) {
   console.error("❌ MIDTRANS_SERVER_KEY (atau BUAYAR_API_KEY) wajib diset.");
   process.exit(1);
 }
+
+// Probe ini membuat transaksi lalu MEBATALKAN semuanya. Menjalankannya tanpa
+// sengaja terhadap akun produksi mencemari dashboard merchant dan laporan
+// bulanannya, jadi berhenti di sini kalau targetnya bukan sandbox.
+//
+// Sengaja TIDAK ada cek prefix kredensial di sini, padahal dokumentasi
+// menyebut server key sandbox diawali "SB-Mid-". Kredensial sandbox yang
+// dipakai tim ini tidak mengikuti pola itu, jadi whitelist akan memblokir
+// probe yang selama ini bekerja. Guard yang salah posisi lebih berbahaya
+// daripada tidak ada guard: orang terbiasa memakai bypass, lalu bypass itu
+// yang justru recklessly dipakai untuk menjalankan probe produksi sungguhan.
+assertProbeTargetsSandbox({
+  provider: "Midtrans",
+  sandbox: SANDBOX,
+});
 
 const config: ProviderConfig = {
   provider: "midtrans",
@@ -149,7 +164,7 @@ async function main() {
             productDetails: `Probe ${ch.method}`,
             customer: { name: "Buayar Probe", email: "probe@buayar.test", phone: "081234567890" },
             returnUrl: "https://example.com/return",
-            paymentMethod: ch.method,
+            paymentMethod: { raw: ch.method, providerOnly: true },
           },
           config
         ),

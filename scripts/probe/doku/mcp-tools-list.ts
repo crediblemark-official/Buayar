@@ -3,6 +3,10 @@
  * Pemakaian: DOKU_CLIENT_ID=... DOKU_API_KEY=... bun run scripts/mcp-tools-list.ts
  */
 
+// Tanpa `export {}` file ini jadi skrip global: top-level `await` ditolak, dan
+// `const focus` di sini bentrok dengan global `focus` yang dideklarasikan type DOM.
+export {};
+
 const CLIENT_ID = process.env.DOKU_CLIENT_ID || "";
 const API_KEY = process.env.DOKU_API_KEY || "";
 const MCP_URL = process.env.DOKU_MCP_URL || "https://api-sandbox.doku.com/doku-mcp-server/mcp";

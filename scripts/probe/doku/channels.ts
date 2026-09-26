@@ -37,7 +37,7 @@ import {
   resolveDokuMcpCredentials,
 } from "../../../src/providers/doku/mcp";
 import type { ProviderConfig } from "../../../src/types";
-import { emitProbeJson, summarize, type ProbeChannelResult } from "../lib";
+import { emitProbeJson, summarize, assertProbeTargetsSandbox, type ProbeChannelResult } from "../lib";
 
 const CLIENT_ID = (process.env.DOKU_CLIENT_ID || process.env.DOKU_MERCHANT_ID || "").trim();
 const SECRET_KEY = (process.env.DOKU_SECRET_KEY || process.env.BUAYAR_API_KEY || "").trim();
@@ -60,6 +60,13 @@ if (!CLIENT_ID || !SECRET_KEY) {
   console.error("   Contoh: DOKU_CLIENT_ID=BRN-... DOKU_SECRET_KEY=SK-... bun run scripts/probe-doku-channels.ts");
   process.exit(1);
 }
+
+// Sama seperti iPaymu: tidak ada prefix kredensial baku, andalkan flag.
+assertProbeTargetsSandbox({
+  provider: "DOKU",
+  sandbox: SANDBOX,
+  apiKey: SECRET_KEY,
+});
 
 const config: ProviderConfig = {
   provider: "doku",

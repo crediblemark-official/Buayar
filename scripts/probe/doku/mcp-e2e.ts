@@ -4,8 +4,12 @@
  * DOKU_API_KEY
  */
 
-const CLIENT_ID = process.env.DOKU_CLIENT_ID;
-const API_KEY = process.env.DOKU_API_KEY;
+// Tanpa `export {}`, file ini diperlakukan sebagai skrip global oleh tsc, dan
+// const di tingkat atas-nya bentrok dengan probe lain yang memakai nama sama.
+export {};
+
+const CLIENT_ID = process.env.DOKU_CLIENT_ID || "";
+const API_KEY = process.env.DOKU_API_KEY || "";
 const MCP_URL = process.env.DOKU_MCP_URL || "https://api-sandbox.doku.com/doku-mcp-server/mcp";
 
 if (!CLIENT_ID || !API_KEY) {

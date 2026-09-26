@@ -1,0 +1,19 @@
+{
+  "//": "Type-check khusus scripts/probe. Terpisah dari tsconfig utama karena:",
+  "//2": "tsconfig utama memakai module NodeNext, dan paket ini tidak punya type=module,",
+  "//3": "jadi .ts diperlakukan sebagai CommonJS dan import.meta ditolak. Tapi probe",
+  "//4": "dijalankan dengan Bun yang memperlakukannya sebagai ESM, sehingga import.meta",
+  "//5": "justru valid di sana. Menyamakan dua sudut pandang itu akan mengendurkan",
+  "//6": "semantik moduleResolution, dan type-check utama ikut ikut melonggarkan.",
+  "//7": "Jadi keduanya dijaga terpisah: tsconfig.json untuk src/ + tests/ (mengikuti",
+  "//8": "aturan build Node), file ini untuk scripts/ (mengikuti aturan Bun).",
+  "//9": "Dijalankan oleh pre-commit hook bersama type-check utama.",
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "noEmit": true,
+    "declaration": false
+  },
+  "include": ["scripts/**/*"]
+}

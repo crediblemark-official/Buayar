@@ -25,9 +25,12 @@
 
 import { XenditProvider } from "../../../src/providers/xendit/provider";
 import type { ProviderConfig } from "../../../src/types";
-import { emitProbeJson, summarize } from "../lib";
+import { emitProbeJson, summarize, assertProbeTargetsSandbox } from "../lib";
 
 const API_KEY = (process.env.XENDIT_SECRET_KEY || process.env.BUAYAR_API_KEY || "").trim();
+// src/core/config.tsResolve lewat facade, tapi probe ini memanggil provider
+// secara langsung, jadi mode sandbox harus ditetapkan sendiri di sini.
+const SANDBOX = (process.env.XENDIT_SANDBOX ?? process.env.BUAYAR_SANDBOX ?? "true") !== "false";
 const AMOUNT = Number(process.env.PROBE_AMOUNT || 10000);
 const TIMEOUT_MS = Number(process.env.PROBE_TIMEOUT_MS || 20000);
 const API_VERSION = (process.env.PROBE_API_VERSION || "").trim(); // "" = v3 (default), "v2" = legacy
@@ -45,10 +48,20 @@ if (!API_KEY) {
   process.exit(1);
 }
 
+// Xendit memakai satu host untuk test dan live, jadi satu-satunya penentu
+// ada di kredensial. Prefix produksi dicek supaya mode yang tersalah ketahuan
+// sebelum request pertama.
+assertProbeTargetsSandbox({
+  provider: "Xendit",
+  sandbox: SANDBOX,
+  apiKey: API_KEY,
+  liveKeyPrefixes: ["xnd_production_"],
+});
+
 const config: ProviderConfig = {
   provider: "xendit",
   apiKey: API_KEY,
-  sandbox: true,
+  sandbox: SANDBOX,
   returnUrl: "https://example.com/return",
   ...(API_VERSION ? { extra: { xenditApiVersion: API_VERSION } } : {}),
 };
@@ -218,7 +231,7 @@ async function main() {
               productDetails: `Probe case ${c.label}`,
               customer: { name: "Buayar Probe", email: "probe@buayar.test", phone: "081234567890" },
               returnUrl: "https://example.com/return",
-              paymentMethod: c.method,
+              paymentMethod: { raw: c.method, providerOnly: true },
               providerParams: c.override,
             },
             config

@@ -76,3 +76,84 @@ export function summarize(
     ...extra,
   };
 }
+
+/** Opsi untuk pemeriksaan target probe. */
+export interface ProbeSafetyOptions {
+  /** Nama provider, untuk pesan error. */
+  provider: string;
+  /** Mode sandbox yang akan dipakai probe ini. */
+  sandbox: boolean;
+  /** Kredensial yang dipakai, bila provider bisa membedakannya lewat prefix. */
+  apiKey?: string;
+  /**
+   * Prefix yang menandai kredensial produksi. Provider yang tidak punya
+   * prefix baku (iPaymu, DOKU) andalkan flag `sandbox` saja.
+   */
+  liveKeyPrefixes?: readonly string[];
+}
+
+/**
+ * Penjaga: probe TIDAK BOLEH menembak akun produksi tanpa opt-in eksplisit.
+ *
+ * Probe adalah skrip yang mengubah state: Midtrans dan iPaymu membuat puluhan
+ * transaksi lalu membatalkannya, dan niat probe itu adalah membersihkan
+ * dashboard sandbox. Tapi `sandbox` hanya sebuah default `true` — begitu ada
+ * yang menyetel `MIDTRANS_SANDBOX=false`, atau memakai server key produksi
+ * sementara env-nya lupa diubah, probe berjalan terhadap akun merchant yang
+ * sungguhan:
+ *
+ *   • puluhan transaksi nyata muncul di dashboard produksi,
+ *   • kanal e-wallet dan paylater bisa memicu notifikasi ke nomor pelanggan,
+ *   • lalu semuanya dibatalkan, jadi laporan bulanan merchant ikut kotor.
+ *
+ * Kerugiannya nyata dan tidak bisa ditarik kembali. Karena itu default-nya
+ * fail-closed: probe berhenti sebelum request pertama, kecuali ada opt-in yang
+ * disengaja.
+ *
+ * Dua lapis pemeriksaan, karena masing-masing menangkap kesalahan yang berbeda:
+ *
+ *   1. Flag `sandbox` bernilai false → memang diarahkan ke produksi.
+ *   2. Prefix kredensial produksi sementara sandbox aktif → kredensial dan flag
+ *      tercampur, yang paling sering terjadi karena keduanya diisi di tempat
+ *      berbeda.
+ *
+ * Lapis kedua hanya dipasang untuk provider yang prefix produsinya sudah
+ * terverifikasi (Xendit). Midtrans, iPaymu, dan DOKU hanya andalkan lapis
+ * pertama. Midtrans khususnya sengaja TIDAK memakai daftar putih prefix sandbox
+ * meski dokumentasi menyebut "SB-Mid-": kredensial sandbox yang dipakai tim
+ * ini tidak mengikuti pola itu, jadi whitelist akan memblokir probe yang
+ * sebenarnya bekerja.
+ */
+export function assertProbeTargetsSandbox(opts: ProbeSafetyOptions): void {
+  const force = process.env.PROBE_ALLOW_PRODUCTION === "1";
+  if (force) return;
+
+  const berhenti = (alasan: string) => {
+    console.error(
+      `\n[!] Probe ${opts.provider} berhenti sebelum berjalan.\n` +
+        `    ${alasan}\n\n` +
+        `    Probe ini membuat transaksi lalu membatalkannya, jadi terhadap akun\n` +
+        `    produksi itu berarti:\n` +
+        `      • puluhan transaksi nyata muncul di dashboard merchant,\n` +
+        `      • kanal e-wallet/paylater bisa memicu notifikasi ke pelanggan,\n` +
+        `      • dan semuanya dibatalkan, jadi laporan bulanan ikut kotor.\n\n` +
+        `    Kalau ini memang yang kamu mau, set:\n` +
+        `      PROBE_ALLOW_PRODUCTION=1\n`,
+    );
+    process.exit(1);
+  };
+
+  if (opts.sandbox === false) {
+    berhenti("Mode produksi terdeteksi (sandbox: false).");
+  }
+
+  const key = (opts.apiKey || "").trim();
+  if (!key) return;
+
+  if ((opts.liveKeyPrefixes || []).some((prefix) => key.startsWith(prefix))) {
+    berhenti(
+      `Kredensial ${opts.provider} terdeteksi sebagai kunci produksi, sementara ` +
+        `sandbox aktif.`,
+    );
+  }
+}

@@ -4,8 +4,18 @@ import { Buayar } from "../src";
 const OY_ENV = ["PROVIDER_PG", "OY_USERNAME", "OY_API_KEY", "OY_SANDBOX"] as const;
 
 // Hindari pencemaran process.env ke file test lain (mis. webhook.test.ts).
+// Dulu hanya dihapus, tidak dipulihkan, jadi var OY yang sudah ada di
+// environment mesin hilang permanen untuk sisa suite. Sekarang nilai aslinya
+// disimpan lalu dikembalikan.
+const ENV_AWAL: Record<string, string | undefined> = {};
+for (const key of OY_ENV) ENV_AWAL[key] = process.env[key];
+
 afterEach(() => {
-  for (const key of OY_ENV) delete process.env[key];
+  for (const key of OY_ENV) {
+    const awal = ENV_AWAL[key];
+    if (awal === undefined) delete process.env[key];
+    else process.env[key] = awal;
+  }
 });
 
 describe("OY! Bisnis Provider & Client Integration", () => {
