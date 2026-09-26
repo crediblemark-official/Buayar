@@ -12,6 +12,7 @@ import {
 } from "../../types";
 import { toXenditPaymentMethod } from "../../core/canonical";
 import { getXenditAuthHeader, verifyXenditWebhookToken } from "./signature";
+import { httpFetch } from "../../utils/http";
 
 /**
  * Normalisasi nomor telepon ke E.164 (Xendit mewajibkan format ini).
@@ -143,7 +144,7 @@ export class XenditProvider extends BasePaymentProvider {
               ...params.providerParams,
             };
 
-        const response = await fetch(url, {
+        const response = await httpFetch(url, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -262,7 +263,7 @@ export class XenditProvider extends BasePaymentProvider {
             ...params.providerParams,
           };
 
-          const response = await fetch(url, {
+          const response = await httpFetch(url, {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
@@ -329,7 +330,7 @@ export class XenditProvider extends BasePaymentProvider {
           ...params.providerParams,
         };
 
-        const response = await fetch(url, {
+        const response = await httpFetch(url, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -573,7 +574,7 @@ export class XenditProvider extends BasePaymentProvider {
     if (apiKey) {
       try {
         const authHeader = getXenditAuthHeader(apiKey);
-        const response = await fetch(`${this.getBaseUrl()}/payment_channels`, {
+        const response = await httpFetch(`${this.getBaseUrl()}/payment_channels`, {
           method: "GET",
           headers: {
             "Authorization": authHeader,
@@ -714,7 +715,7 @@ export class XenditProvider extends BasePaymentProvider {
     try {
       // Payment Sessions (`ps-...`) adalah jalur semi-integrasi saat ini.
       if (merchantOrderId.startsWith("ps-")) {
-        const sessionRes = await fetch(`${this.getBaseUrl()}/sessions/${merchantOrderId}`, {
+        const sessionRes = await httpFetch(`${this.getBaseUrl()}/sessions/${merchantOrderId}`, {
           method: "GET",
           headers: { "Authorization": authHeader },
         });
@@ -744,7 +745,7 @@ export class XenditProvider extends BasePaymentProvider {
 
       // Fallback legacy: query Invoice v2 via external_id.
       let url = `${this.getBaseUrl()}/v2/invoices?external_id=${merchantOrderId}`;
-      let response = await fetch(url, {
+      let response = await httpFetch(url, {
         method: "GET",
         headers: { "Authorization": authHeader },
       });
@@ -759,7 +760,7 @@ export class XenditProvider extends BasePaymentProvider {
       // Jika tidak ditemukan via external_id list, coba query langsung via invoice ID
       if (!invoice && merchantOrderId.startsWith("inv_")) {
         url = `${this.getBaseUrl()}/v2/invoices/${merchantOrderId}`;
-        response = await fetch(url, {
+        response = await httpFetch(url, {
           method: "GET",
           headers: { "Authorization": authHeader },
         });

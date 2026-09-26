@@ -39,6 +39,7 @@ import {
   fetchDokuMerchantPaymentMethods,
   resolveDokuMcpCredentials,
 } from "./mcp";
+import { httpFetch } from "../../utils/http";
 
 /** D-16: resolusi kanonikal VA mcpOnly dari input bank (mis. "btn" → "btn_va"). */
 function resolveMcpOnlyVaMethod(bank?: string): string | undefined {
@@ -252,7 +253,7 @@ export class DokuProvider extends BasePaymentProvider {
 
         const headers = generateDokuHeaders(clientId, secretKey, endpoint, payload);
 
-        const response = await fetch(url, {
+        const response = await httpFetch(url, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -349,7 +350,7 @@ export class DokuProvider extends BasePaymentProvider {
 
         const headers = generateDokuHeaders(clientId, secretKey, endpoint, payload);
 
-        const response = await fetch(url, {
+        const response = await httpFetch(url, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -1065,7 +1066,7 @@ export class DokuProvider extends BasePaymentProvider {
     const headers = generateDokuHeaders(clientId, secretKey, endpoint);
 
     try {
-      const response = await fetch(url, {
+      const response = await httpFetch(url, {
         method: "GET",
         headers: {
           "Content-Type": "application/json",

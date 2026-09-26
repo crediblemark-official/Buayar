@@ -11,6 +11,7 @@ import {
   PaymentMethod,
 } from "../../types";
 import { verifyAdyenWebhook } from "./signature";
+import { httpFetch } from "../../utils/http";
 
 export class AdyenProvider extends BasePaymentProvider {
   readonly name = "adyen";
@@ -52,7 +53,7 @@ export class AdyenProvider extends BasePaymentProvider {
           ...params.providerParams,
         };
 
-        const response = await fetch(url, {
+        const response = await httpFetch(url, {
           method: "POST",
           headers: { "X-API-Key": apiKey, "Content-Type": "application/json" },
           body: JSON.stringify(body),
@@ -94,7 +95,7 @@ export class AdyenProvider extends BasePaymentProvider {
           ...params.providerParams,
         };
 
-        const response = await fetch(url, {
+        const response = await httpFetch(url, {
           method: "POST",
           headers: { "X-API-Key": apiKey, "Content-Type": "application/json" },
           body: JSON.stringify(body),
@@ -192,7 +193,7 @@ export class AdyenProvider extends BasePaymentProvider {
     const baseUrl = this.getBaseUrl(config);
 
     try {
-      const response = await fetch(`${baseUrl}/v68/payments/${encodeURIComponent(merchantOrderId)}`, {
+      const response = await httpFetch(`${baseUrl}/v68/payments/${encodeURIComponent(merchantOrderId)}`, {
         method: "GET",
         headers: { "X-API-Key": apiKey, "Content-Type": "application/json" },
       });

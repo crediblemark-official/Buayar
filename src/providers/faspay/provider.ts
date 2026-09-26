@@ -12,6 +12,7 @@ import {
 } from "../../types";
 import { toFaspayPaymentMethod } from "../../core/canonical";
 import { generateFaspaySignature, verifyFaspaySignature } from "./signature";
+import { httpFetch } from "../../utils/http";
 
 export class FaspayProvider extends BasePaymentProvider {
   readonly name = "faspay";
@@ -68,7 +69,7 @@ export class FaspayProvider extends BasePaymentProvider {
     };
 
     try {
-      const response = await fetch(url, {
+      const response = await httpFetch(url, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -382,7 +383,7 @@ export class FaspayProvider extends BasePaymentProvider {
     };
 
     try {
-      const response = await fetch(url, {
+      const response = await httpFetch(url, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

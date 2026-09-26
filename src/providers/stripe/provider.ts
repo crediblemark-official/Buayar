@@ -13,6 +13,7 @@ import {
 import { toStripePaymentMethod } from "../../core/canonical";
 import { serializeStripeParams, verifyStripeWebhook } from "./signature";
 import { signedPayload } from "../../utils/rawBody";
+import { httpFetch } from "../../utils/http";
 
 export class StripeProvider extends BasePaymentProvider {
   readonly name = "stripe";
@@ -52,7 +53,7 @@ export class StripeProvider extends BasePaymentProvider {
           ...params.providerParams,
         };
 
-        const response = await fetch(url, {
+        const response = await httpFetch(url, {
           method: "POST",
           headers,
           body: serializeStripeParams(payload),
@@ -114,7 +115,7 @@ export class StripeProvider extends BasePaymentProvider {
           ...params.providerParams,
         };
 
-        const response = await fetch(url, {
+        const response = await httpFetch(url, {
           method: "POST",
           headers,
           body: serializeStripeParams(payload),
@@ -308,7 +309,7 @@ export class StripeProvider extends BasePaymentProvider {
     };
 
     try {
-      const response = await fetch(url, {
+      const response = await httpFetch(url, {
         method: "GET",
         headers,
       });

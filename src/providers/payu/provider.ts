@@ -13,6 +13,7 @@ import {
 import { verifyPayuWebhook, buildPayuBasicAuth } from "./signature";
 import { resolveRawBody, signedPayload, RAW_BODY_REQUIRED_MESSAGE } from "../../utils/rawBody";
 import { CANONICAL_TO_PAYU, resolvePaymentMethodCode } from "../../core/canonical";
+import { httpFetch } from "../../utils/http";
 
 export class PayuProvider extends BasePaymentProvider {
   readonly name = "payu";
@@ -35,7 +36,7 @@ export class PayuProvider extends BasePaymentProvider {
 
     const baseUrl = this.getBaseUrl(config);
 
-    const response = await fetch(`${baseUrl}/pl/standard/user/oauth/authorize`, {
+    const response = await httpFetch(`${baseUrl}/pl/standard/user/oauth/authorize`, {
       method: "POST",
       headers: {
         "Authorization": `Basic ${buildPayuBasicAuth(clientId, clientSecret)}`,
@@ -106,7 +107,7 @@ export class PayuProvider extends BasePaymentProvider {
     }
 
     try {
-      const response = await fetch(`${baseUrl}/api/v2_1/orders`, {
+      const response = await httpFetch(`${baseUrl}/api/v2_1/orders`, {
         method: "POST",
         headers: {
           "Authorization": `Bearer ${accessToken}`,
@@ -214,7 +215,7 @@ export class PayuProvider extends BasePaymentProvider {
     }
 
     try {
-      const response = await fetch(`${baseUrl}/api/v2_1/orders/${encodeURIComponent(merchantOrderId)}`, {
+      const response = await httpFetch(`${baseUrl}/api/v2_1/orders/${encodeURIComponent(merchantOrderId)}`, {
         method: "GET",
         headers: { "Authorization": `Bearer ${accessToken}`, "Content-Type": "application/json" },
       });

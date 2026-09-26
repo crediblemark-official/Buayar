@@ -12,6 +12,7 @@ import {
 } from "../../types";
 import { toPrismalinkPaymentMethod } from "../../core/canonical";
 import { generatePrismalinkSignature, verifyPrismalinkSignature } from "./signature";
+import { httpFetch } from "../../utils/http";
 
 export class PrismalinkProvider extends BasePaymentProvider {
   readonly name = "prismalink";
@@ -71,7 +72,7 @@ export class PrismalinkProvider extends BasePaymentProvider {
     }
 
     try {
-      const response = await fetch(url, {
+      const response = await httpFetch(url, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -351,7 +352,7 @@ export class PrismalinkProvider extends BasePaymentProvider {
     };
 
     try {
-      const response = await fetch(url, {
+      const response = await httpFetch(url, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

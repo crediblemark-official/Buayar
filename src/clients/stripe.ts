@@ -1,5 +1,6 @@
 import { ProviderConfig } from "../types";
 import { serializeStripeParams } from "../providers/stripe/signature";
+import { httpFetch } from "../utils/http";
 
 export class StripeClient {
   private secretKey: string;
@@ -32,7 +33,7 @@ export class StripeClient {
       fetchOptions.body = serializeStripeParams(body);
     }
 
-    const response = await fetch(url, fetchOptions);
+    const response = await httpFetch(url, fetchOptions);
     const text = await response.text();
     let data: any = null;
     try {

@@ -1,4 +1,5 @@
 import { ProviderConfig } from "../types";
+import { httpFetch } from "../utils/http";
 
 export class MidtransClient {
   private apiKey: string;
@@ -42,7 +43,7 @@ export class MidtransClient {
       fetchOptions.body = JSON.stringify(body);
     }
 
-    const response = await fetch(url, fetchOptions);
+    const response = await httpFetch(url, fetchOptions);
     const text = await response.text();
     let data: any = null;
     try {
@@ -149,7 +150,7 @@ export class MidtransClient {
       try {
         const irisUrl = `${this.sandbox ? "https://api.sandbox.midtrans.com" : "https://api.midtrans.com"}/iris/api/v1/balance`;
         const authHeader = `Basic ${Buffer.from(this.apiKey + ":").toString("base64")}`;
-        const response = await fetch(irisUrl, {
+        const response = await httpFetch(irisUrl, {
           method: "GET",
           headers: {
             "Accept": "application/json",

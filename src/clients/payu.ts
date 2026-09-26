@@ -1,5 +1,6 @@
 import { ProviderConfig } from "../types";
 import { buildPayuBasicAuth } from "../providers/payu/signature";
+import { httpFetch } from "../utils/http";
 
 export class PayuClient {
   private config: ProviderConfig;
@@ -20,7 +21,7 @@ export class PayuClient {
     const clientId = this.config.extra?.oauthClientId || this.config.clientKey || "";
     const clientSecret = this.config.extra?.oauthClientSecret || this.config.apiKey || this.config.secretKey || "";
 
-    const response = await fetch(`${this.getBaseUrl()}/pl/standard/user/oauth/authorize`, {
+    const response = await httpFetch(`${this.getBaseUrl()}/pl/standard/user/oauth/authorize`, {
       method: "POST",
       headers: { "Authorization": `Basic ${buildPayuBasicAuth(clientId, clientSecret)}`, "Content-Type": "application/x-www-form-urlencoded" },
       body: "grant_type=client_credentials",
@@ -35,7 +36,7 @@ export class PayuClient {
   /** Ambil detail order PayU */
   async getOrder(orderId: string): Promise<any> {
     const token = await this.getToken();
-    const response = await fetch(`${this.getBaseUrl()}/api/v2_1/orders/${orderId}`, {
+    const response = await httpFetch(`${this.getBaseUrl()}/api/v2_1/orders/${orderId}`, {
       headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
     });
     return response.json();
@@ -44,7 +45,7 @@ export class PayuClient {
   /** Batalkan order PayU */
   async cancelOrder(orderId: string): Promise<any> {
     const token = await this.getToken();
-    const response = await fetch(`${this.getBaseUrl()}/api/v2_1/orders/${orderId}`, {
+    const response = await httpFetch(`${this.getBaseUrl()}/api/v2_1/orders/${orderId}`, {
       method: "DELETE",
       headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
     });
@@ -57,7 +58,7 @@ export class PayuClient {
     const body: any = { refund: { description: description || "Refund" } };
     if (amount) body.refund.amount = amount;
 
-    const response = await fetch(`${this.getBaseUrl()}/api/v2_1/orders/${orderId}/refunds`, {
+    const response = await httpFetch(`${this.getBaseUrl()}/api/v2_1/orders/${orderId}/refunds`, {
       method: "POST",
       headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
       body: JSON.stringify(body),

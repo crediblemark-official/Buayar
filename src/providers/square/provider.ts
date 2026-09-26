@@ -12,6 +12,7 @@ import {
 } from "../../types";
 import { verifySquareWebhook } from "./signature";
 import { resolveRawBody, signedPayload, RAW_BODY_REQUIRED_MESSAGE } from "../../utils/rawBody";
+import { httpFetch } from "../../utils/http";
 
 export class SquareProvider extends BasePaymentProvider {
   readonly name = "square";
@@ -56,7 +57,7 @@ export class SquareProvider extends BasePaymentProvider {
           ...params.providerParams,
         };
 
-        const response = await fetch(`${baseUrl}/v2/payments`, {
+        const response = await httpFetch(`${baseUrl}/v2/payments`, {
           method: "POST", headers, body: JSON.stringify(body),
         });
 
@@ -98,7 +99,7 @@ export class SquareProvider extends BasePaymentProvider {
           ...params.providerParams,
         };
 
-        const response = await fetch(`${baseUrl}/v2/online-checkout/payment-links`, {
+        const response = await httpFetch(`${baseUrl}/v2/online-checkout/payment-links`, {
           method: "POST", headers, body: JSON.stringify(body),
         });
 
@@ -186,7 +187,7 @@ export class SquareProvider extends BasePaymentProvider {
     const headers = this.buildHeaders(config);
 
     try {
-      const response = await fetch(`${baseUrl}/v2/payments/${encodeURIComponent(merchantOrderId)}`, {
+      const response = await httpFetch(`${baseUrl}/v2/payments/${encodeURIComponent(merchantOrderId)}`, {
         method: "GET", headers,
       });
 

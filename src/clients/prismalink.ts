@@ -1,5 +1,6 @@
 import { ProviderConfig } from "../types";
 import { generatePrismalinkSignature } from "../providers/prismalink/signature";
+import { httpFetch } from "../utils/http";
 
 export class PrismalinkClient {
   private merchantId: string;
@@ -36,7 +37,7 @@ export class PrismalinkClient {
       fetchOptions.body = JSON.stringify(body);
     }
 
-    const response = await fetch(url, fetchOptions);
+    const response = await httpFetch(url, fetchOptions);
     const text = await response.text();
     let data: any = null;
     try {

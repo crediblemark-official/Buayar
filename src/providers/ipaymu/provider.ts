@@ -12,6 +12,7 @@ import {
 } from "../../types";
 import { toIpaymuPaymentMethod } from "../../core/canonical";
 import { generateIpaymuSignature, verifyIpaymuCallback, verifyIpaymuCallbackSignature } from "./signature";
+import { httpFetch } from "../../utils/http";
 
 export class IpaymuProvider extends BasePaymentProvider {
   readonly name = "ipaymu";
@@ -139,7 +140,7 @@ export class IpaymuProvider extends BasePaymentProvider {
     const { signature, timestamp } = generateIpaymuSignature("POST", va, apiKey, payload);
 
     try {
-      const response = await fetch(url, {
+      const response = await httpFetch(url, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -283,7 +284,7 @@ export class IpaymuProvider extends BasePaymentProvider {
       const url = `${this.getBaseUrl(sandbox)}/payment-channels`;
       const { signature, timestamp } = generateIpaymuSignature("GET", va, apiKey);
 
-      const response = await fetch(url, {
+      const response = await httpFetch(url, {
         method: "GET",
         headers: {
           "Content-Type": "application/json",
@@ -440,7 +441,7 @@ export class IpaymuProvider extends BasePaymentProvider {
     const { signature, timestamp } = generateIpaymuSignature("POST", va, apiKey, payload);
 
     try {
-      const response = await fetch(url, {
+      const response = await httpFetch(url, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

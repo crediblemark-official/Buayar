@@ -12,6 +12,7 @@ import {
 } from "../../types";
 import { verifySumopodSvixSignature, verifySumopodToken } from "./signature";
 import { resolveRawBody, signedPayload, RAW_BODY_REQUIRED_MESSAGE } from "../../utils/rawBody";
+import { httpFetch } from "../../utils/http";
 
 export class SumopodProvider extends BasePaymentProvider {
   readonly name = "sumopod";
@@ -42,7 +43,7 @@ export class SumopodProvider extends BasePaymentProvider {
     };
 
     try {
-      const response = await fetch(`${baseUrl}/api/v1/payments`, {
+      const response = await httpFetch(`${baseUrl}/api/v1/payments`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -244,7 +245,7 @@ export class SumopodProvider extends BasePaymentProvider {
     const baseUrl = this.getBaseUrl(config);
 
     try {
-      const response = await fetch(`${baseUrl}/api/v1/payments/${encodeURIComponent(merchantOrderId)}`, {
+      const response = await httpFetch(`${baseUrl}/api/v1/payments/${encodeURIComponent(merchantOrderId)}`, {
         method: "GET",
         headers: {
           "Accept": "application/json",

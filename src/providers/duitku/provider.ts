@@ -19,6 +19,7 @@ import {
   getDuitkuPaymentMethodsSignature,
   getDuitkuStatusSignatures,
 } from "./signature";
+import { httpFetch } from "../../utils/http";
 
 export class DuitkuProvider extends BasePaymentProvider {
   readonly name = "duitku";
@@ -77,7 +78,7 @@ export class DuitkuProvider extends BasePaymentProvider {
         headers["x-duitku-merchantcode"] = merchantCode;
       }
 
-      const response = await fetch(url, {
+      const response = await httpFetch(url, {
         method: "POST",
         headers,
         body: JSON.stringify(payload),
@@ -176,7 +177,7 @@ export class DuitkuProvider extends BasePaymentProvider {
     const signature = getDuitkuPaymentMethodsSignature(merchantCode, amount, datetime, apiKey);
 
     try {
-      const response = await fetch(url, {
+      const response = await httpFetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -272,7 +273,7 @@ export class DuitkuProvider extends BasePaymentProvider {
     const { timestamp, headerSignature, bodySignature } = getDuitkuStatusSignatures(merchantCode, merchantOrderId, apiKey);
 
     try {
-      const response = await fetch(url, {
+      const response = await httpFetch(url, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

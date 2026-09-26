@@ -1,5 +1,6 @@
 import { ProviderConfig } from "../types";
 import { buildRazorpayBasicAuth } from "../providers/razorpay/signature";
+import { httpFetch } from "../utils/http";
 
 export class RazorpayClient {
   private config: ProviderConfig;
@@ -23,7 +24,7 @@ export class RazorpayClient {
 
   /** Ambil detail payment */
   async fetchPayment(paymentId: string): Promise<any> {
-    const response = await fetch(`${this.getBaseUrl()}/payments/${paymentId}`, {
+    const response = await httpFetch(`${this.getBaseUrl()}/payments/${paymentId}`, {
       method: "GET", headers: this.buildHeaders(),
     });
     return response.json();
@@ -31,7 +32,7 @@ export class RazorpayClient {
 
   /** Capture authorized payment */
   async capturePayment(paymentId: string, amount: number, currency?: string): Promise<any> {
-    const response = await fetch(`${this.getBaseUrl()}/payments/${paymentId}/capture`, {
+    const response = await httpFetch(`${this.getBaseUrl()}/payments/${paymentId}/capture`, {
       method: "POST",
       headers: this.buildHeaders(),
       body: JSON.stringify({ amount, currency: currency || "INR" }),
@@ -43,7 +44,7 @@ export class RazorpayClient {
   async createRefund(paymentId: string, amount?: number, notes?: Record<string, string>): Promise<any> {
     const body: any = { notes };
     if (amount) body.amount = amount;
-    const response = await fetch(`${this.getBaseUrl()}/payments/${paymentId}/refund`, {
+    const response = await httpFetch(`${this.getBaseUrl()}/payments/${paymentId}/refund`, {
       method: "POST",
       headers: this.buildHeaders(),
       body: JSON.stringify(body),
@@ -53,7 +54,7 @@ export class RazorpayClient {
 
   /** Cek saldo akun Razorpay */
   async checkBalance(): Promise<any> {
-    const response = await fetch(`${this.getBaseUrl()}/balance`, {
+    const response = await httpFetch(`${this.getBaseUrl()}/balance`, {
       method: "GET", headers: this.buildHeaders(),
     });
     return response.json();
@@ -66,7 +67,7 @@ export class RazorpayClient {
     if (to) params.set("to", to.toString());
     if (count) params.set("count", count.toString());
 
-    const response = await fetch(`${this.getBaseUrl()}/payments?${params}`, {
+    const response = await httpFetch(`${this.getBaseUrl()}/payments?${params}`, {
       method: "GET", headers: this.buildHeaders(),
     });
     return response.json();

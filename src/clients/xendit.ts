@@ -1,5 +1,6 @@
 import { ProviderConfig } from "../types";
 import { getXenditAuthHeader } from "../providers/xendit/signature";
+import { httpFetch } from "../utils/http";
 
 export interface XenditDisbursementParams {
   externalId: string;
@@ -43,7 +44,7 @@ export class XenditClient {
       fetchOptions.body = JSON.stringify(body);
     }
 
-    const response = await fetch(url, fetchOptions);
+    const response = await httpFetch(url, fetchOptions);
     const text = await response.text();
     let data: any = null;
     try {

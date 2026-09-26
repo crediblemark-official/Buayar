@@ -1,4 +1,5 @@
 import { ProviderConfig } from "../types";
+import { httpFetch } from "../utils/http";
 
 export class CheckoutComClient {
   private config: ProviderConfig;
@@ -22,7 +23,7 @@ export class CheckoutComClient {
 
   /** Ambil detail payment berdasarkan Payment ID */
   async getPaymentDetails(paymentId: string): Promise<any> {
-    const response = await fetch(`${this.getBaseUrl()}/payments/${paymentId}`, {
+    const response = await httpFetch(`${this.getBaseUrl()}/payments/${paymentId}`, {
       method: "GET", headers: this.buildHeaders(),
     });
     return response.json();
@@ -30,7 +31,7 @@ export class CheckoutComClient {
 
   /** Void (batalkan) payment yang belum di-capture */
   async voidPayment(paymentId: string, reference?: string): Promise<any> {
-    const response = await fetch(`${this.getBaseUrl()}/payments/${paymentId}/voids`, {
+    const response = await httpFetch(`${this.getBaseUrl()}/payments/${paymentId}/voids`, {
       method: "POST",
       headers: this.buildHeaders(),
       body: JSON.stringify({ reference }),
@@ -42,7 +43,7 @@ export class CheckoutComClient {
   async refundPayment(paymentId: string, amount?: number, reference?: string): Promise<any> {
     const body: any = { reference };
     if (amount) body.amount = amount;
-    const response = await fetch(`${this.getBaseUrl()}/payments/${paymentId}/refunds`, {
+    const response = await httpFetch(`${this.getBaseUrl()}/payments/${paymentId}/refunds`, {
       method: "POST",
       headers: this.buildHeaders(),
       body: JSON.stringify(body),
@@ -52,7 +53,7 @@ export class CheckoutComClient {
 
   /** Cek saldo merchant di Checkout.com */
   async checkBalance(): Promise<any> {
-    const response = await fetch(`${this.getBaseUrl()}/balances`, {
+    const response = await httpFetch(`${this.getBaseUrl()}/balances`, {
       method: "GET", headers: this.buildHeaders(),
     });
     return response.json();
@@ -60,7 +61,7 @@ export class CheckoutComClient {
 
   /** Ambil daftar payment links */
   async listPaymentLinks(): Promise<any> {
-    const response = await fetch(`${this.getBaseUrl()}/payment-links`, {
+    const response = await httpFetch(`${this.getBaseUrl()}/payment-links`, {
       method: "GET", headers: this.buildHeaders(),
     });
     return response.json();

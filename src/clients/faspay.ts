@@ -1,5 +1,6 @@
 import { ProviderConfig } from "../types";
 import { generateFaspaySignature } from "../providers/faspay/signature";
+import { httpFetch } from "../utils/http";
 
 export class FaspayClient {
   private merchantId: string;
@@ -26,7 +27,7 @@ export class FaspayClient {
   async request(endpoint: string, payload: any): Promise<any> {
     const url = `${this.getBaseUrl()}${endpoint}`;
 
-    const response = await fetch(url, {
+    const response = await httpFetch(url, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

@@ -1,5 +1,6 @@
 import { ProviderConfig } from "../types";
 import { buildTwoCheckoutAuth } from "../providers/twocheckout/signature";
+import { httpFetch } from "../utils/http";
 
 export class TwoCheckoutClient {
   private config: ProviderConfig;
@@ -27,7 +28,7 @@ export class TwoCheckoutClient {
 
   /** Ambil detail order 2Checkout berdasarkan Reference Number */
   async getOrder(refNo: string): Promise<any> {
-    const response = await fetch(`${this.getBaseUrl()}/6.0/orders/${refNo}`, {
+    const response = await httpFetch(`${this.getBaseUrl()}/6.0/orders/${refNo}`, {
       method: "GET", headers: this.buildHeaders(),
     });
     return response.json();
@@ -35,7 +36,7 @@ export class TwoCheckoutClient {
 
   /** Refund order 2Checkout */
   async refundOrder(refNo: string, amount: number, comment?: string): Promise<any> {
-    const response = await fetch(`${this.getBaseUrl()}/6.0/orders/${refNo}/refund`, {
+    const response = await httpFetch(`${this.getBaseUrl()}/6.0/orders/${refNo}/refund`, {
       method: "POST",
       headers: this.buildHeaders(),
       body: JSON.stringify({ amount, comment: comment || "Refund", reason: "NOT_SATISFIED" }),
@@ -45,7 +46,7 @@ export class TwoCheckoutClient {
 
   /** Ambil detail subscription */
   async getSubscription(subscriptionRef: string): Promise<any> {
-    const response = await fetch(`${this.getBaseUrl()}/6.0/subscriptions/${subscriptionRef}`, {
+    const response = await httpFetch(`${this.getBaseUrl()}/6.0/subscriptions/${subscriptionRef}`, {
       method: "GET", headers: this.buildHeaders(),
     });
     return response.json();
@@ -56,7 +57,7 @@ export class TwoCheckoutClient {
     const params = new URLSearchParams({
       Pagination: JSON.stringify({ Page: page || 1, Limit: limit || 10 }),
     });
-    const response = await fetch(`${this.getBaseUrl()}/6.0/orders?${params}`, {
+    const response = await httpFetch(`${this.getBaseUrl()}/6.0/orders?${params}`, {
       method: "GET", headers: this.buildHeaders(),
     });
     return response.json();

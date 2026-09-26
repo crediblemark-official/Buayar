@@ -12,6 +12,7 @@ import {
 } from "../../types";
 import { buildBraintreeBasicAuth, verifyBraintreeWebhook } from "./signature";
 import { signedPayload } from "../../utils/rawBody";
+import { httpFetch } from "../../utils/http";
 
 export class BraintreeProvider extends BasePaymentProvider {
   readonly name = "braintree";
@@ -61,7 +62,7 @@ export class BraintreeProvider extends BasePaymentProvider {
           },
         };
 
-        const response = await fetch(`${baseUrl}/transactions`, {
+        const response = await httpFetch(`${baseUrl}/transactions`, {
           method: "POST", headers, body: JSON.stringify(body),
         });
 
@@ -84,7 +85,7 @@ export class BraintreeProvider extends BasePaymentProvider {
         // Client Token generation for Drop-in UI (redirect flow)
         const body = { client_token: { customer_id: customer?.email || orderId } };
 
-        const response = await fetch(`${baseUrl}/client_token`, {
+        const response = await httpFetch(`${baseUrl}/client_token`, {
           method: "POST", headers, body: JSON.stringify(body),
         });
 
@@ -167,7 +168,7 @@ export class BraintreeProvider extends BasePaymentProvider {
     const headers = this.buildHeaders(config);
 
     try {
-      const response = await fetch(`${baseUrl}/transactions/${encodeURIComponent(merchantOrderId)}`, {
+      const response = await httpFetch(`${baseUrl}/transactions/${encodeURIComponent(merchantOrderId)}`, {
         method: "GET", headers,
       });
 

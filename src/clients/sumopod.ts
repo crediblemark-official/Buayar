@@ -1,4 +1,5 @@
 import { ProviderConfig } from "../types";
+import { httpFetch } from "../utils/http";
 
 export interface SumopodCreatePaymentParams {
   order_id: string;
@@ -57,7 +58,7 @@ export class SumopodClient {
       fetchOptions.body = JSON.stringify(body);
     }
 
-    const response = await fetch(url, fetchOptions);
+    const response = await httpFetch(url, fetchOptions);
     const text = await response.text();
     let data: any = null;
     try {

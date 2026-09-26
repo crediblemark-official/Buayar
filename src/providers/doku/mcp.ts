@@ -1,4 +1,5 @@
 import type { PaymentMethod, ProviderConfig } from "../../types";
+import { httpFetch } from "../../utils/http";
 
 /**
  * Klien ringan untuk **DOKU MCP Server**.
@@ -224,7 +225,7 @@ export async function callDokuMcpTool(
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), creds.timeoutMs);
   try {
-    const res = await fetch(creds.url, {
+    const res = await httpFetch(creds.url, {
       method: "POST",
       headers: {
         "Client-Id": creds.clientId,

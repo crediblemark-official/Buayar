@@ -12,6 +12,7 @@ import {
 } from "../../types";
 import { verifyCheckoutComWebhook } from "./signature";
 import { resolveRawBody, signedPayload, RAW_BODY_REQUIRED_MESSAGE } from "../../utils/rawBody";
+import { httpFetch } from "../../utils/http";
 
 export class CheckoutComProvider extends BasePaymentProvider {
   readonly name = "checkoutcom";
@@ -46,7 +47,7 @@ export class CheckoutComProvider extends BasePaymentProvider {
           ...params.providerParams,
         };
 
-        const response = await fetch(url, {
+        const response = await httpFetch(url, {
           method: "POST",
           headers: { "Authorization": `Bearer ${secretKey}`, "Content-Type": "application/json" },
           body: JSON.stringify(body),
@@ -83,7 +84,7 @@ export class CheckoutComProvider extends BasePaymentProvider {
           ...params.providerParams,
         };
 
-        const response = await fetch(url, {
+        const response = await httpFetch(url, {
           method: "POST",
           headers: { "Authorization": `Bearer ${secretKey}`, "Content-Type": "application/json" },
           body: JSON.stringify(body),
@@ -187,7 +188,7 @@ export class CheckoutComProvider extends BasePaymentProvider {
     const baseUrl = this.getBaseUrl(config);
 
     try {
-      const response = await fetch(`${baseUrl}/payments/${encodeURIComponent(merchantOrderId)}`, {
+      const response = await httpFetch(`${baseUrl}/payments/${encodeURIComponent(merchantOrderId)}`, {
         method: "GET",
         headers: { "Authorization": `Bearer ${secretKey}`, "Content-Type": "application/json" },
       });

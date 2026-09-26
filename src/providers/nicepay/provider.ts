@@ -12,6 +12,7 @@ import {
 } from "../../types";
 import { toNicepayPaymentMethod } from "../../core/canonical";
 import { formatNicepayTimestamp, generateNicepayToken, verifyNicepayWebhook } from "./signature";
+import { httpFetch } from "../../utils/http";
 
 export class NicepayProvider extends BasePaymentProvider {
   readonly name = "nicepay";
@@ -73,7 +74,7 @@ export class NicepayProvider extends BasePaymentProvider {
     }
 
     try {
-      const response = await fetch(url, {
+      const response = await httpFetch(url, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -378,7 +379,7 @@ export class NicepayProvider extends BasePaymentProvider {
     };
 
     try {
-      const response = await fetch(url, {
+      const response = await httpFetch(url, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

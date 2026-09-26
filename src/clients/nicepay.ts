@@ -1,6 +1,7 @@
 import { ProviderConfig } from "../types";
 import { formatNicepayTimestamp, generateNicepayToken } from "../providers/nicepay/signature";
 import { sha256 } from "../utils/crypto";
+import { httpFetch } from "../utils/http";
 
 export class NicepayClient {
   private iMid: string;
@@ -25,7 +26,7 @@ export class NicepayClient {
   async request(endpoint: string, payload: any): Promise<any> {
     const url = `${this.getBaseUrl()}${endpoint}`;
 
-    const response = await fetch(url, {
+    const response = await httpFetch(url, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

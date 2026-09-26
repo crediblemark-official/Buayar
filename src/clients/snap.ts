@@ -7,6 +7,7 @@ import {
   snapExternalId,
   snapErrorHint,
 } from "../providers/doku/snap";
+import { httpFetch } from "../utils/http";
 
 export interface SnapClientOptions {
   clientId: string;        // doku_key_...
@@ -67,7 +68,7 @@ export class SnapClient {
     const timestamp = snapUtcTimestamp();
     const signature = generateSnapAsymmetricSignature(privateKey, clientId, timestamp);
 
-    const response = await fetch(this.baseUrl + endpoint, {
+    const response = await httpFetch(this.baseUrl + endpoint, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -157,7 +158,7 @@ export class SnapClient {
       ...(opts.extraHeaders || {}),
     };
 
-    const response = await fetch(this.baseUrl + endpoint, {
+    const response = await httpFetch(this.baseUrl + endpoint, {
       method,
       headers,
       body: method === "POST" && body !== undefined ? JSON.stringify(body) : undefined,

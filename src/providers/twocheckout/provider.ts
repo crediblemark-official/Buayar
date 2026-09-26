@@ -11,6 +11,7 @@ import {
   PaymentMethod,
 } from "../../types";
 import { buildTwoCheckoutAuth, verifyTwoCheckoutWebhook } from "./signature";
+import { httpFetch } from "../../utils/http";
 
 export class TwoCheckoutProvider extends BasePaymentProvider {
   readonly name = "twocheckout";
@@ -79,7 +80,7 @@ export class TwoCheckoutProvider extends BasePaymentProvider {
     }
 
     try {
-      const response = await fetch(`${baseUrl}/6.0/orders`, {
+      const response = await httpFetch(`${baseUrl}/6.0/orders`, {
         method: "POST", headers, body: JSON.stringify(body),
       });
 
@@ -162,7 +163,7 @@ export class TwoCheckoutProvider extends BasePaymentProvider {
     const headers = this.buildHeaders(config);
 
     try {
-      const response = await fetch(`${baseUrl}/6.0/orders/${encodeURIComponent(merchantOrderId)}`, {
+      const response = await httpFetch(`${baseUrl}/6.0/orders/${encodeURIComponent(merchantOrderId)}`, {
         method: "GET", headers,
       });
 

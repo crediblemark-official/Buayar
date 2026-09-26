@@ -12,6 +12,7 @@ import {
 } from "../../types";
 import { buildRazorpayBasicAuth, verifyRazorpayWebhook } from "./signature";
 import { resolveRawBody, signedPayload, RAW_BODY_REQUIRED_MESSAGE } from "../../utils/rawBody";
+import { httpFetch } from "../../utils/http";
 
 export class RazorpayProvider extends BasePaymentProvider {
   readonly name = "razorpay";
@@ -47,7 +48,7 @@ export class RazorpayProvider extends BasePaymentProvider {
           ...params.providerParams,
         };
 
-        const response = await fetch(`${baseUrl}/orders`, {
+        const response = await httpFetch(`${baseUrl}/orders`, {
           method: "POST", headers, body: JSON.stringify(body),
         });
 
@@ -80,7 +81,7 @@ export class RazorpayProvider extends BasePaymentProvider {
           ...params.providerParams,
         };
 
-        const response = await fetch(`${baseUrl}/payment_links`, {
+        const response = await httpFetch(`${baseUrl}/payment_links`, {
           method: "POST", headers, body: JSON.stringify(body),
         });
 
@@ -172,7 +173,7 @@ export class RazorpayProvider extends BasePaymentProvider {
         ? `/payment_links/${encodeURIComponent(merchantOrderId)}`
         : `/payments/${encodeURIComponent(merchantOrderId)}`;
 
-      const response = await fetch(`${baseUrl}${endpoint}`, { method: "GET", headers });
+      const response = await httpFetch(`${baseUrl}${endpoint}`, { method: "GET", headers });
       const text = await response.text();
       let data: any = null;
       try { data = JSON.parse(text); } catch (e) {}

@@ -1,5 +1,6 @@
 import { ProviderConfig } from "../types";
 import { generateOyHeaders } from "../providers/oy/signature";
+import { httpFetch } from "../utils/http";
 
 export class OyClient {
   private username: string;
@@ -34,7 +35,7 @@ export class OyClient {
       fetchOptions.body = JSON.stringify(body);
     }
 
-    const response = await fetch(url, fetchOptions);
+    const response = await httpFetch(url, fetchOptions);
     const text = await response.text();
     let data: any = null;
     try {

@@ -11,6 +11,7 @@ import {
   PaymentMethod,
 } from "../../types";
 import { buildPaypalBasicAuth } from "./signature";
+import { httpFetch } from "../../utils/http";
 
 export class PaypalProvider extends BasePaymentProvider {
   readonly name = "paypal";
@@ -32,7 +33,7 @@ export class PaypalProvider extends BasePaymentProvider {
     const auth = buildPaypalBasicAuth(clientId, clientSecret);
     const baseUrl = this.getBaseUrl(config);
 
-    const response = await fetch(`${baseUrl}/v1/oauth2/token`, {
+    const response = await httpFetch(`${baseUrl}/v1/oauth2/token`, {
       method: "POST",
       headers: {
         "Authorization": `Basic ${auth}`,
@@ -109,7 +110,7 @@ export class PaypalProvider extends BasePaymentProvider {
     }
 
     try {
-      const response = await fetch(`${this.getBaseUrl(config)}/v1/notifications/verify-webhook-signature`, {
+      const response = await httpFetch(`${this.getBaseUrl(config)}/v1/notifications/verify-webhook-signature`, {
         method: "POST",
         headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -181,7 +182,7 @@ export class PaypalProvider extends BasePaymentProvider {
     }
 
     try {
-      const response = await fetch(`${baseUrl}/v2/checkout/orders`, {
+      const response = await httpFetch(`${baseUrl}/v2/checkout/orders`, {
         method: "POST",
         headers: {
           "Authorization": `Bearer ${accessToken}`,
@@ -331,7 +332,7 @@ export class PaypalProvider extends BasePaymentProvider {
     const baseUrl = this.getBaseUrl(config);
 
     try {
-      const response = await fetch(`${baseUrl}/v2/checkout/orders/${encodeURIComponent(merchantOrderId)}`, {
+      const response = await httpFetch(`${baseUrl}/v2/checkout/orders/${encodeURIComponent(merchantOrderId)}`, {
         method: "GET",
         headers: {
           "Authorization": `Bearer ${accessToken}`,

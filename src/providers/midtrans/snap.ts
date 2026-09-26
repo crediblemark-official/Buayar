@@ -7,6 +7,7 @@ import {
   sha256Hex,
   snapTimestamp,
 } from "../../utils/snap";
+import { httpFetch } from "../../utils/http";
 
 /**
  * Adapter **BI-SNAP Core API Midtrans** (Standar Nasional Open API Pembayaran).
@@ -495,7 +496,7 @@ export class MidtransSnapClient {
     timestamp: string,
     signature: string
   ): Promise<any> {
-    const response = await fetch(`${this.baseUrl}${MIDTRANS_SNAP_PATHS.accessToken}`, {
+    const response = await httpFetch(`${this.baseUrl}${MIDTRANS_SNAP_PATHS.accessToken}`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -576,7 +577,7 @@ export class MidtransSnapClient {
       ...(opts.extraHeaders || {}),
     };
 
-    const response = await fetch(`${this.baseUrl}${endpoint}`, {
+    const response = await httpFetch(`${this.baseUrl}${endpoint}`, {
       method,
       headers,
       ...(body !== undefined && method !== "GET" ? { body: serializedBody } : {}),

@@ -1,4 +1,5 @@
 import { ProviderConfig } from "../types";
+import { httpFetch } from "../utils/http";
 
 export class SquareClient {
   private config: ProviderConfig;
@@ -23,7 +24,7 @@ export class SquareClient {
 
   /** Ambil detail payment Square */
   async getPayment(paymentId: string): Promise<any> {
-    const response = await fetch(`${this.getBaseUrl()}/v2/payments/${paymentId}`, {
+    const response = await httpFetch(`${this.getBaseUrl()}/v2/payments/${paymentId}`, {
       method: "GET", headers: this.buildHeaders(),
     });
     return response.json();
@@ -31,7 +32,7 @@ export class SquareClient {
 
   /** Batalkan payment Square */
   async cancelPayment(paymentId: string): Promise<any> {
-    const response = await fetch(`${this.getBaseUrl()}/v2/payments/${paymentId}/cancel`, {
+    const response = await httpFetch(`${this.getBaseUrl()}/v2/payments/${paymentId}/cancel`, {
       method: "POST", headers: this.buildHeaders(), body: "{}",
     });
     return response.json();
@@ -39,7 +40,7 @@ export class SquareClient {
 
   /** Refund payment Square */
   async refundPayment(paymentId: string, amount: number, currency: string, idempotencyKey: string, reason?: string): Promise<any> {
-    const response = await fetch(`${this.getBaseUrl()}/v2/refunds`, {
+    const response = await httpFetch(`${this.getBaseUrl()}/v2/refunds`, {
       method: "POST",
       headers: this.buildHeaders(),
       body: JSON.stringify({
@@ -55,7 +56,7 @@ export class SquareClient {
   /** Ambil saldo location Square */
   async retrieveBalance(locationId?: string): Promise<any> {
     const id = locationId || this.config.extra?.locationId || this.config.projectId || "";
-    const response = await fetch(`${this.getBaseUrl()}/v2/locations/${id}`, {
+    const response = await httpFetch(`${this.getBaseUrl()}/v2/locations/${id}`, {
       method: "GET", headers: this.buildHeaders(),
     });
     return response.json();
@@ -63,7 +64,7 @@ export class SquareClient {
 
   /** List semua locations merchant */
   async listLocations(): Promise<any> {
-    const response = await fetch(`${this.getBaseUrl()}/v2/locations`, {
+    const response = await httpFetch(`${this.getBaseUrl()}/v2/locations`, {
       method: "GET", headers: this.buildHeaders(),
     });
     return response.json();

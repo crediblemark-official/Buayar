@@ -1,5 +1,6 @@
 import { ProviderConfig } from "../types";
 import { buildBraintreeBasicAuth } from "../providers/braintree/signature";
+import { httpFetch } from "../utils/http";
 
 export class BraintreeClient {
   private config: ProviderConfig;
@@ -30,7 +31,7 @@ export class BraintreeClient {
   async getClientToken(customerId?: string): Promise<string> {
     const body: any = {};
     if (customerId) body.client_token = { customer_id: customerId };
-    const response = await fetch(`${this.getBaseUrl()}/client_token`, {
+    const response = await httpFetch(`${this.getBaseUrl()}/client_token`, {
       method: "POST", headers: this.buildHeaders(), body: JSON.stringify(body),
     });
     const data = await response.json();
@@ -39,7 +40,7 @@ export class BraintreeClient {
 
   /** Ambil detail transaction */
   async findTransaction(transactionId: string): Promise<any> {
-    const response = await fetch(`${this.getBaseUrl()}/transactions/${transactionId}`, {
+    const response = await httpFetch(`${this.getBaseUrl()}/transactions/${transactionId}`, {
       method: "GET", headers: this.buildHeaders(),
     });
     return response.json();
@@ -49,7 +50,7 @@ export class BraintreeClient {
   async refundTransaction(transactionId: string, amount?: number): Promise<any> {
     const body: any = {};
     if (amount) body.transaction = { amount: (amount / 100).toFixed(2) };
-    const response = await fetch(`${this.getBaseUrl()}/transactions/${transactionId}/refund`, {
+    const response = await httpFetch(`${this.getBaseUrl()}/transactions/${transactionId}/refund`, {
       method: "POST", headers: this.buildHeaders(), body: JSON.stringify(body),
     });
     return response.json();
@@ -57,7 +58,7 @@ export class BraintreeClient {
 
   /** Void (batalkan) transaction sebelum settlement */
   async voidTransaction(transactionId: string): Promise<any> {
-    const response = await fetch(`${this.getBaseUrl()}/transactions/${transactionId}/void`, {
+    const response = await httpFetch(`${this.getBaseUrl()}/transactions/${transactionId}/void`, {
       method: "PUT", headers: this.buildHeaders(), body: "{}",
     });
     return response.json();

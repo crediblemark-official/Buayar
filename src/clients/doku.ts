@@ -7,6 +7,7 @@ import {
 } from "../types";
 import { generateDokuHeaders } from "../providers/doku/signature";
 import { SnapClient } from "./snap";
+import { httpFetch } from "../utils/http";
 
 export class DokuClient {
   private clientId: string;
@@ -66,7 +67,7 @@ export class DokuClient {
       fetchOptions.body = typeof body === "string" ? body : JSON.stringify(body);
     }
 
-    const response = await fetch(url, fetchOptions);
+    const response = await httpFetch(url, fetchOptions);
     const text = await response.text();
     let data: any = null;
     try {

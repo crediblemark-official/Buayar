@@ -4,6 +4,7 @@ import {
   getDuitkuPaymentMethodsSignature,
   getDuitkuStatusSignatures,
 } from "../providers/duitku/signature";
+import { httpFetch } from "../utils/http";
 
 export interface DuitkuDisbursementParams {
   bankCode: string;
@@ -72,7 +73,7 @@ export class DuitkuClient {
       fetchOptions.body = JSON.stringify(body);
     }
 
-    const response = await fetch(url, fetchOptions);
+    const response = await httpFetch(url, fetchOptions);
     const text = await response.text();
     let data: any = null;
     try {

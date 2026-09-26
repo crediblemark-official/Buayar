@@ -12,6 +12,7 @@ import {
 } from "../../types";
 import { toFinpayPaymentMethod } from "../../core/canonical";
 import { generateFinpaySignature, verifyFinpaySignature } from "./signature";
+import { httpFetch } from "../../utils/http";
 
 export class FinpayProvider extends BasePaymentProvider {
   readonly name = "finpay";
@@ -54,7 +55,7 @@ export class FinpayProvider extends BasePaymentProvider {
     };
 
     try {
-      const response = await fetch(url, {
+      const response = await httpFetch(url, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -337,7 +338,7 @@ export class FinpayProvider extends BasePaymentProvider {
     };
 
     try {
-      const response = await fetch(url, {
+      const response = await httpFetch(url, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

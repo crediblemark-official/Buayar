@@ -1,5 +1,6 @@
 import { ProviderConfig } from "../types";
 import { generateFinpaySignature } from "../providers/finpay/signature";
+import { httpFetch } from "../utils/http";
 
 export class FinpayClient {
   private merchantId: string;
@@ -24,7 +25,7 @@ export class FinpayClient {
   async request(endpoint: string, payload: any): Promise<any> {
     const url = `${this.getBaseUrl()}${endpoint}`;
 
-    const response = await fetch(url, {
+    const response = await httpFetch(url, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

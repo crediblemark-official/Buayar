@@ -13,6 +13,7 @@ import {
 } from "../../types";
 import { toOyPaymentMethod } from "../../core/canonical";
 import { generateOyHeaders, verifyOyWebhook } from "./signature";
+import { httpFetch } from "../../utils/http";
 
 export class OyProvider extends BasePaymentProvider {
   readonly name = "oy";
@@ -49,7 +50,7 @@ export class OyProvider extends BasePaymentProvider {
           ...params.providerParams,
         };
 
-        const response = await fetch(url, {
+        const response = await httpFetch(url, {
           method: "POST",
           headers,
           body: JSON.stringify(payload),
@@ -93,7 +94,7 @@ export class OyProvider extends BasePaymentProvider {
           ...params.providerParams,
         };
 
-        const response = await fetch(url, {
+        const response = await httpFetch(url, {
           method: "POST",
           headers,
           body: JSON.stringify(payload),
@@ -144,7 +145,7 @@ export class OyProvider extends BasePaymentProvider {
           ...params.providerParams,
         };
 
-        const response = await fetch(url, {
+        const response = await httpFetch(url, {
           method: "POST",
           headers,
           body: JSON.stringify(payload),
@@ -405,7 +406,7 @@ export class OyProvider extends BasePaymentProvider {
     const headers = generateOyHeaders(username, apiKey);
 
     try {
-      const response = await fetch(url, {
+      const response = await httpFetch(url, {
         method: "GET",
         headers,
       });

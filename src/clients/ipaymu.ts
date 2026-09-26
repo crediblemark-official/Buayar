@@ -1,5 +1,6 @@
 import { ProviderConfig } from "../types";
 import { generateIpaymuSignature } from "../providers/ipaymu/signature";
+import { httpFetch } from "../utils/http";
 
 export class IpaymuClient {
   private va: string;
@@ -42,7 +43,7 @@ export class IpaymuClient {
       fetchOptions.body = JSON.stringify(body);
     }
 
-    const response = await fetch(url, fetchOptions);
+    const response = await httpFetch(url, fetchOptions);
     const text = await response.text();
     let data: any = null;
     try {
@@ -211,7 +212,7 @@ export class IpaymuClient {
    * Ambil daftar seluruh provinsi di Indonesia
    */
   async getAreasProvince(): Promise<any> {
-    const res = await fetch("https://my.ipaymu.com/api/areas/province");
+    const res = await httpFetch("https://my.ipaymu.com/api/areas/province");
     return res.json();
   }
 
@@ -219,7 +220,7 @@ export class IpaymuClient {
    * Ambil daftar kota / kabupaten berdasarkan ID provinsi
    */
   async getAreasCity(provinceId: string | number): Promise<any> {
-    const res = await fetch(`https://my.ipaymu.com/api/areas/city/${provinceId}`);
+    const res = await httpFetch(`https://my.ipaymu.com/api/areas/city/${provinceId}`);
     return res.json();
   }
 
@@ -227,7 +228,7 @@ export class IpaymuClient {
    * Ambil daftar kecamatan berdasarkan ID kota / kabupaten
    */
   async getAreasDistrict(cityId: string | number): Promise<any> {
-    const res = await fetch(`https://my.ipaymu.com/api/areas/district/${cityId}`);
+    const res = await httpFetch(`https://my.ipaymu.com/api/areas/district/${cityId}`);
     return res.json();
   }
 
@@ -235,7 +236,7 @@ export class IpaymuClient {
    * Ambil daftar kelurahan berdasarkan ID kecamatan
    */
   async getAreasVillage(districtId: string | number): Promise<any> {
-    const res = await fetch(`https://my.ipaymu.com/api/areas/village/${districtId}`);
+    const res = await httpFetch(`https://my.ipaymu.com/api/areas/village/${districtId}`);
     return res.json();
   }
 
