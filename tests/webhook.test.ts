@@ -274,19 +274,31 @@ describe("Universal Webhook Verification & Normalization", () => {
   });
 
   it("[S9] should gracefully handle unknown webhook without throwing an error", async () => {
-    const unconfiguredBuayar = new Buayar({
-      provider: "" as any,
-    });
+    // CI: file test lain (mis. config.test.ts) dapat meninggalkan env kredensial —
+    // bersihkan agar autodetect tidak "menebak" provider dari sisa env.
+    const savedEnv = { ...process.env };
+    for (const k of Object.keys(process.env)) {
+      if (/^(BUAYAR_|PROVIDER_PG|PAYMENT_PROVIDER|.*_(API_KEY|SERVER_KEY|SECRET_KEY|CLIENT_ID|CLIENT_SECRET|MERCHANT|VA|PASSWORD|KEY))$/.test(k)) {
+        delete process.env[k];
+      }
+    }
+    try {
+      const unconfiguredBuayar = new Buayar({
+        provider: "" as any,
+      });
 
-    const unknownPayload = {
-      foo: "bar",
-      some_random_id: 12345,
-    };
+      const unknownPayload = {
+        foo: "bar",
+        some_random_id: 12345,
+      };
 
-    const result = await unconfiguredBuayar.verifyWebhook(unknownPayload, undefined, { provider: "" as any });
-    expect(result.isValid).toBe(false);
-    expect(result.provider).toBe("unknown");
-    expect(result.error).toContain("Unable to detect payment provider");
+      const result = await unconfiguredBuayar.verifyWebhook(unknownPayload, undefined, { provider: "" as any });
+      expect(result.isValid).toBe(false);
+      expect(result.provider).toBe("unknown");
+      expect(result.error).toContain("Unable to detect payment provider");
+    } finally {
+      process.env = savedEnv;
+    }
   });
 
   it("[S9] should detect provider from headers with high confidence", async () => {
