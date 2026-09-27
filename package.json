@@ -1,6 +1,6 @@
 {
   "name": "@crediblemark/buayar",
-  "version": "0.9.0",
+  "version": "0.10.0",
   "description": "Unified Payment Gateway SDK for Node.js & TypeScript — 21 providers (Midtrans, Xendit, Duitku, Stripe, PayPal, Adyen, Razorpay, Square, Checkout.com, PayU, Braintree, 2Checkout, DOKU, iPaymu, PrismaLink, Faspay, Finpay, Nicepay, OY!, SumoPod, Xenith) with zero-code switching via .env",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
