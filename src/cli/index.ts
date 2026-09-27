@@ -6,6 +6,7 @@ import { FRAMEWORKS, PROVIDERS, Framework } from "./templates";
 import { selectPrompt, confirmPrompt } from "./prompts";
 import { scaffold, printScaffoldSummary } from "./scaffold";
 import { runChannels, printChannelsHelp } from "./channels";
+import { runAudit, printAuditHelp } from "./audit";
 
 function getVersion(): string {
   try {
@@ -96,12 +97,17 @@ Usage:
   buayar channels --format <fmt> canonical | raw | categories (default: canonical)
   buayar channels --wrap         Bungkus metadata di luar array channel
 
+  buayar audit                   Status verifikasi tiap provider (live vs contract)
+  buayar audit --json            Keluaran JSON untuk CI
+  buayar audit --only-unverified Hanya yang belum pernah diuji ke server asli
+
   buayar --version | -v          Tampilkan versi
   buayar --help | -h             Tampilkan bantuan
 
 Contoh:
   buayar init --yes --framework hono --provider xendit
   buayar channels --provider sumopod --out ./payment-channels.json
+  buayar audit --json
 `);
 }
 
@@ -127,7 +133,17 @@ async function runInit(argv: string[]): Promise<number> {
       "midtrans"
     );
   }
-  provider = provider || "midtrans";
+  if (!provider) {
+    // Default ke midtrans dipertahankan demi backward-compatibility (`--yes`
+    // tanpa `--provider`), tapi TIDAK lagi diam-diam: diam-diam menulis
+    // MIDTRANS ke .env scaffold padahal user memakai PG lain adalah
+    // sumber bug yang mahal dicari.
+    p.log.warn(
+      "Tidak ada --provider. Default ke 'midtrans'. " +
+        "Kalau provider-mu bukan Midtrans, jalankan ulang: buayar init --provider <nama>"
+    );
+    provider = "midtrans";
+  }
   if (!PROVIDERS.includes(provider as any)) {
     p.cancel(`Provider tidak dikenal: "${provider}"`);
     return 1;
@@ -176,6 +192,14 @@ Selesai! Langkah berikutnya:
 async function main(): Promise<number> {
   const argv = process.argv.slice(2);
   const { command, flags } = parseArgs(argv);
+
+  if (command === "audit" || command === "verify") {
+    if (hasFlag(flags, "help") || hasFlag(flags, "h")) {
+      printAuditHelp();
+      return 0;
+    }
+    return runAudit(argv);
+  }
 
   if (command === "channels" || command === "generate-channels" || command === "payment-channels") {
     if (hasFlag(flags, "help") || hasFlag(flags, "h")) {

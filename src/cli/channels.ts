@@ -138,6 +138,13 @@ export async function runChannels(argv: string[]): Promise<number> {
   }
 
   if (!provider) {
+    // Default dipertahankan demi backward-compatibility, tapi diumumkan keras:
+    // command ini menembak API provider sungguhan dengan kredensial dari .env,
+    // jadi menebak provider bisa jadi mahal.
+    console.error(
+      "\n⚠ Tidak ada --provider dan .env tidak menetapkan provider. " +
+        "Menggunakan default: midtrans. Tentukan provider dengan --provider <nama>."
+    );
     provider = "midtrans";
   }
 

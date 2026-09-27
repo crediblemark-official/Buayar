@@ -299,7 +299,7 @@ describe("iPaymu Provider & Client Integration", () => {
         amount: 50000,
         paymentMethod: "bca_va",
         productDetails: "Produk",
-        customer: { name: "Budi", email: "budi@mail.com" },
+        customer: { name: "Budi", email: "budi@mail.com", phone: "081234567890" },
         feeDirection: "BUYER",
         escrow: true,
       });
@@ -311,18 +311,70 @@ describe("iPaymu Provider & Client Integration", () => {
     }
   });
 
-  it("should NOT send hardcoded phone when customer.phone is empty (S3 fix)", async () => {
+  it("S3: tidak pernah mengarang phone — pre-flight menolak sebelum request (-strengthened)", async () => {
+    const originalFetch = globalThis.fetch;
+    let fetchCalled = false;
+    (globalThis as any).fetch = async () => {
+      fetchCalled = true;
+      return { ok: true, status: 200, text: async () => "{}" };
+    };
+    try {
+      const res = await new Buayar({
+        provider: "ipaymu",
+        merchantCode: "0000001411234567",
+        apiKey: "test-api-key",
+      }).createInvoice({
+        orderId: "ORDER-NO-PHONE",
+        amount: 50000,
+        paymentMethod: "bca_va",
+        productDetails: "Test",
+        customer: { name: "Budi", email: "budi@mail.com" },
+      });
+
+      expect(res.success).toBe(false);
+      // S3 tetap terpenuhi: tidak ada nomor telepon karangan yang dikirim
+      expect(JSON.stringify(res.rawResponse)).not.toContain("phone");
+      // Request tidak boleh dibuang ke jaringan untuk hal yang pasti ditolak
+      expect(fetchCalled).toBe(false);
+      // Pesan harus menyebut provider, field, dan cara memperbaiki
+      expect(res.error).toContain("customer.phone");
+      expect(res.error).toContain("iPaymu");
+      expect(res.error).toContain("5-15");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("phone invalid ditolak pre-flight dengan menyebut format yang benar", async () => {
+    const originalFetch = globalThis.fetch;
+    let fetchCalled = false;
+    (globalThis as any).fetch = async () => { fetchCalled = true; return { ok: true, status: 200, text: async () => "{}" }; };
+    try {
+      const res = await new Buayar({ provider: "ipaymu", apiKey: "k", merchantCode: "M" }).createInvoice({
+        orderId: "ORDER-BAD-PHONE",
+        amount: 50000,
+        paymentMethod: "bca_va",
+        productDetails: "Test",
+        // "+62…" ditolak gateway iPaymu: "Panjang phone harus antara 5 dan 15 digit"
+        customer: { name: "Budi", email: "budi@mail.com", phone: "+6281234567890" },
+      });
+      expect(res.success).toBe(false);
+      expect(fetchCalled).toBe(false);
+      expect(res.error).toContain("must contain digits only");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("phone valid diteruskan apa adanya ke direct & redirect", async () => {
     let capturedDirectBody: any = null;
     let capturedRedirectBody: any = null;
     const originalFetch = globalThis.fetch;
     (globalThis as any).fetch = async (url: any, options: any) => {
       const urlStr = String(url);
       const body = JSON.parse(options.body);
-      if (urlStr.includes("/payment/direct")) {
-        capturedDirectBody = body;
-      } else {
-        capturedRedirectBody = body;
-      }
+      if (urlStr.includes("/payment/direct")) capturedDirectBody = body;
+      else capturedRedirectBody = body;
       return {
         ok: true,
         status: 200,
@@ -341,36 +393,26 @@ describe("iPaymu Provider & Client Integration", () => {
         apiKey: "test-api-key",
       });
 
-      // Direct payment tanpa phone
+      // Direct
       await buayar.createInvoice({
-        orderId: "ORDER-NO-PHONE-1",
+        orderId: "ORDER-WITH-PHONE-1",
         amount: 50000,
         paymentMethod: "bca_va",
         productDetails: "Test",
-        customer: { name: "Budi", email: "budi@mail.com" },
+        customer: { name: "Budi", email: "budi@mail.com", phone: "081234567890" },
       });
-      expect(capturedDirectBody.phone).toBeUndefined();
+      expect(capturedDirectBody.phone).toBe("081234567890");
       expect(capturedDirectBody.name).toBe("Budi");
 
-      // Redirect payment tanpa phone
+      // Redirect (tanpa paymentMethod → jalur checkout redirect iPaymu)
       await buayar.createInvoice({
-        orderId: "ORDER-NO-PHONE-2",
+        orderId: "ORDER-WITH-PHONE-2",
         amount: 50000,
         productDetails: "Test",
-        customer: { name: "Budi", email: "budi@mail.com" },
+        customer: { name: "Budi", email: "budi@mail.com", phone: "081234567890" },
       });
-      expect(capturedRedirectBody.buyerPhone).toBeUndefined();
+      expect(capturedRedirectBody.buyerPhone).toBe("081234567890");
       expect(capturedRedirectBody.buyerName).toBe("Budi");
-
-      // Dengan phone → harus tetap dikirim
-      await buayar.createInvoice({
-        orderId: "ORDER-WITH-PHONE",
-        amount: 50000,
-        paymentMethod: "bca_va",
-        productDetails: "Test",
-        customer: { name: "Budi", email: "budi@mail.com", phone: "08123456789" },
-      });
-      expect(capturedDirectBody.phone).toBe("08123456789");
     } finally {
       globalThis.fetch = originalFetch;
     }
@@ -406,7 +448,7 @@ describe("iPaymu Provider & Client Integration", () => {
         amount: 25000,
         paymentMethod: "cod",
         productDetails: "Paket COD",
-        customer: { name: "Budi", email: "budi@mail.com" },
+        customer: { name: "Budi", email: "budi@mail.com", phone: "081234567890" },
         items: [{ name: "Kaos", price: 25000, quantity: 1, weight: 1, width: 10, length: 20, height: 5 }],
       });
       expect(capturedBody.paymentMethod).toBe("cod");
@@ -426,7 +468,7 @@ describe("iPaymu Provider & Client Integration", () => {
         amount: 10000,
         paymentMethod: "bca_va",
         productDetails: "Langganan Premium",
-        customer: { name: "Budi", email: "budi@mail.com" },
+        customer: { name: "Budi", email: "budi@mail.com", phone: "081234567890" },
       });
       expect(capturedBody.product).toEqual(["Langganan Premium"]);
       expect(capturedBody.qty).toEqual([1]);
@@ -468,7 +510,7 @@ describe("iPaymu Provider & Client Integration", () => {
         amount: 10000,
         paymentMethod: "debitonline",
         productDetails: "Debit Online",
-        customer: { name: "Budi", email: "budi@mail.com" },
+        customer: { name: "Budi", email: "budi@mail.com", phone: "081234567890" },
         returnUrl: "https://shop.test/return",
       });
       expect(capturedUrl).toContain("/payment/direct");
@@ -661,7 +703,7 @@ describe("iPaymu Provider & Client Integration", () => {
         amount: 150000,
         paymentMethod: "bca_va",
         productDetails: "Split payment test",
-        customer: { name: "Budi", email: "budi@mail.com" },
+        customer: { name: "Budi", email: "budi@mail.com", phone: "081234567890" },
         subAccountId: "0000009988776655",
       });
       expect(capturedDirectBody.account).toBe("0000009988776655");
@@ -671,7 +713,7 @@ describe("iPaymu Provider & Client Integration", () => {
         orderId: "SPLIT-REDIR-1",
         amount: 200000,
         productDetails: "Split redirect test",
-        customer: { name: "Budi", email: "budi@mail.com" },
+        customer: { name: "Budi", email: "budi@mail.com", phone: "081234567890" },
         subAccountId: "0000009988776655",
       });
       expect(capturedRedirectBody.account).toBe("0000009988776655");

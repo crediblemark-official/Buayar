@@ -25,7 +25,8 @@ scripts/probe/
 ├── ipaymu/channels.ts
 └── xendit/channels.ts
 
-tests/                           # 535 test (bun test), termasuk webhook fail-closed 21/21
+tests/                           # bun test, termasuk webhook fail-closed 21/21
+                                 # (angka test berubah terus — jalankan `bun test`)
 ```
 
 ## Status per provider (rincian → klik nama)
@@ -51,7 +52,7 @@ Provider yang sudah diuji langsung dengan kredensial sandbox nyata (`sandbox.md`
 | Finpay | ✅ FP-1/FP-3 | ✅ **TESTED LIVE (sandbox)** | 13/13 kanal aktif lolos; `indomaret` belum diaktifkan di akun | [finpay](./finpay/README.md) |
 
 ### ⏳ Provider Belum Diuji Live Sandbox / Simulator Only (13)
-Provider yang implementasinya telah selesai & terkunci 535 test unit/simulator, tetapi **belum pernah ditembakkan ke akun sandbox nyata** karena menunggu tersedianya kredensial:
+Provider yang implementasinya telah selesai & terkunci oleh test unit/simulator, tetapi **belum pernah ditembakkan ke akun sandbox nyata** karena menunggu tersedianya kredensial:
 | Nicepay | ✅ N-1/N-2 | ⏳ **BELUM TESTED LIVE** | Butuh akun sandbox Nicepay (`NICEPAY_IMID`, `NICEPAY_KEY`) | [nicepay](./nicepay/README.md) |
 | Faspay | ✅ F-1 (verified) | ⏳ **BELUM TESTED LIVE** | Butuh akun sandbox Faspay (`FASPAY_MERCHANT_ID`, `FASPAY_USER_ID`, `FASPAY_PASSWORD`) | [faspay](./faspay/README.md) |
 | OY! Bisnis | ⏳ Gelombang 3 | ⏳ **BELUM TESTED LIVE** | Butuh akun sandbox OY! (`OY_USERNAME`, `OY_API_KEY`) | [oy](./oy/README.md) |

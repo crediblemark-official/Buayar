@@ -29,6 +29,11 @@ export class CheckoutComProvider extends BasePaymentProvider {
     const currency = (params.currency || "USD").toUpperCase();
     const baseUrl = this.getBaseUrl(config);
     const isDirect = !!params.paymentMethod;
+    // Checkout.com Payment Links (jalur redirect di bawah) tidak punya field
+    // pembatas metode. Payments API punya `payment_source.type`, tapi setiap
+    // metode wallet/APM mewajibkan token atau detail tambahan dari client SDK
+    // — mengisinya server-side hanya menghasilkan 422. Karena itu `paymentMethod`
+    // tidak di-forward dan ditandai "advisory".
     const successUrl = returnUrl || config.returnUrl || "https://example.com/payment/success";
 
     try {
@@ -68,6 +73,7 @@ export class CheckoutComProvider extends BasePaymentProvider {
           amount: data.amount || amount,
           reference: data.id,
           paymentUrl: data._links?.redirect?.href,
+          paymentMethodApplied: params.paymentMethod ? "advisory" : undefined,
           rawResponse: data,
         };
       } else {
@@ -183,7 +189,9 @@ export class CheckoutComProvider extends BasePaymentProvider {
   }
 
   async checkTransaction(params: CheckTransactionParams, config: ProviderConfig): Promise<CheckTransactionResult> {
-    const { merchantOrderId } = params;
+    // `merchantOrderId` opsional di tipe publik; PaymentManager sudah menjamin
+    // salah satu identifier terisi sebelum sampai ke provider.
+    const merchantOrderId = params.merchantOrderId || params.transactionId || "";
     const secretKey = config.apiKey || config.secretKey || "";
     const baseUrl = this.getBaseUrl(config);
 

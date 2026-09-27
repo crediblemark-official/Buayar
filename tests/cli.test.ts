@@ -3,6 +3,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { buildScaffold, getRouteTemplate, FRAMEWORKS, PROVIDERS } from "../src/cli/templates";
+import { providerRegistry } from "../src/core/providerRegistry";
 import { scaffold } from "../src/cli/scaffold";
 
 let tmpDir: string;
@@ -49,8 +50,14 @@ describe("buildScaffold", () => {
     expect(FRAMEWORKS).toContain("nextjs");
   });
 
-  it("exposes all 20 providers", () => {
-    expect(PROVIDERS.length).toBe(20);
+  it("exposes all 21 providers", () => {
+    expect(PROVIDERS.length).toBe(21);
+  });
+
+  it("daftar PROVIDERS CLI sinkron dengan provider yang terdaftar di SDK", () => {
+    const cli: string[] = [...PROVIDERS].sort();
+    const registered: string[] = providerRegistry.names().sort();
+    expect(cli).toEqual(registered);
   });
 
   it("ensures express, hono, and nextjs templates capture raw body for signature verification", () => {

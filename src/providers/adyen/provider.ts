@@ -10,6 +10,8 @@ import {
   CheckTransactionResult,
   PaymentMethod,
 } from "../../types";
+import { CANONICAL_TO_ADYEN } from "../../core/canonical";
+import { resolvePaymentMethodCode } from "../../types/canonical";
 import { verifyAdyenWebhook } from "./signature";
 import { httpFetch } from "../../utils/http";
 
@@ -34,6 +36,16 @@ export class AdyenProvider extends BasePaymentProvider {
     const baseUrl = this.getBaseUrl(config);
     const isDirect = !!params.paymentMethod;
 
+    // Adyen punya field method resmi di kedua jalur:
+    //   /payments  -> paymentMethod: { type, ...details }  (WAJIB ada)
+    //   /sessions  -> allowedPaymentMethods: ["scheme", ...]
+    // Jadi di sini method benar-benar dikirim, bukan hanya penanda "direct".
+    const canonical = resolvePaymentMethodCode(params.paymentMethod);
+    const adyenType = canonical ? CANONICAL_TO_ADYEN[canonical.toLowerCase().trim()] : undefined;
+    // Detail wajib per type (mis. kartu terenkripsi) hanya bisa dihasilkan
+    // client SDK, jadi caller menyediakannya lewat providerParams.paymentMethod.
+    const callerPaymentMethod = params.providerParams?.paymentMethod;
+
     const successUrl = returnUrl || config.returnUrl || "https://example.com/payment/success";
 
     try {
@@ -52,6 +64,15 @@ export class AdyenProvider extends BasePaymentProvider {
           metadata: { order_id: orderId },
           ...params.providerParams,
         };
+
+        // `paymentMethod` wajib untuk /payments. Kalau caller menyediakannya,
+        // biarkan apa adanya; kalau tidak, isi `type` saja dari kode kanonik
+        // (Adyen akan mengembalikan error deskriptif bila detail kurang).
+        if (callerPaymentMethod) {
+          body.paymentMethod = callerPaymentMethod;
+        } else if (adyenType) {
+          body.paymentMethod = { type: adyenType };
+        }
 
         const response = await httpFetch(url, {
           method: "POST",
@@ -77,6 +98,7 @@ export class AdyenProvider extends BasePaymentProvider {
           amount,
           reference: data.pspReference || data.merchantReference,
           paymentUrl: data.action?.url || data.redirect?.url || undefined,
+          paymentMethodApplied: params.paymentMethod ? (body.paymentMethod ? "server" : "advisory") : undefined,
           rawResponse: data,
         };
       } else {
@@ -93,6 +115,12 @@ export class AdyenProvider extends BasePaymentProvider {
           shopperReference: customer?.email || orderId,
           metadata: { order_id: orderId },
           ...params.providerParams,
+          // Membatasi metode yang tampil di halaman Adyen-hosted — inilah
+          // tempat `paymentMethod` benar-benar berpengaruh untuk mode redirect.
+          // Caller yang sudah menyetel `allowedPaymentMethods` sendiri menang.
+          ...(adyenType && !params.providerParams?.allowedPaymentMethods
+            ? { allowedPaymentMethods: [adyenType] }
+            : {}),
         };
 
         const response = await httpFetch(url, {
@@ -117,6 +145,9 @@ export class AdyenProvider extends BasePaymentProvider {
           reference: data.id,
           paymentUrl: data.url,
           paymentCode: data.sessionData,
+          paymentMethodApplied: params.paymentMethod
+            ? (body.paymentMethod || body.allowedPaymentMethods ? "server" : "advisory")
+            : undefined,
           rawResponse: data,
         };
       }
@@ -185,7 +216,9 @@ export class AdyenProvider extends BasePaymentProvider {
   }
 
   async checkTransaction(params: CheckTransactionParams, config: ProviderConfig): Promise<CheckTransactionResult> {
-    const { merchantOrderId } = params;
+    // `merchantOrderId` opsional di tipe publik; PaymentManager sudah menjamin
+    // salah satu identifier terisi sebelum sampai sini.
+    const merchantOrderId = params.merchantOrderId || params.transactionId || "";
     const apiKey = config.apiKey || config.secretKey || "";
     const merchantAccount = config.merchantCode || config.merchantId || "";
 

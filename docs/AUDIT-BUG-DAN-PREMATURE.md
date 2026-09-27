@@ -4,7 +4,13 @@
 >
 > **Repo:** `/Buayar` (package `@crediblemark/buayar`, versi 0.8.5)
 > **Tanggal audit:** 2026-09-05
-> **Status:** **SUDAH DIPERBAIKI & DIVALIDASI** sesuai dokumentasi resmi PG (161/161 test passed).
+> **Status:** **SUDAH DIPERBAIKI & DIVALIDASI** sesuai dokumentasi resmi PG.
+>
+> ⚠️ **Rujukan baris di dokumen ini sudah kadaluarsa.** Beberapa `file:line`
+> tidak lagi cocok dengan kode sekarang karena ada pass perbaikan tambahan.
+> Angka "161/161 test passed" bersifat historis — jalankan `bun test` untuk angka
+> terkini. Sumber kebenaran: [`README.md`](../README.md) dan
+> [`docs/guide.md`](guide.md).
 
 Laporan ini merangkum bug dan bagian "premature" (fitur yang tampak tersedia di API/types namun
 perilaku aktualnya belum lengkap/benar) yang ditemukan saat menelusuri SDK, termasuk dampaknya bagi
@@ -22,7 +28,7 @@ Seluruh temuan critical (S1, S2) dan high (S3, S4, S5, S6) telah ditangani dan d
 | S3 | 🟠 High | Bug kontrak | `providers/ipaymu/provider.ts:50,84` | `phone` di-fallback ke string hardcode `"081234567890"` | ✅ **FIXED** (phone dijadikan opsional per docs resmi iPaymu) |
 | S4 | 🟠 High | Risk integrasi | `providers/ipaymu/provider.ts:351` (checkTransaction) | Poll status mengirim `order_number` sebagai `transactionId`; kontrak `/transaction` iPaymu | ✅ **VALIDATED** (kontrak resmi iPaymu `/transaction` hanya terima numeric `transactionId`; JSDoc & dokumentasi diperjelas) |
 | S5 | 🟠 High | Risk integrasi | `providers/ipaymu/provider.ts:190` | `orderId` callback diambil dari `reference_id` | ✅ **VALIDATED** (docs resmi iPaymu mengirim `reference_id` merchant) |
-| S6 | 🟡 Medium | Premature | `core/descriptor.ts:90` | `coming_soon` selalu di-hardcode `false` | ✅ **FIXED** (baca `raw.coming_soon ?? raw.is_coming_soon ?? false`) |
+| S6 | 🟡 Medium | Premature | `core/descriptor.ts:90` | `coming_soon` selalu di-hardcode `false` | ✅ **FIXED** (baca `pm.coming_soon ?? false` di `core/descriptor.ts`) |
 | S7 | 🟡 Medium | Premature | beberapa provider `getPaymentMethods` | Daftar channel Midtrans/Xendit dll. adalah statis | 🟡 **DIKOREKSI** — klaim "Xendit query `GET /payment_channels` live" **tidak benar**: tidak ada kode itu dan Xendit tidak menyediakan API ketersediaan channel. Live: **iPaymu** (`/api/v2/payment-channels`); statis: Midtrans/Xendit/DOKU |
 | S8 | 🟡 Medium | Premature | `core/manager.ts:297` | `probePaymentMethods` sebagian besar fallback | ✅ **FIXED** (live: iPaymu & Midtrans; Xendit kini jujur `source: "static"` + fallback dinamis di manager) |
 | S10 | 🟢 Low | Bug DX | `core/buayar.ts` (module scope) | `export const buayar = new Buayar()` di-construct saat import → membaca environment & mencetak warning autodetect hanya karena `import` | ✅ **FIXED** (singleton dibuat lazy via Proxy) |
@@ -103,7 +109,7 @@ Seluruh temuan critical (S1, S2) dan high (S3, S4, S5, S6) telah ditangani dan d
 **Lokasi:** `src/core/descriptor.ts:90`
 
 **Perbaikan:**
-- Implementasi diperbarui agar membaca status `coming_soon` dari raw payment method (`raw.coming_soon ?? raw.is_coming_soon ?? false`) alih-alih hardcode `false`.
+- Implementasi diperbarui agar membaca status `coming_soon` dari raw payment method (`pm.coming_soon ?? false` — hanya satu field, `is_coming_soon` memang tidak pernah ada di API) alih-alih hardcode `false`.
 - Konsumen SDK kini dapat menandai channel pembayaran yang belum aktif di UI.; channel yang seharusnya
 ditandai tidak tersedia akan tampil normal.
 
@@ -190,7 +196,7 @@ Regresi dikunci oleh `tests/singleton.test.ts`.
 3. **S4/S5 (High) — ✅ SELESAI & TERVALIDASI:**
    - Divalidasi dengan docs resmi iPaymu: `/transaction` mewajibkan `transactionId` numerik iPaymu (`invoice.reference`), bukan orderId merchant. JSDoc dan dokumentasi diperjelas.
    - Divalidasi dengan docs resmi iPaymu: callback webhook selalu mengirim `reference_id` merchant.
-4. **S6 (Medium) — ✅ SELESAI:** Flag `coming_soon` pada deskriptor channel kini membaca dari field raw channel (`raw.coming_soon ?? raw.is_coming_soon ?? false`).
+4. **S6 (Medium) — ✅ SELESAI:** Flag `coming_soon` pada deskriptor channel kini membaca dari field raw channel (`pm.coming_soon ?? false` — hanya satu field, `is_coming_soon` memang tidak pernah ada di API).
 5. **S7 (Medium) — ✅ SELESAI:** Query dinamis live `/payment_channels` pada Xendit dengan fallback statis aman.
 6. **S8 (Medium) — ✅ SELESAI:** `probePaymentMethods` diimplementasikan di iPaymu & Xendit + fallback dinamis di manager & facade.
 7. **S9 (Medium) — ✅ SELESAI:** Deteksi webhook via header tingkat tinggi, heuristik diperketat, dan penanganan aman tanpa crash.
@@ -203,7 +209,7 @@ Regresi dikunci oleh `tests/singleton.test.ts`.
 - `src/providers/xendit/provider.ts` — `verifyCallback` (≈217-260)
 - `src/providers/ipaymu/provider.ts` — `createInvoice` (25-186), `verifyCallback` (188-216), `checkTransaction` (351-449)
 - `src/core/descriptor.ts` — `buildPaymentMethodDescriptor` (72-93)
-- `src/core/manager.ts` — `probePaymentMethods` (289-298), `getPaymentMethods` (271-278), `checkTransaction` (280-287)
+- `src/core/manager.ts` — `probePaymentMethods`, `getPaymentMethods`, `checkTransaction` (nomor baris berubah; cari per nama)
 - `src/core/providerRegistry.ts` — `detectFromWebhook` (83-107)
 - `src/core/buayar.ts` — `verifyWebhook` (243-310)
 ---

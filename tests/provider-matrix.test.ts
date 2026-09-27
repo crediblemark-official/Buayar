@@ -1,12 +1,15 @@
 import { describe, expect, it } from "bun:test";
 import { paymentManager } from "../src/core/manager";
 import { Buayar } from "../src";
+import { providerRegistry } from "../src/core/providerRegistry";
+import { PROVIDERS as CLI_PROVIDERS } from "../src/cli/templates";
 
-// Daftar 20 provider yang didukung.
+// Daftar 21 provider yang didukung. Harus sinkron dengan
+// providerRegistry + src/cli/templates.ts (PROVIDERS) — test ini yang menjaga sinkronisasinya.
 const PROVIDERS = [
   "midtrans", "duitku", "ipaymu", "xendit", "doku", "prismalink", "faspay",
   "finpay", "nicepay", "oy", "stripe", "paypal", "adyen", "checkoutcom",
-  "razorpay", "square", "payu", "braintree", "twocheckout", "sumopod",
+  "razorpay", "square", "payu", "braintree", "twocheckout", "sumopod", "xenith",
 ] as const;
 
 // Matriks dukungan fitur unggulan (sesuai switch di PaymentManager).
@@ -36,6 +39,7 @@ const CAPABILITIES: Record<
   braintree:     { refund: true,  checkBalance: false, disburse: false },
   twocheckout:   { refund: true,  checkBalance: false, disburse: false },
   sumopod:       { refund: false, checkBalance: false, disburse: false },
+  xenith:       { refund: false, checkBalance: true,  disburse: true  },
 };
 
 const baseConfig: Record<string, any> = {
@@ -59,15 +63,24 @@ const baseConfig: Record<string, any> = {
   braintree:   { apiKey: "x", merchantCode: "M", extra: { publicKey: "p", privateKey: "pk" } },
   twocheckout: { apiKey: "x", merchantCode: "M", extra: { secretWord: "w" } },
   sumopod:     { apiKey: "sumo_k" },
+  xenith:      { apiKey: "x", secretKey: "s" },
 };
 
 describe("Provider Matrix — semua PG terdaftar", () => {
-  it("harus mendaftarkan seluruh 20 provider", () => {
+  it("harus mendaftarkan seluruh 21 provider", () => {
     for (const name of PROVIDERS) {
       const provider = paymentManager.getProvider(name);
       expect(provider.name.toLowerCase()).toBe(name);
     }
-    expect(PROVIDERS.length).toBe(20);
+    expect(PROVIDERS.length).toBe(21);
+  });
+
+  it("matriks test harus sinkron dengan registry & CLI (21 provider, tanpa yang tertinggal)", () => {
+    const registered: string[] = providerRegistry.names().sort();
+    const matrix: string[] = [...PROVIDERS].sort();
+    const cli: string[] = [...CLI_PROVIDERS].sort();
+    expect(matrix).toEqual(registered);
+    expect(cli).toEqual(registered);
   });
 
   it("harus menyediakan getter client di facade untuk semua provider", () => {
@@ -78,8 +91,9 @@ describe("Provider Matrix — semua PG terdaftar", () => {
       "getNicepayClient", "getOyClient", "getStripeClient", "getPaypalClient",
       "getAdyenClient", "getCheckoutComClient", "getRazorpayClient", "getSquareClient",
       "getPayuClient", "getBraintreeClient", "getTwoCheckoutClient", "getSumopodClient",
+      "getXenithClient",
     ] as const;
-    expect(getters.length).toBe(20);
+    expect(getters.length).toBe(21);
     for (const g of getters) {
       expect(typeof (buayar as any)[g]).toBe("function");
     }
@@ -124,7 +138,7 @@ describe("Provider Matrix — matriks fitur unggulan", () => {
     }
   });
 
-  it("K1 DoD — 20/20 provider lolos smoke test createInvoice yang dikonfigurasi 100% via env var", async () => {
+  it("K1 DoD — 21/21 provider lolos smoke test createInvoice yang dikonfigurasi 100% via env var", async () => {
     const ENV_MAP: Record<string, Record<string, string>> = {
       midtrans:    { MIDTRANS_SERVER_KEY: "SB-Mid-server-x" },
       duitku:      { DUITKU_API_KEY: "k", DUITKU_MERCHANT_CODE: "M" },
@@ -146,6 +160,7 @@ describe("Provider Matrix — matriks fitur unggulan", () => {
       braintree:   { BRAINTREE_MERCHANT_ID: "M", BRAINTREE_PUBLIC_KEY: "pub", BRAINTREE_PRIVATE_KEY: "priv" },
       twocheckout: { TWOCHECKOUT_MERCHANT_CODE: "M", TWOCHECKOUT_SECRET_KEY: "s" },
       sumopod:     { SUMOPOD_API_KEY: "sumo_k" },
+      xenith:      { XENITH_ACCESS_KEY: "a", XENITH_SECRET_KEY: "s" },
     };
 
     const prevEnv = { ...process.env };

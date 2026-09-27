@@ -1054,7 +1054,9 @@ export class DokuProvider extends BasePaymentProvider {
   }
 
   async checkTransaction(params: CheckTransactionParams, config: ProviderConfig): Promise<CheckTransactionResult> {
-    const { merchantOrderId } = params;
+    // `merchantOrderId` opsional di tipe publik; PaymentManager sudah menjamin
+    // salah satu identifier terisi sebelum sampai ke provider.
+    const merchantOrderId = params.merchantOrderId || params.transactionId || "";
     const clientId = config.merchantCode || config.merchantId || config.clientKey || "";
     const secretKey = config.apiKey || config.serverKey || config.secretKey || "";
     const sandbox = !!config.sandbox;
@@ -1158,7 +1160,9 @@ export class DokuProvider extends BasePaymentProvider {
     config: ProviderConfig,
     clientId: string
   ): Promise<CheckTransactionResult> {
-    const { merchantOrderId } = params;
+    // `merchantOrderId` opsional di tipe publik; PaymentManager sudah menjamin
+    // salah satu identifier terisi sebelum sampai ke provider.
+    const merchantOrderId = params.merchantOrderId || params.transactionId || "";
     const snap = this.buildSnap(config);
     // Query QRIS dan Query VA memakai endpoint + service code berbeda. Pilih lewat
     // `config.extra.snapQueryType` ("qr" default, "va" untuk Virtual Account).

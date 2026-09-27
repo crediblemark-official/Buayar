@@ -337,7 +337,9 @@ export class PrismalinkProvider extends BasePaymentProvider {
   }
 
   async checkTransaction(params: CheckTransactionParams, config: ProviderConfig): Promise<CheckTransactionResult> {
-    const { merchantOrderId } = params;
+    // `merchantOrderId` opsional di tipe publik; PaymentManager sudah menjamin
+    // salah satu identifier terisi sebelum sampai ke provider.
+    const merchantOrderId = params.merchantOrderId || params.transactionId || "";
     const merchantId = config.merchantCode || config.merchantId || "";
     const secretKey = config.apiKey || config.serverKey || config.secretKey || "";
     const sandbox = !!config.sandbox;

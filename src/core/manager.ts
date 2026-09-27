@@ -59,6 +59,7 @@ import {
 } from "../types";
 import { providerRegistry } from "./providerRegistry";
 import { simulatorEngine } from "../simulator/engine";
+import { validateRequiredCustomerFields } from "./requirements";
 
 export class PaymentManager {
   private providers: Map<string, BasePaymentProvider> = new Map();
@@ -287,6 +288,28 @@ export class PaymentManager {
   ): Promise<InvoiceResponse> {
     const provider = this.getProvider(providerName);
 
+    // Pre-flight: field customer yang WAJIB diisi provider ini. Tanpa ini, kode
+    // yang sama berjalan di 6 provider lalu ditolak iPaymu dengan pesan
+    // "phone wajib diisi." yang tidak menjelaskan apa pun. Aturannya diverifikasi
+    // terhadap sandbox iPaymu (lihat tests/ipaymu.test.ts).
+    //
+    // Dilewati saat `simulate`: simulator tidak punya gateway, jadi aturan
+    // gateway tidak berlaku — kalau tidak, `BUAYAR_SIMULATE=1` justru jadi
+    // lebih ketat dari produksi, yang membingungkan.
+    const fieldError = config.simulate
+      ? undefined
+      : validateRequiredCustomerFields(providerName, params.customer);
+    if (fieldError) {
+      return {
+        success: false,
+        provider: providerName,
+        orderId: params.orderId,
+        amount: params.amount,
+        error: fieldError,
+        rawResponse: null,
+      };
+    }
+
     // K5: Pre-flight capability check — tolak sebelum request bila method tidak didukung
     if (params.paymentMethod) {
       const isRawEscapeHatch =
@@ -323,7 +346,33 @@ export class PaymentManager {
       return simulatorEngine.createInvoice(providerName, normalizedParams, config);
     }
 
-    return provider.createInvoice(normalizedParams, config);
+    const res = await provider.createInvoice(normalizedParams, config);
+    return this.deriveMode(res);
+  }
+
+  /**
+   * Isi `mode` bila provider tidak mengisinya.
+   *
+   * Kenapa perlu: hanya 6 dari 21 provider yang benar-benar set `mode`, padahal
+   * `InvoiceResponse.mode` adalah field publik yang dipakai render UI. Tanpa
+   * ini, `if (inv.mode === "va")` diam-diam selalu false untuk 15 provider
+   * lain, dan tidak ada error — persis kelas bug yang paling mahal dicari.
+   *
+   * Aturan: field yang sudah diisi provider tidak pernah ditimpa. Yang diinfer
+   * hanya dari isian yang benar-benar ada, jadi tidak pernah mengarang kanal.
+   */
+  private deriveMode(res: InvoiceResponse): InvoiceResponse {
+    if (res.mode || !res.success) return res;
+
+    // Urutan dari paling spesifik: jangan simpulkan "checkout" hanya karena
+    // paymentUrl ada — VA/QRIS/e-wallet juga punya paymentUrl di sebagian PG.
+    if (res.vaNumber) return { ...res, mode: "va" };
+    if (res.qrString) return { ...res, mode: "qris" };
+    if (res.deeplink) return { ...res, mode: "ewallet" };
+    if (res.qrCodeUrl) return { ...res, mode: "qris" };
+    if (res.paymentUrl) return { ...res, mode: "checkout" };
+
+    return { ...res, mode: "other" };
   }
 
   async verifyCallback(
@@ -340,6 +389,9 @@ export class PaymentManager {
     params: GetPaymentMethodsParams,
     config: ProviderConfig
   ): Promise<GetPaymentMethodsResult> {
+    if (config.simulate) {
+      return simulatorEngine.getPaymentMethods(providerName, params, config);
+    }
     const provider = this.getProvider(providerName);
     return provider.getPaymentMethods(params, config);
   }
@@ -349,17 +401,53 @@ export class PaymentManager {
     params: CheckTransactionParams,
     config: ProviderConfig
   ): Promise<CheckTransactionResult> {
+    // Normalisasi di sini, bukan di 21 provider: `merchantOrderId` (order milik
+    // merchant) dan `transactionId` (ID dari gateway) sama-sama bisa jadi input,
+    // tapi hanya sebagian provider yang memakai yang mana. Tanpa ini, pemanggil
+    // harus hafal per provider — persis yang harus dihindari oleh SDK ini.
+    //
+    // iPaymu butuh `transactionId` (TransactionId numerik dari PG); sisa 20
+    // provider memakai `merchantOrderId` milik merchant. Fallback di sini
+    // menyatukan keduanya: kode lama yang hanya mengirim `merchantOrderId`
+    // tetap jalan, dan iPaymu bisa menerima `transactionId` dengan nama yang
+    // tidak menyesatkan.
+    const transactionId = (params.transactionId || params.merchantOrderId || "").trim();
+    const merchantOrderId = (params.merchantOrderId || params.transactionId || "").trim();
+
+    if (!transactionId && !merchantOrderId) {
+      return {
+        success: false,
+        provider: providerName,
+        orderId: "",
+        reference: "",
+        amount: 0,
+        statusCode: "",
+        status: "failed",
+        isPaid: false,
+        rawResponse: null,
+        error:
+          "checkTransaction requires an identifier. Pass `merchantOrderId` (the orderId you " +
+          "sent to createInvoice) for most providers, or `transactionId` for iPaymu " +
+          "(use createInvoice's `reference`). Neither was provided.",
+      } as CheckTransactionResult;
+    }
+
+    const normalized: CheckTransactionParams = { ...params, transactionId, merchantOrderId };
+
     if (config.simulate) {
-      return simulatorEngine.checkTransaction(providerName, params, config);
+      return simulatorEngine.checkTransaction(providerName, normalized, config);
     }
     const provider = this.getProvider(providerName);
-    return provider.checkTransaction(params, config);
+    return provider.checkTransaction(normalized, config);
   }
 
   async probePaymentMethods(
     providerName: string,
     config: ProviderConfig
   ): Promise<{ success: boolean; enabled: string[]; source?: "live" | "static"; error?: string }> {
+    if (config.simulate) {
+      return simulatorEngine.probePaymentMethods(providerName, config);
+    }
     const provider = this.getProvider(providerName);
     if (provider.probePaymentMethods) {
       const res = await provider.probePaymentMethods(config);

@@ -1,5 +1,13 @@
 // Types
 export * from "./types";
+// Tipe payment method kanonik harus jadi public API: scaffolded app mengimpornya
+// untuk mendapat type-safety atas `paymentMethod` (lihat cli/templates.ts).
+export type {
+  CanonicalPaymentMethod,
+  PaymentMethodInput,
+  RawProviderMethod,
+} from "./types/canonical";
+export { resolvePaymentMethodCode } from "./types/canonical";
 
 // Core Engine
 export * from "./core/buayar";
@@ -8,6 +16,7 @@ export * from "./core/config";
 export * from "./core/canonical";
 export * from "./core/descriptor";
 export * from "./core/providerRegistry";
+export * from "./core/requirements";
 export * from "./simulator";
 
 // ─── Indonesian Providers ─────────────────────────────────────────────────

@@ -41,6 +41,9 @@ export class BraintreeProvider extends BasePaymentProvider {
     const baseUrl = this.getBaseUrl(config);
     const headers = this.buildHeaders(config);
     const isDirect = !!params.paymentMethod;
+    // Braintree menentukan metode dari `payment_method_nonce` yang di-mint
+    // Drop-in UI di browser. Transaction.sale tidak punya field method bebas,
+    // jadi `paymentMethod` tidak bisa di-forward server-side → "advisory".
 
     try {
       if (isDirect) {
@@ -79,7 +82,9 @@ export class BraintreeProvider extends BasePaymentProvider {
         return {
           success: statusRaw === "submitted_for_settlement" || statusRaw === "settling" || statusRaw === "settled",
           provider: "braintree", orderId, amount: Math.round(Number(tx.amount || amount / 100) * 100),
-          reference: tx.id, rawResponse: data,
+          reference: tx.id,
+          paymentMethodApplied: params.paymentMethod ? "advisory" : undefined,
+          rawResponse: data,
         };
       } else {
         // Client Token generation for Drop-in UI (redirect flow)
@@ -163,7 +168,9 @@ export class BraintreeProvider extends BasePaymentProvider {
   }
 
   async checkTransaction(params: CheckTransactionParams, config: ProviderConfig): Promise<CheckTransactionResult> {
-    const { merchantOrderId } = params;
+    // `merchantOrderId` opsional di tipe publik; PaymentManager sudah menjamin
+    // salah satu identifier terisi sebelum sampai ke provider.
+    const merchantOrderId = params.merchantOrderId || params.transactionId || "";
     const baseUrl = this.getBaseUrl(config);
     const headers = this.buildHeaders(config);
 

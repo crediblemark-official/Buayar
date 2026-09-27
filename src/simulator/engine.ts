@@ -12,6 +12,18 @@ import type {
   PaymentMode,
 } from "../types";
 import { resolvePaymentMethodCode } from "../types";
+import {
+  GetPaymentMethodsParams,
+  GetPaymentMethodsResult,
+  UpdateVaParams,
+  UpdateVaResult,
+  DeleteVaParams,
+  DeleteVaResult,
+  ValidateBankAccountParams,
+  ValidateBankAccountResult,
+} from "../types";
+import { providerRegistry } from "../core/providerRegistry";
+import { getPaymentMethodCategory } from "../utils/category";
 
 export class SimulatorEngine {
   /**
@@ -227,6 +239,100 @@ export class SimulatorEngine {
       reference: params.externalId,
       status: "SUCCESS",
       rawResponse: { simulated: true, externalId: params.externalId, amount: params.amount },
+    };
+  }
+
+  /**
+   * Simulasi `getPaymentMethods` — tanpa network.
+   *
+   * PENTING: katalog yang dikembalikan adalah tabel statik di dalam repo, BUKAN
+   * channel yang benar-benar aktif di akun merchant. Karena itu `source` selalu
+   * `"static"`. Jangan pakai hasilnya untuk memutuskan channel mana yang
+   * guaranteed hidup — untuk itu butuh mode live (`BUAYAR_SIMULATE` tidak di-set).
+   */
+  async getPaymentMethods(
+    providerName: string,
+    params: GetPaymentMethodsParams,
+    config: ProviderConfig
+  ): Promise<GetPaymentMethodsResult> {
+    const cap = providerRegistry.get(providerName);
+    const methods = cap?.methods || [];
+    return {
+      success: true,
+      provider: providerName,
+      methods: methods.map((paymentMethod) => ({
+        paymentMethod,
+        paymentName: paymentMethod,
+        // Katalog statis tidak punya aset/fee PG. Jangan dikarang — pemanggil
+        // yang butuh fee & logo harus memanggil provider sungguhan.
+        paymentImage: "",
+        totalFee: "",
+        category: getPaymentMethodCategory(paymentMethod, paymentMethod),
+      })),
+      rawResponse: { simulated: true, source: "static", provider: providerName },
+    };
+  }
+
+  /**
+   * Simulasi `probePaymentMethods` — selalu static, tidak pernah menyentuh API PG.
+   */
+  async probePaymentMethods(
+    providerName: string,
+    config: ProviderConfig
+  ): Promise<{ success: boolean; enabled: string[]; source?: "live" | "static"; error?: string }> {
+    const cap = providerRegistry.get(providerName);
+    return {
+      success: true,
+      enabled: cap?.methods || [],
+      source: "static",
+    };
+  }
+
+  /**
+   * Simulasi operasi Virtual Account khusus DOKU.
+   *
+   * Ketiganya hanya ada di DOKU (lihat `Buayar.updateVirtualAccount`), jadi tanpa
+   * entrain ini `BUAYAR_SIMULATE=1` tetap menembak API DOKU sungguhan — melanggar
+   * janji simulator "tanpa memanggil PG".
+   */
+  async updateVirtualAccount(
+    providerName: string,
+    params: UpdateVaParams,
+    config: ProviderConfig
+  ): Promise<UpdateVaResult> {
+    return {
+      success: true,
+      provider: providerName,
+      orderId: params.orderId,
+      rawResponse: { simulated: true, orderId: params.orderId, vaNumber: params.vaNumber, bank: params.bank, amount: params.amount },
+    };
+  }
+
+  async deleteVirtualAccount(
+    providerName: string,
+    params: DeleteVaParams,
+    config: ProviderConfig
+  ): Promise<DeleteVaResult> {
+    return {
+      success: true,
+      provider: providerName,
+      orderId: params.orderId,
+      rawResponse: { simulated: true, orderId: params.orderId },
+    };
+  }
+
+  async validateBankAccount(
+    providerName: string,
+    params: ValidateBankAccountParams,
+    config: ProviderConfig
+  ): Promise<ValidateBankAccountResult> {
+    return {
+      success: true,
+      provider: providerName,
+      bankCode: params.bankCode,
+      accountNumber: params.accountNumber,
+      accountHolderName: params.accountHolderName || params.accountNumber,
+      rawResponse: { simulated: true, bankCode: params.bankCode, accountNumber: params.accountNumber },
     };
   }
 }

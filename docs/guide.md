@@ -97,7 +97,7 @@ Setiap provider punya kredensial yang **berbeda-beda** (`MIDTRANS_SERVER_KEY` vs
 
 | Variabel Universal | Dipakai sebagai |
 | :--- | :--- |
-| `BUAYAR_PROVIDER` | nama provider aktif (opsional → autodetect) |
+| `BUAYAR_PROVIDER` | nama provider aktif — **wajib** bila hanya memakai `BUAYAR_*` (lihat catatan di bawah) |
 | `BUAYAR_API_KEY` | secret / server key / password provider |
 | `BUAYAR_MERCHANT_CODE` | merchant id / va / username / imid / client id |
 | `BUAYAR_CLIENT_KEY` | client / public / publishable key |
@@ -105,8 +105,24 @@ Setiap provider punya kredensial yang **berbeda-beda** (`MIDTRANS_SERVER_KEY` vs
 | `BUAYAR_SANDBOX` | mode sandbox (`true`/`false`) |
 | `BUAYAR_CALLBACK_URL` / `BUAYAR_RETURN_URL` | URL webhook & redirect |
 | `BUAYAR_WEBHOOK_SECRET` / `BUAYAR_WEBHOOK_TOKEN` | secret webhook |
+| `BUAYAR_EXTRA_*` | knob/flag provider (`BUAYAR_EXTRA_SNAP=true` → `extra.snap`) |
+| `BUAYAR_PRIVATE_KEY` | private key RSA (DOKU SNAP B2B, Adyen library) |
 
 > 🔧 Variabel spesifik per provider (`MIDTRANS_SERVER_KEY`, `DUITKU_API_KEY`, dll.) **tetap didukung** sebagai fallback. Prioritas konfigurasi: `config` eksplisit → `BUAYAR_*` → variabel spesifik → default.
+
+> ⚠️ **Tiga hal soal `BUAYAR_PROVIDER` yang sering mengejutkan:**
+>
+> 1. **Tidak bisa di-autodetect dari `BUAYAR_*`.** Autodetect hanya membaca env
+>    berprefiks provider (`MIDTRANS_SERVER_KEY`, `STRIPE_SECRET_KEY`, …). Kredensial
+>    universal namanya identik untuk 21 provider, jadi tidak ada yang bisa ditebak
+>    — kalau Anda hanya mengisi `BUAYAR_*` dan tidak mengisi `BUAYAR_PROVIDER`,
+>    setiap panggilan unified akan gagal dengan `No payment provider configured`.
+> 2. **`PROVIDER_PG` dan `PG_PROVIDER` (legacy) masih menang atas `BUAYAR_PROVIDER`.**
+>    Ini dipertahankan demi backward-compatibility. Kalau kedua env itu di-set ke
+>    nilai berbeda, SDK mencetak peringatan di startup yang menyebut keduanya.
+>    Solusinya: hapus `PROVIDER_PG`/`PG_PROVIDER` dari `.env`.
+> 3. **Webhook secret di-scope per provider.** Env milik provider lain tidak lagi
+>    menimpa token provider aktif. Tetap disarankan: satu `.env` = satu provider.
 
 ---
 
@@ -135,19 +151,22 @@ if (invoice.success) {
 
 ### Full Integrasi (Custom Native UI)
 
-Sertakan `paymentMethod` dengan **kode canonical**. SDK mengembalikan data mentah (`vaNumber`, `qrString` EMVCo, `paymentCode`, `deeplink`) untuk dirender di UI Anda sendiri.
+Sertakan `paymentMethod` dengan **kode canonical**. SDK mengembalikan data mentah
+(`vaNumber`, `qrString` EMVCo, `qrCodeUrl`, `deeplink`) untuk dirender di UI Anda
+sendiri, plus `mode` yang sudah dinormalisasi di semua 21 provider.
 
 ```typescript
 // Virtual Account
 const va = await buayar.createInvoice({
   orderId: "ORDER-1002",
   amount: 150000,
-  paymentMethod: "bca_va",   // canonical — berlaku di semua provider
+  paymentMethod: "bca_va",   // canonical — dipetakan otomatis per provider
   productDetails: "Top Up Saldo",
   customer: { name: "Budi", email: "budi@example.com" },
 });
 console.log("Nomor VA:", va.vaNumber);   // "123456789012"
 console.log("Bank:", va.vaBank);         // "bca"
+console.log("Kanal:", va.mode);           // "va"
 
 // QRIS
 const qris = await buayar.createInvoice({
@@ -157,9 +176,35 @@ const qris = await buayar.createInvoice({
   productDetails: "Kopi",
   customer: { name: "Budi", email: "budi@example.com" },
 });
-console.log("Raw QRIS (EMVCo):", qris.qrString);   // untuk dirender
-console.log("QR Image URL:", qris.qrCodeUrl);
+// Selalu pakai `??` — tidak semua provider mengembalikan string EMVCo mentah.
+console.log("Raw QRIS (EMVCo):", qris.qrString ?? qris.qrCodeUrl);
 ```
+
+#### Tiga hal yang perlu diketahui soal field response
+
+| Field | Kenapa perlu hati-hati |
+| :--- | :--- |
+| `mode` | Sudah dinormalisasi untuk **21/21** provider (`"checkout" \| "va" \| "qris" \| "ewallet" \| "retail" \| "other"`). Tidak lagi perlu menebak dari field mana yang terisi. |
+| `qrString` | Hanya diisi provider yang benar-benar mengembalikan string EMVCo (Xendit, Duitku, iPaymu, DOKU, Xenith, …). **Midtrans Core API tidak mengembalikannya** — hanya URL PNG. Selalu `qrString ?? qrCodeUrl`. |
+| `paymentCode` | Maknanya berbeda per provider: kode bayar di gerai (Duitku, iPaymu), Drop-in client token (Braintree), `sessionData` (Adyen), `client_secret` (Stripe). Jangan dipakai sebagai "kode retail" secara umum. |
+
+> **Canonical ≠ tersedia di semua provider.** Tidak ada kode method yang didukung
+> 21/21: `indodana` hanya di Duitku, `gopay` hanya di 4 provider, `apple_pay` hanya
+> di provider international. Cek dulu sebelum memanggil:
+>
+> ```typescript
+> buayar.supportsMethod("gopay", "duitku");               // false
+> buayar.getCapabilities("duitku").methods;               // daftar lengkap
+> buayar.getCapabilities("adyen").serverForwardedMethods;  // method yang benar-benar dikirim ke PG
+> ```
+>
+> Method di luar daftar ditolak **sebelum** request dikirim, dengan pesan yang
+> menyebut provider dan daftar method yang didukung.
+>
+> `paymentMethodApplied` di response memberi tahu apakah method benar-benar
+> dikirim ke PG (`"server"`) atau hanya penanda mode direct (`"advisory"`).
+> Square, Braintree, PayPal, dan Checkout.com masuk kategori `"advisory"` —
+> PSP-nya yang menentukan metode dari token/checkout sisi klien.
 
 ### Menargetkan Provider Tertentu (opsional)
 
@@ -245,6 +290,47 @@ fs.writeFileSync("payment-channels.json", JSON.stringify(descriptors, null, 2));
 
 ---
 
+## ✅ Provider Mana yang Sudah Terverifikasi?
+
+Tidak semua dari 21 provider pernah ditembakkan ke sandbox sungguhan. SDK
+melaporkannya sendiri, bukan bikin Anda menebak:
+
+```bash
+npx buayar audit              # tabel di terminal
+npx buayar audit --json       # untuk CI
+npx buayar audit --only-unverified
+```
+
+```typescript
+buayar.listVerifiedProviders();     // 8 provider yang sudah live-tested
+buayar.listUnverifiedProviders();   // 13 sisanya
+buayar.getCapabilities("stripe")?.verified;          // false
+buayar.getCapabilities("stripe")?.verificationNote;  // "Butuh API key sandbox Stripe (sk_test_...)"
+```
+
+Status per provider juga ada di [`docs/providers/README.md`](providers/README.md).
+
+> ⚠️ **`verified: false` bukan berarti kodenya rusak atau belum jadi.**
+> Implementasinya lengkap dan terkunci test contract/simulator: webhook
+> fail-closed, signature generator asli, pre-flight rejection. Yang belum ada
+> hanya bukti end-to-end ke server sungguhan, karena kredensial sandbox-nya
+> belum tersedia. Perlakukan sebagai "belum terbukti", bukan "belum siap".
+
+Layoutnya:
+
+| Status | Jumlah | Arti |
+| :--- | :---: | :--- |
+| `✅ live` | 8 | Request nyata pernah sampai ke sandbox/production sungguhan; endpoint & shape payload terbukti. |
+| `⏳ contract` | 13 | Lengkap & contract-tested, belum pernah menyentuh API asli karena kredensial sandbox belum tersedia. |
+
+Untuk CI — gagal kalau ada provider tak terverifikasi yang ikut dipakai produksi:
+
+```bash
+npx buayar audit --json | jq -e '.providers | map(select(.verified)) | length >= 8'
+```
+
+---
+
 ## 🔍 Cek Status Transaksi
 
 ```typescript
@@ -256,15 +342,51 @@ if (result.success) {
 }
 ```
 
-> 💡 **Catatan Parameter per Provider:**
-> - **Midtrans, Duitku, Xendit, DOKU, dll:** `merchantOrderId` menerima string ID order yang Anda buat (mis. `"ORDER-1001"`).
-> - **iPaymu:** Dokumentasi resmi iPaymu v2 mewajibkan `transactionId` numerik. Masukkan nilai **`invoice.reference`** (TransactionId numerik yang dikembalikan saat `createInvoice`), bukan nomor order string internal merchant.
+> 💡 **Dua field, dan Anda tidak perlu hafal mana yang dipakai provider:**
+>
+> | Field | Berisi | Dipakai oleh |
+> | :--- | :--- | :--- |
+> | `merchantOrderId` | Order ID **milik Anda** — sama dengan `orderId` yang Anda kirim ke `createInvoice` | 20 dari 21 provider |
+> | `transactionId` | ID yang **diberikan gateway** — ambil dari `createInvoice(...).reference` | **iPaymu** (wajib), opsional di provider lain |
+>
+> Kode di atas sudah benar untuk keduanya: kalau `transactionId` terisi, SDK
+> mengirimkannya ke iPaymu; kalau tidak, `merchantOrderId` yang dipakai.
+>
+> Untuk iPaymu, isi lewat `transactionId` (bukan `merchantOrderId`) karena itu
+> yang diminta dokumentasi resmi iPaymu v2 — dan nama field-nya tidak menyesatkan:
+>
+> ```typescript
+> const invoice = await buayar.createInvoice({ /* … */ paymentMethod: "bca_va" });
+> const result = await buayar.checkTransaction({ transactionId: invoice.reference! });
+> ```
+>
+> Kalau keduanya kosong, SDK menolak **sebelum** memanggil PG dengan pesan yang
+> menyebut kedua nama field tersebut.
 
 ---
 
 ## 🪝 Webhook Universal
 
-Satu endpoint untuk semua provider. Provider **terdeteksi otomatis** dari struktur payload — tidak ada routing manual.
+Satu endpoint untuk semua provider — **provider diambil dari konfigurasi aktif**
+(`BUAYAR_PROVIDER`), bukan dari isi payload. Verifikasi signature selalu
+fail-closed: tanpa bukti signature yang valid, `isValid` dan `isPaid` bernilai
+`false`.
+
+Deteksi dari payload **hanya** berjalan bila tidak ada provider yang
+dikonfigurasi. Kalau aplikasi menerima webhook dari lebih dari satu PG, tentukan
+provider-nya sendiri lalu teruskan sebagai `configOverride.provider`:
+
+```typescript
+const detected = buayar.detectProviderFromPayload(req.body, req.headers);
+const result = await buayar.verifyWebhook(req.body, req.headers, {
+  provider: detected,
+});
+```
+
+> **`rawBody` wajib diteruskan** untuk provider yang menandatangani byte mentah
+> (Stripe, Checkout.com, Razorpay, Square, PayU, Braintree, DOKU SNAP, SumoPod,
+> Xenith). Tanpa itu verifikasi selalu `false`. Template `buayar init` sudah
+> menanganinya dengan benar.
 
 ```typescript
 import { buayar } from "@crediblemark/buayar";
@@ -371,12 +493,27 @@ BUAYAR_API_KEY=sk_test_51...
 BUAYAR_WEBHOOK_SECRET=whsec_...
 ```
 
-Bahkan bisa **tanpa `BUAYAR_PROVIDER`** — cukup ganti kredensial, dan provider terdeteksi otomatis:
+Secara teknis Anda **boleh** mengosongkan `BUAYAR_PROVIDER` — **asalkan** Anda memakai
+env yang berprefiks provider (bukan `BUAYAR_*`):
 
 ```env
-# Auto: cukup isi key-nya, provider tertelan
-BUAYAR_API_KEY=sk_test_51...      # berubah ke Stripe
+# Auto: terdeteksi dari env berprefiks provider
+STRIPE_SECRET_KEY=sk_test_51...    # terdeteksi: stripe
+MIDTRANS_SERVER_KEY=SB-Mid-...     # terdeteksi: midtrans
 ```
+
+> ⚠️ Yang **tidak** bisa adalah hanya mengisi kredensial universal:
+> `BUAYAR_API_KEY=sk_test_51...` saja tidak akan terdeteksi. Nama env itu sama
+> untuk 21 provider sehingga tidak ada yang bisa ditebak, dan hasilnya
+> `No payment provider configured`.
+>
+> Autodetect juga mengembalikan `undefined` bila ambigu (dua provider dengan
+> jumlah kredensial sama) atau bila ada provider lain yang kredensialnya
+> parsial. Untuk produksi, selalu tulis `BUAYAR_PROVIDER` secara eksplisit.
+
+> Knob khusus provider juga cukup lewat env, tanpa edit kode — misalnya
+> `BUAYAR_EXTRA_SNAP=true` untuk mengaktifkan jalur DOKU SNAP (wajib untuk
+> QRIS / DANA / ShopeePay di DOKU), `BUAYAR_EXTRA_COUNTRY_CODE=ID` untuk Adyen.
 
 ---
 

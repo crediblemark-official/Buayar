@@ -297,7 +297,9 @@ export class StripeProvider extends BasePaymentProvider {
   }
 
   async checkTransaction(params: CheckTransactionParams, config: ProviderConfig): Promise<CheckTransactionResult> {
-    const { merchantOrderId } = params;
+    // `merchantOrderId` opsional di tipe publik; PaymentManager sudah menjamin
+    // salah satu identifier terisi sebelum sampai ke provider.
+    const merchantOrderId = params.merchantOrderId || params.transactionId || "";
     const secretKey = config.apiKey || config.serverKey || config.secretKey || "";
     // Stripe memakai satu host untuk test & live; yang membedakan hanya kunci.
     // Tanpa cek ini, `sandbox: true` + kunci `sk_live_` akan menagih kartu asli.

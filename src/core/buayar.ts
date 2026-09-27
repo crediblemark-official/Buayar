@@ -48,9 +48,33 @@ import { SumopodClient } from "../clients/sumopod";
 import { XenithClient } from "../clients/xenith";
 import { BasePaymentProvider } from "../providers/base";
 import { resolveConfigFromEnv } from "./config";
-import { simulator, BuayarSimulator } from "../simulator";
+import { simulator, BuayarSimulator, simulatorEngine } from "../simulator";
 
 export { resolveConfigFromEnv };
+
+/**
+ * Kunci di dalam `BuayarConfig.extra` yang berisi kredensial milik provider
+ * tertentu. Dibuang saat `setConfig()` mengganti provider (lihat `setConfig`).
+ */
+const PROVIDER_SCOPED_EXTRA_KEYS = [
+  "webhookToken",
+  "webhookSecret",
+  "webhookSignatureKey",
+  "webhookId",
+  "paypalWebhookId",
+  "hmacKey",
+  "md5Key",
+  "secretWord",
+  "locationId",
+  "oauthClientId",
+  "oauthClientSecret",
+  "mcpApiKey",
+  "userId",
+  "iMid",
+  "username",
+  "merchantAccount",
+  "liveUrlPrefix",
+] as const;
 
 /**
  * Buayar - Unified Payment Gateway Client
@@ -58,9 +82,9 @@ export { resolveConfigFromEnv };
  * Antarmuka tingkat tinggi untuk membuat transaksi, query channel pembayaran,
  * pengecekan status, dan verifikasi webhook universal tanpa perlu rombak kode.
  * 
- * Mendukung 20 Payment Gateway: Midtrans, Duitku, iPaymu, Xendit, DOKU, PrismaLink,
+ * Mendukung 21 Payment Gateway: Midtrans, Duitku, iPaymu, Xendit, DOKU, PrismaLink,
  * Faspay, Finpay, Nicepay, OY! Bisnis, Stripe, PayPal, Adyen, Checkout.com,
- * Razorpay, Square, PayU, Braintree, 2Checkout/Verifone, SumoPod.
+ * Razorpay, Square, PayU, Braintree, 2Checkout/Verifone, SumoPod, Xenith.
  */
 export class Buayar {
   private manager: PaymentManager;
@@ -86,8 +110,35 @@ export class Buayar {
 
   /**
    * Perbarui konfigurasi saat runtime
+   *
+   * PENTING: bila `provider` berubah, kredensial provider lama **dibuang**.
+   * Tanpa ini `setConfig({ provider: 'xendit' })` pada instance yang tadinya
+   * dikonfigurasi Midtrans akan memakai server key Midtrans sebagai Xendit
+   * secret key — permintaan ditolak 401 tanpa petunjuk penyebabnya. Kredensial
+   * baru diambil ulang dari env, jadi provider tujuan harus punya env-nya sendiri.
    */
   setConfig(config: Partial<BuayarConfig>): void {
+    const nextProvider = config.provider;
+    const providerChanged = !!nextProvider && nextProvider !== this.config.provider;
+    if (providerChanged) {
+      const { sandbox, simulate, callbackUrl, returnUrl, extra } = this.config;
+      // Kredensial di dalam `extra` (webhook token/secret, HMAC, md5 key, ...) juga
+      // milik provider lama. Menyeretnya ke provider baru akan (a) memakai kunci
+      // yang salah dan (b) — karena `resolveConfigFromEnv` menaruh `...customConfig.extra`
+      // di akhir spread — MENIMPA nilai env yang sudah benar-benar ter-resolve.
+      const inherited: Record<string, unknown> = { ...(extra || {}) };
+      for (const k of PROVIDER_SCOPED_EXTRA_KEYS) delete inherited[k];
+      this.config = resolveConfigFromEnv({
+        ...config,
+        // Pertahankan preferensi non-kredensial milik pemanggil.
+        sandbox: config.sandbox ?? sandbox,
+        simulate: config.simulate ?? simulate,
+        callbackUrl: config.callbackUrl ?? callbackUrl,
+        returnUrl: config.returnUrl ?? returnUrl,
+        extra: { ...inherited, ...(config.extra || {}) },
+      });
+      return;
+    }
     this.config = resolveConfigFromEnv({ ...this.config, ...config });
   }
 
@@ -131,11 +182,44 @@ export class Buayar {
    * Cek capability (metode + operasi) provider tertentu — atau provider aktif bila kosong.
    * Jawab pertanyaan "provider ini dukung apa?" secara runtime, tanpa bongkar dokumen.
    */
+  /**
+   * Capability provider aktif (atau yang diberi `name`).
+   *
+   * Mengembalikan field lengkap dari descriptor — termasuk `serverForwardedMethods`
+   * (method yang benar-benar dikirim ke PG) dan `verified` (sudah pernah diuji ke
+   * server sungguhan atau belum). Field `envKeys`/`requiredEnvKeys` sengaja
+   * disembunyikan karena itu internal autodetect, bukan kontrak publik.
+   */
   getCapabilities(name?: string): ProviderCapability | undefined {
     const n = name || this.provider;
     const desc = this.registry.get(n);
     if (!desc) return undefined;
-    return { methods: desc.methods, operations: desc.operations };
+    return {
+      methods: desc.methods,
+      operations: desc.operations,
+      ...(desc.serverForwardedMethods ? { serverForwardedMethods: desc.serverForwardedMethods } : {}),
+      verified: desc.verified,
+      ...(desc.verificationNote ? { verificationNote: desc.verificationNote } : {}),
+    };
+  }
+
+  /**
+   * Daftar provider yang PERNAH diverifikasi terhadap kredensial sandbox/production
+   * sungguhan. Equivalent CLI: `buayar audit`.
+   */
+  listVerifiedProviders(): string[] {
+    return this.registry.names().filter((n) => this.registry.get(n)?.verified === true).sort();
+  }
+
+  /**
+   * Daftar provider yang implementasinya lengkap & contract-tested, tetapi belum
+   * pernah menyentuh API asli karena kredensial sandbox-nya belum tersedia.
+   *
+   * PENTING: ini BUKAN daftar provider "rusak" atau "belum jadi" — semuanya
+   * berfungsi. Yang belum ada hanya bukti end-to-end.
+   */
+  listUnverifiedProviders(): string[] {
+    return this.registry.names().filter((n) => this.registry.get(n)?.verified !== true).sort();
   }
 
   /**
@@ -451,6 +535,9 @@ export class Buayar {
   ): Promise<UpdateVaResult> {
     const mergedConfig: ProviderConfig = { ...this.config, ...configOverride };
     const providerName = (configOverride as any)?.provider || this.provider;
+    if (mergedConfig.simulate) {
+      return simulatorEngine.updateVirtualAccount(providerName, params, mergedConfig);
+    }
     if (providerName.toLowerCase() === "doku") {
       return this.manager.getDokuProvider().updateVirtualAccount(params, mergedConfig);
     }
@@ -472,6 +559,9 @@ export class Buayar {
   ): Promise<DeleteVaResult> {
     const mergedConfig: ProviderConfig = { ...this.config, ...configOverride };
     const providerName = (configOverride as any)?.provider || this.provider;
+    if (mergedConfig.simulate) {
+      return simulatorEngine.deleteVirtualAccount(providerName, params, mergedConfig);
+    }
     if (providerName.toLowerCase() === "doku") {
       return this.manager.getDokuProvider().deleteVirtualAccount(params, mergedConfig);
     }
@@ -493,6 +583,9 @@ export class Buayar {
   ): Promise<ValidateBankAccountResult> {
     const mergedConfig: ProviderConfig = { ...this.config, ...configOverride };
     const providerName = (configOverride as any)?.provider || this.provider;
+    if (mergedConfig.simulate) {
+      return simulatorEngine.validateBankAccount(providerName, params, mergedConfig);
+    }
     if (providerName.toLowerCase() === "doku") {
       return this.manager.getDokuProvider().validateBankAccount(params, mergedConfig);
     }

@@ -148,6 +148,12 @@ export class PaypalProvider extends BasePaymentProvider {
     const baseUrl = this.getBaseUrl(config);
     const amountFormatted = (amount / 100).toFixed(2); // PayPal uses decimal (e.g. "15.00")
     const isDirect = !!params.paymentMethod;
+    // Catatan kejujuran: PayPal Orders v2 hanya menerima `payment_source` berisi
+    // token/vault milik klien. Untuk kartu, PayPal JS SDK harus membuat
+    // `payment_source.card` lebih dulu — server tidak bisa memaksanya. Karena
+    // itu `paymentMethod` tidak dikirim sebagai field method dan ditandai
+    // "advisory" pada response. Kirim `payment_source` lewat providerParams
+    // bila PayPal JS SDK sudah menghasilkannya; SDK tidak akan menimpanya.
 
     const successUrl = returnUrl || config.returnUrl || "https://example.com/payment/success";
     const cancelUrl = returnUrl || config.returnUrl || "https://example.com/payment/cancel";
@@ -219,6 +225,7 @@ export class PaypalProvider extends BasePaymentProvider {
         amount,
         reference: data.id,
         paymentUrl,
+        paymentMethodApplied: params.paymentMethod ? "advisory" : undefined,
         rawResponse: data,
       };
     } catch (e: any) {
@@ -316,7 +323,9 @@ export class PaypalProvider extends BasePaymentProvider {
   }
 
   async checkTransaction(params: CheckTransactionParams, config: ProviderConfig): Promise<CheckTransactionResult> {
-    const { merchantOrderId } = params;
+    // `merchantOrderId` opsional di tipe publik; PaymentManager sudah menjamin
+    // salah satu identifier terisi sebelum sampai ke provider.
+    const merchantOrderId = params.merchantOrderId || params.transactionId || "";
 
     let accessToken: string;
     try {

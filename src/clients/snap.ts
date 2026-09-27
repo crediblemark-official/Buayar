@@ -62,6 +62,17 @@ export class SnapClient {
     if (!privateKey) {
       throw new Error("DOKU SNAP: RSA privateKey required to obtain B2B access token");
     }
+    // DOKU menolak private key yang bukan PEM dengan pesan OpenSSL yang tidak
+    // actionable ("BAD_BASE64_DECODE").-catching di sini jauh lebih murah dicari.
+    if (!/-----BEGIN [A-Z ]*PRIVATE KEY-----/.test(privateKey)) {
+      throw new Error(
+        "DOKU SNAP: privateKey is not a PEM-formatted RSA private key " +
+          "(expected a block starting with -----BEGIN PRIVATE KEY-----). " +
+          "This usually means the private key fell back to the Secret Key: set " +
+          "BUAYAR_PRIVATE_KEY to the RSA private key downloaded from DOKU Back Office " +
+          "→ Settings → API Keys, and remove the fallback."
+      );
+    }
 
     const endpoint = "/authorization/v1/access-token/b2b";
     // Get-token (asymmetric) requires UTC+0 ISO8601 with Z suffix.

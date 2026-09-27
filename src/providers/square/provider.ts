@@ -38,6 +38,10 @@ export class SquareProvider extends BasePaymentProvider {
     const baseUrl = this.getBaseUrl(config);
     const headers = this.buildHeaders(config);
     const isDirect = !!params.paymentMethod;
+    // Square TIDAK punya field payment method di CreatePayment — dokumentasi resmi
+    // menyatakan metode ditentukan oleh `source_id` (token dari Web Payments SDK).
+    // Jadi `paymentMethod` di sini murni penanda mode direct; hasilnya ditandai
+    // "advisory" supaya pemanggil tidak mengira metode sudah dikunci server-side.
     const successUrl = returnUrl || config.returnUrl || "https://example.com/payment/success";
 
     try {
@@ -72,7 +76,9 @@ export class SquareProvider extends BasePaymentProvider {
         const payment = data.payment || data;
         return {
           success: true, provider: "square", orderId, amount: payment.amount_money?.amount || amount,
-          reference: payment.id, rawResponse: data,
+          reference: payment.id,
+          paymentMethodApplied: params.paymentMethod ? "advisory" : undefined,
+          rawResponse: data,
         };
       } else {
         // Square Checkout (Hosted Payment Page)
@@ -182,7 +188,9 @@ export class SquareProvider extends BasePaymentProvider {
   }
 
   async checkTransaction(params: CheckTransactionParams, config: ProviderConfig): Promise<CheckTransactionResult> {
-    const { merchantOrderId } = params;
+    // `merchantOrderId` opsional di tipe publik; PaymentManager sudah menjamin
+    // salah satu identifier terisi sebelum sampai ke provider.
+    const merchantOrderId = params.merchantOrderId || params.transactionId || "";
     const baseUrl = this.getBaseUrl(config);
     const headers = this.buildHeaders(config);
 

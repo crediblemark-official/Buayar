@@ -106,6 +106,21 @@ export interface InvoiceResponse {
   /** Waktu kedaluwarsa tagihan pembayaran */
   expiresAt?: Date | string;
 
+  /**
+   * Status penerapan `paymentMethod` oleh SDK — untuk membedakan "PG-nya yang
+   * menentukan" dari "SDK yang benar-benar mengirim field method".
+   *
+   * - `"server"`   — method dipetakan ke field resmi PG dan dikirim
+   *                   (mis. Adyen `paymentMethod.type`, Razorpay `method`,
+   *                   Stripe `payment_method_types`).
+   * - `"advisory"` — `paymentMethod` TIDAK dikirim. PG memilih metode dari
+   *                   token/checkout sisi klien. Ini kondisi normal untuk
+   *                   Square, Braintree, PayPal, dan Checkout.com.
+   *
+   * Jangan diisi manual; biarkan undefined bila tidak ada `paymentMethod`.
+   */
+  paymentMethodApplied?: "server" | "advisory";
+
   /** Raw response asli dari API provider (termasuk saat gagal) */
   rawResponse: any;
   /** Pesan error jika gagal */
@@ -381,15 +396,23 @@ export interface GetPaymentMethodDescriptorsResult {
 
 export interface CheckTransactionParams {
   /**
-   * ID transaksi untuk pengecekan status (orderId / merchantOrderId).
+   * Order ID milik merchant — apa yang Anda kirim sebagai `orderId` ke
+   * `createInvoice`. Dipakai Midtrans, DOKU, Xendit, Duitku, Finpay, Adyen,
+   * Braintree, Checkout.com, dan sebagian besar provider lain.
    *
-   * **iPaymu:** Harus berisi `TransactionId` numerik dari response `createInvoice`
-   * (`invoice.reference`), BUKAN `orderId`/`order_number` merchant.
-   * Endpoint iPaymu `/api/v2/transaction` hanya menerima ID numerik milik iPaymu.
+   * Wajib diisi, kecuali `transactionId` sudah diisi (lihat catatan iPaymu).
    */
-  merchantOrderId: string;
+  merchantOrderId?: string;
   /**
-   * ID transaksi unik dari gateway (mis. session ID 'ps-...' Xendit atau trxId iPaymu).
+   * ID yang DIBERIKAN OLEH gateway, bukan oleh Anda.
+   *
+   * **iPaymu (wajib di sini):** endpoint `/api/v2/transaction` hanya menerima
+   * `TransactionId` numerik dari response `createInvoice` (`invoice.reference`),
+   * BUKAN `orderId` milik merchant. Karena itu untuk iPaymu, isi `transactionId`
+   * alih-alih `merchantOrderId` — jauh lebih sulit salah baca.
+   *
+   * Untuk provider lain, `transactionId`-opsional boleh diisi bila response
+   * `createInvoice` memberi `reference` (mis. `ps-...` dari Xendit, `trx_...`).
    */
   transactionId?: string;
 }

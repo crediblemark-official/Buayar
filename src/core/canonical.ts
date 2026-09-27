@@ -386,6 +386,55 @@ export const CANONICAL_TO_OY: Record<string, { type: "va" | "qris" | "ewallet" |
   indomaret: { type: "cstore", channel: "indomaret" },
 };
 
+// ─── Payment method untuk provider international ────────────────────────────
+//
+// PENTING — baca dulu sebelum menambahkan kode di sini.
+//
+// Untuk 6 PSP international ini, payment method pada arsitektur normal
+// DITENTUKAN SISI KLIEN (checkout SDK / token / nonce), bukan oleh server.
+// Square CreatePayment tidak punya field method sama sekali; metode diambil dari
+// `source_id`. Braintree memerlukan `payment_method_nonce` dari Drop-in UI.
+// Checkout.com Payment Links tidak punya field pembatas method.
+//
+// Karena itu tabel di bawah TIDAK berarti "SDK mengirim method ini ke PG".
+// Bedakan dua hal:
+//
+//   FORWARDABLE = API-nya benar-benar punya field method, jadi SDK mengisinya.
+//   ADVISORY    = PG yang memutuskan; `paymentMethod` hanya catatan niat dan
+//                 tidak dikirim. Response menandai ini lewat
+//                 `paymentMethodApplied: "advisory"` supaya tidak ada yang
+//                 mengira method-nya sudah diterapkan.
+//
+// Sumber: dokumentasi API resmi masing-masing PSP (lihat docs/providers/*/README.md).
+
+/** Adyen `/payments` (wajib) & `/sessions` (`allowedPaymentMethods`). Verified. */
+export const CANONICAL_TO_ADYEN: Record<string, string> = {
+  credit_card: "scheme",
+  paypal: "paypal",
+  apple_pay: "applepay",
+  google_pay: "googlepay",
+  klarna: "klarna",
+  paylater: "klarna",
+  sepa: "sepadirectdebit",
+  bank_transfer: "sepadirectdebit",
+};
+
+/** Razorpay `POST /v1/orders` punya field `method` opsional (netbanking | upi). Verified. */
+export const CANONICAL_TO_RAZORPAY: Record<string, string> = {
+  upi: "upi",
+  netbanking: "netbanking",
+};
+
+/**
+ * Nama method yang di-forward server-side per provider.
+ * Key = nama provider. Method di luar daftar ini tetap dikirim (atau ditolak
+ * pre-flight), tapi TIDAK Influence payload.
+ */
+export const SERVER_FORWARDED_METHODS: Record<string, string[]> = {
+  adyen: Object.keys(CANONICAL_TO_ADYEN),
+  razorpay: Object.keys(CANONICAL_TO_RAZORPAY),
+};
+
 /**
  * Mapping dari Canonical Payment Method ke payment_method_types Stripe
  */

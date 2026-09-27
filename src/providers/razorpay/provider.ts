@@ -13,6 +13,8 @@ import {
 import { buildRazorpayBasicAuth, verifyRazorpayWebhook } from "./signature";
 import { resolveRawBody, signedPayload, RAW_BODY_REQUIRED_MESSAGE } from "../../utils/rawBody";
 import { httpFetch } from "../../utils/http";
+import { CANONICAL_TO_RAZORPAY } from "../../core/canonical";
+import { resolvePaymentMethodCode } from "../../types/canonical";
 
 export class RazorpayProvider extends BasePaymentProvider {
   readonly name = "razorpay";
@@ -40,11 +42,20 @@ export class RazorpayProvider extends BasePaymentProvider {
     try {
       if (isDirect) {
         // Create Order (client frontend completes payment with Razorpay checkout.js)
-        const body = {
+        // Razorpay punya field `method` resmi di POST /v1/orders. Nilainya
+        // terbatas: "upi" atau "netbanking" (dokumentasi Razorpay). Method lain
+        // (card, wallet) TIDAK punya padanan server-side — checkout.js yang
+        // menentukannya, jadi ditandai advisory di response.
+        const canonical = resolvePaymentMethodCode(params.paymentMethod);
+        const rzpMethod = canonical ? CANONICAL_TO_RAZORPAY[canonical.toLowerCase().trim()] : undefined;
+        const body: any = {
           amount,
           currency,
           receipt: orderId,
           notes: { order_id: orderId, product: productDetails },
+          // Peta kanonik lebih dulu, lalu providerParams menimpanya — supaya
+          // `providerParams` tetap jadi escape hatch, sama seperti provider lain.
+          ...(rzpMethod ? { method: rzpMethod } : {}),
           ...params.providerParams,
         };
 
@@ -62,7 +73,9 @@ export class RazorpayProvider extends BasePaymentProvider {
 
         return {
           success: true, provider: "razorpay", orderId, amount: data.amount || amount,
-          reference: data.id, paymentCode: data.id, rawResponse: data,
+          reference: data.id, paymentCode: data.id,
+          paymentMethodApplied: params.paymentMethod ? (body.method ? "server" : "advisory") : undefined,
+          rawResponse: data,
         };
       } else {
         // Payment Link (Hosted checkout page)
@@ -163,7 +176,9 @@ export class RazorpayProvider extends BasePaymentProvider {
   }
 
   async checkTransaction(params: CheckTransactionParams, config: ProviderConfig): Promise<CheckTransactionResult> {
-    const { merchantOrderId } = params;
+    // `merchantOrderId` opsional di tipe publik; PaymentManager sudah menjamin
+    // salah satu identifier terisi sebelum sampai ke provider.
+    const merchantOrderId = params.merchantOrderId || params.transactionId || "";
     const baseUrl = this.getBaseUrl();
     const headers = this.buildHeaders(config);
 

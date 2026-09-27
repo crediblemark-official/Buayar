@@ -429,16 +429,20 @@ export class IpaymuProvider extends BasePaymentProvider {
   }
 
   async checkTransaction(params: CheckTransactionParams, config: ProviderConfig): Promise<CheckTransactionResult> {
-    const { merchantOrderId } = params;
+    // `transactionId` diprioritaskan karena inilah yang benar-benar dipakai iPaymu.
+    // `merchantOrderId` tetap didukung untuk backward compatibility, tapi risky:
+    // nilainya/order_id merchant, yang ditolak endpoint iPaymu.
+    const transactionId = params.transactionId || params.merchantOrderId || "";
+    const merchantOrderId = params.merchantOrderId || params.transactionId || "";
     const va = config.merchantCode || config.merchantId || "";
     const apiKey = config.apiKey || "";
     const sandbox = !!config.sandbox;
 
     const url = `${this.getBaseUrl(sandbox)}/transaction`;
     // PENTING: iPaymu /transaction HANYA menerima TransactionId numerik (ID dari iPaymu),
-    // bukan referenceId/orderId merchant. Pastikan consumer mengirim `invoice.reference`
-    // (TransactionId dari response createInvoice), bukan order_number.
-    const payload = { transactionId: merchantOrderId };
+    // bukan referenceId/orderId merchant. Kirim `transactionId: invoice.reference`
+    // (dari response createInvoice), bukan order_number milik Anda sendiri.
+    const payload = { transactionId };
     const { signature, timestamp } = generateIpaymuSignature("POST", va, apiKey, payload);
 
     try {

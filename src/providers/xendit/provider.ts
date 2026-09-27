@@ -715,7 +715,10 @@ export class XenditProvider extends BasePaymentProvider {
   }
 
   async checkTransaction(params: CheckTransactionParams, config: ProviderConfig): Promise<CheckTransactionResult> {
-    const { merchantOrderId, transactionId } = params;
+    // `merchantOrderId` opsional di tipe publik; PaymentManager sudah menjamin
+    // salah satu identifier terisi sebelum sampai ke provider.
+    const merchantOrderId = params.merchantOrderId || params.transactionId || "";
+    const transactionId = params.transactionId || "";
     const apiKey = config.apiKey || config.serverKey || config.secretKey || "";
     // Xendit memakai satu host (`api.xendit.co`) untuk test & live; yang
     // membedakan hanya kunci `xnd_development_` vs `xnd_production_`.

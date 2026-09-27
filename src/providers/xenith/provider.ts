@@ -193,7 +193,7 @@ export class XenithProvider extends BasePaymentProvider {
     config: ProviderConfig
   ): Promise<CheckTransactionResult> {
     const client = this.getClient(config);
-    const lookupId = params.transactionId || params.merchantOrderId;
+    const lookupId = params.transactionId || params.merchantOrderId || "";
 
     try {
       let res: any;
@@ -246,7 +246,7 @@ export class XenithProvider extends BasePaymentProvider {
       return {
         success: false,
         provider: "xenith",
-        orderId: params.merchantOrderId,
+        orderId: params.merchantOrderId || params.transactionId || "",
         reference: "",
         amount: 0,
         status: "failed",

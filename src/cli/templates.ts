@@ -7,15 +7,20 @@ export interface TemplateFiles {
 }
 
 export const DOT_ENV_TEMPLATE = `# ── @crediblemark/buayar · Konfigurasi ─────────────────────────────
-# CUKUP isi blok universal di bawah. Provider aktif bisa DITENTUKAN sendiri
-# (BUAYAR_PROVIDER) atau DI-AUTODETECT dari kunci kredensial yang terisi.
-# Saat pindah provider, umumnya kode TIDAK berubah — cukup isi key-nya.
+# Saat pindah provider, kode aplikasi TIDAK berubah — cukup ganti
+# BUAYAR_PROVIDER + kredensial di bawah.
+#
+# ⚠  BUAYAR_PROVIDER itu WAJIB diisi bila kamu hanya memakai kredensial
+#    universal (BUAYAR_*). Autodetect hanya bekerja dari env yang
+#    BERPREFIX provider (mis. MIDTRANS_SERVER_KEY, STRIPE_SECRET_KEY),
+#    bukan dari BUAYAR_* — nama universalnya sama untuk semua provider
+#    sehingga tidak ada yang bisa ditebak.
 
-# (opsional) Nama provider aktif. Bila dikosongkan, otomatis dideteksi.
+BUAYAR_PROVIDER=midtrans
+
 # midtrans | duitku | ipaymu | xendit | doku | prismalink | faspay | finpay
 # nicepay | oy | stripe | paypal | adyen | checkoutcom | razorpay | square
-# payu | braintree | twocheckout | sumopod
-# BUAYAR_PROVIDER=midtrans
+# payu | braintree | twocheckout | sumopod | xenith
 
 # Kredensial Universal — dipetakan otomatis sesuai provider aktif.
 # Isi sesuai kredensial yang diminta provider itu (umumnya: secret/key/password).
@@ -29,8 +34,40 @@ BUAYAR_SANDBOX=true
 BUAYAR_CALLBACK_URL=http://localhost:3000/api/payment/webhook
 BUAYAR_RETURN_URL=http://localhost:3000/payment/success
 
+# Webhook shared secret (hanya bila providermu pakai token/secret terpisah
+# dari API key: xendit, sumopod, xenith, stripe, checkoutcom, razorpay,
+# square, adyen). Square juga bisa lewat BUAYAR_WEBHOOK_SIGNATURE_KEY,
+# PayPal lewat BUAYAR_WEBHOOK_ID.
+# BUAYAR_WEBHOOK_TOKEN=
+# BUAYAR_WEBHOOK_SECRET=
+# BUAYAR_WEBHOOK_SIGNATURE_KEY=
+# BUAYAR_WEBHOOK_ID=
+
+# Simulator — transaksi diproses lokal, TANPA memanggil PG sungguhan.
+# Berguna saat merchant account belum disetujui.
+# BUAYAR_SIMULATE=1
+
+# ── Knob & feature flag per provider (opsional) ────────────────────────────
+# Beberapa kapabilitas hanya bisa diaktifkan lewat kode
+# (new Buayar({ extra: { snap: true } })). prefixed BUAYAR_EXTRA__* membuat
+# semuanya bisa Announcement dari .env, jadi pindah provider tetap tanpa edit kode.
+#
+#   BUAYAR_EXTRA_SNAP=true            -> extra.snap         (DOKU: QRIS/DANA/ShopeePay via SNAP)
+#   BUAYAR_EXTRA_COUNTRY_CODE=ID      -> extra.countryCode  (Adyen session)
+#   BUAYAR_EXTRA_MERCHANT_ACCOUNT=ACC -> extra.merchantAccount
+#
+# Nilai "true"/"1" menjadi boolean true; "false"/"0"/kosong menjadi false.
+# BUAYAR_EXTRA_SNAP=false
+# BUAYAR_EXTRA_COUNTRY_CODE=ID
+
+# Private key RSA (DOKU SNAP B2B Get Token, Adyen library). Tempel sebagai satu baris
+# dengan \n, atau pakai file +BUAYAR_EXTRA_PRIVATE_KEY_FILE=./doku-private.key
+# BUAYAR_PRIVATE_KEY=
+
 # ── Kredensial Spesifik Provider (opsional & lanjutan) ─────────────────────
 # Bisa diisi bila ingin eksplisit; bila kosong, nilai universal di atas dipakai.
+# Jangan isi beberapa provider sekaligus kecuali kamu tahu apa yang kamu lakukan:
+# env milik provider lain bisa dipakai untuk autodetect dan bikin ambigu.
 # MIDTRANS_SERVER_KEY=
 # MIDTRANS_CLIENT_KEY=
 # DUITKU_API_KEY=
@@ -69,6 +106,7 @@ BUAYAR_RETURN_URL=http://localhost:3000/payment/success
 # RAZORPAY_WEBHOOK_SECRET=
 # SQUARE_ACCESS_TOKEN=
 # SQUARE_LOCATION_ID=
+# SQUARE_WEBHOOK_SIGNATURE_KEY=
 # PAYU_POS_ID=
 # PAYU_MD5_KEY=
 # BRAINTREE_MERCHANT_ID=
@@ -80,6 +118,9 @@ BUAYAR_RETURN_URL=http://localhost:3000/payment/success
 # SUMOPOD_API_KEY=
 # SUMOPOD_WEBHOOK_SECRET=
 # SUMOPOD_WEBHOOK_TOKEN=
+# XENITH_ACCESS_KEY=
+# XENITH_SECRET_KEY=
+# XENITH_WEBHOOK_SECRET=
 `;
 
 export const CONFIG_TEMPLATE = `// src/payment/buayar.ts
@@ -100,6 +141,11 @@ export const SERVICE_TEMPLATE = `// src/payment/service.ts
 // Service layer — satu-satunya tempat aplikasi berinteraksi dengan Buayar.
 // Ganti provider cukup dengan ubah .env; kode ini tidak berubah.
 import { buayar } from "./buayar";
+// PENTING: PaymentMethodInput (bukan \`string\`). Tipe ini yang membuat kode
+// provider (mis. "qris_static" milik DOKU) ditolak saat compile time —
+// lihat blok PaymentMethodInput di types/canonical.ts. Kalau butuh kode
+// provider-specific, pakai escape hatch: { raw: "...", providerOnly: true }.
+import type { PaymentMethodInput } from "@crediblemark/buayar";
 
 export interface PaymentService {
   createCheckout(input: {
@@ -107,7 +153,7 @@ export interface PaymentService {
     amount: number;
     productDetails: string;
     customer: { name: string; email: string; phone?: string };
-    paymentMethod?: string;
+    paymentMethod?: PaymentMethodInput;
     currency?: string;
   }): Promise<any>;
   getMethods(amount?: number): Promise<any>;
@@ -228,10 +274,15 @@ paymentRoutes.post(
     if (Buffer.isBuffer(req.body)) {
       // JSON arrives sebagai Buffer supaya byte yang ditandatangani provider
       // tetap utuh.
-      rawBody = req.body.toString("utf8");
-      if (rawBody.trim()) {
+      //
+      // Pakai const 'text' dan bukan let 'rawBody': TypeScript tidak men-narrow
+      // variabel let di dalam blok ini, jadi JSON.parse(rawBody) gagal compile
+      // di aplikasi dengan strict: true.
+      const text = req.body.toString("utf8");
+      rawBody = text;
+      if (text.trim()) {
         try {
-          payload = JSON.parse(rawBody);
+          payload = JSON.parse(text);
         } catch {
           // Penting: 500 di sini berarti gateway menganggap gagal lalu
           // mengulang pengiriman berhari-hari, dan siapa pun bisa memicuinya
@@ -438,7 +489,7 @@ export interface WebhookVerification {
 export const PROVIDERS = [
   "midtrans", "duitku", "ipaymu", "xendit", "doku", "prismalink", "faspay",
   "finpay", "nicepay", "oy", "stripe", "paypal", "adyen", "checkoutcom",
-  "razorpay", "square", "payu", "braintree", "twocheckout", "sumopod",
+  "razorpay", "square", "payu", "braintree", "twocheckout", "sumopod", "xenith",
 ] as const;
 
 export const FRAMEWORKS = ["express", "hono", "nextjs"] as const;

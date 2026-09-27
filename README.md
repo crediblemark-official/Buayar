@@ -175,13 +175,14 @@ const { categories } = await buayar.getPaymentMethods({ amount: 150000 });
 const vaInvoice = await buayar.createInvoice({
   orderId: "ORDER-1002",
   amount: 150000,
-  paymentMethod: "bca_va", // canonical code — works across all providers
+  paymentMethod: "bca_va", // canonical code — mapped per provider automatically
   productDetails: "Wallet Top-up",
   customer: { name: "John", email: "john@example.com" },
 });
 
 console.log(vaInvoice.vaNumber);   // "123456789012"
 console.log(vaInvoice.vaBank);     // "bca"
+console.log(vaInvoice.mode);       // "va" — normalised across all 21 providers
 
 // QRIS
 const qrisInvoice = await buayar.createInvoice({
@@ -192,15 +193,30 @@ const qrisInvoice = await buayar.createInvoice({
   customer: { name: "John", email: "john@example.com" },
 });
 
-console.log(qrisInvoice.qrString); // Raw EMVCo string for QR rendering
+console.log(qrisInvoice.qrString ?? qrisInvoice.qrCodeUrl);
+// ⚠️ `qrString` (EMVCo raw) hanya diisi provider yang benar-benar mengembalikannya
+// (Xendit, Duitku, iPaymu, DOKU, …). Midtrans Core API hanya memberi URL PNG.
+// Selalu pakai `?? qrCodeUrl` supaya portabel lintas provider.
 ```
+
+> **Canonical ≠ tersedia di semua provider.** Tidak ada satu pun kode method yang
+> didukung 21/21. `buayar.supportsMethod("gopay", "duitku")` memberi jawaban
+> sebelum request dikirim, dan `getCapabilities("duitku").methods` memberi daftar
+> lengkapnya. Method di luar daftar ditolak pre-flight, bukan gagal 400 dari PG.
+> Lihat tabel method per provider di [`docs/providers/README.md`](docs/providers/README.md).
 
 #### 4. Universal Webhook Handler
 ```typescript
 // Works with Express, Elysia, Hono, Next.js App Router, etc.
 app.post("/api/payment/webhook", async (req, res) => {
-  const result = await buayar.verifyWebhook(req.body, req.headers);
-  // Auto-detects the provider from payload — no manual routing needed
+  const result = await buayar.verifyWebhook(req.body, req.headers, /* config? */ undefined);
+  // Provider diambil dari BUAYAR_PROVIDER / config yang aktif.
+
+  // ⚠️ Deteksi dari payload HANYA jalan bila TIDAK ada provider yang dikonfigurasi.
+  // Kalau BUAYAR_PROVIDER di-set, payload milik provider lain akan ditolak — itu
+  // fail-closed yang disengaja, bukan bug. Kalau kamu menerima webhook dari
+  >1 provider sekaligus, panggil `buayar.detectProviderFromPayload(payload, headers)`
+  // lalu teruskan hasilnya sebagai `configOverride.provider`.
 
   if (!result.isValid) return res.status(400).json({ error: "Invalid signature" });
 
@@ -213,14 +229,58 @@ app.post("/api/payment/webhook", async (req, res) => {
 });
 ```
 
+> **`rawBody` wajib diteruskan** untuk provider yang menandatangani byte mentah
+> (Stripe, Checkout.com, Razorpay, Square, PayU, Braintree, DOKU SNAP, SumoPod,
+> Xenith). Tanpa itu verifikasi selalu `false` dan `result.error` menjelaskan
+> caranya. Template dari `buayar init` sudah menangani ini dengan benar.
+
 #### 5. Zero-Code PG Switch
 ```env
 # Switch from Midtrans to Stripe — zero code change required
 BUAYAR_PROVIDER=stripe
 BUAYAR_API_KEY=sk_live_...
 BUAYAR_WEBHOOK_SECRET=whsec_...
-# (or omit BUAYAR_PROVIDER entirely — provider auto-detected from the credentials)
 ```
+
+> ⚠️ **Dua hal yang harus diketahui sebelum bergantung pada switcher:**
+>
+> 1. **`BUAYAR_PROVIDER` itu wajib** kalau kamu memakai kredensial universal
+>    (`BUAYAR_*`). Autodetect hanya membaca env berprefiks provider
+>    (`MIDTRANS_SERVER_KEY`, `STRIPE_SECRET_KEY`, …) — nama universalnya sama
+>    untuk semua provider sehingga tidak ada yang bisa ditebak.
+> 2. **Jangan campur kredensial provider lain di satu `.env`.** Versi lama membaca
+>    webhook secret secara global, sehingga `SUMOPOD_WEBHOOK_TOKEN` yang tertinggal
+>    akan menimpa token Xendit dan menggagalkan 100% webhook. Sekarang sudah
+>    di-scope per provider, tapi satu env per provider tetap cara paling aman.
+>
+> Semua provider juga punya **field wajib yang spesifik** (contoh: iPaymu
+> mewajibkan `customer.phone` 5–15 digit). Ini divalidasi pre-flight dengan pesan
+> yang menyebut provider dan field-nya — lihat
+> [`src/core/requirements.ts`](src/core/requirements.ts).
+
+#### 6. Which providers are actually verified?
+
+Not all 21 providers have been fired at a real sandbox. The SDK reports this
+itself rather than leaving you to guess:
+
+```bash
+npx buayar audit             # table
+npx buayar audit --json      # for CI
+```
+
+```typescript
+buayar.listVerifiedProviders();    // ["doku","duitku","finpay","ipaymu","midtrans","sumopod","xendit","xenith"]
+buayar.listUnverifiedProviders();  // 13 sisanya
+buayar.getCapabilities("stripe")?.verified;          // false
+buayar.getCapabilities("stripe")?.verificationNote;  // "Butuh API key sandbox Stripe (sk_test_...)"
+```
+
+> **What `verified: false` does and does not mean.**
+> It does **not** mean the code is broken or unfinished. The implementation is
+> complete and locked down by contract/simulator tests — webhook fail-closed,
+> real signature generation, pre-flight rejection. What is missing is only
+> end-to-end proof against a live server, because the sandbox credentials are
+> not available yet. Treat it as "not yet proven", not "not ready".
 
 ---
 
@@ -357,22 +417,55 @@ const { categories } = await buayar.getPaymentMethods({ amount: 150000 });
 const vaInvoice = await buayar.createInvoice({
   orderId: "ORDER-1002",
   amount: 150000,
-  paymentMethod: "bca_va", // kode canonical — berlaku di semua provider
+  paymentMethod: "bca_va", // kode canonical — dipetakan otomatis per provider
   productDetails: "Topup Saldo",
   customer: { name: "Budi", email: "budi@example.com" },
 });
 
 console.log("Nomor VA:", vaInvoice.vaNumber);  // "123456789012"
 console.log("Bank:", vaInvoice.vaBank);        // "bca"
-console.log("QRIS:", vaInvoice.qrString);      // Raw EMVCo string
+console.log("Kanal:", vaInvoice.mode);          // "va" — seragam di 21 provider
+
+// QRIS
+const qrisInvoice = await buayar.createInvoice({
+  orderId: "ORDER-1003",
+  amount: 50000,
+  paymentMethod: "qris",
+  productDetails: "Kopi",
+  customer: { name: "Budi", email: "budi@example.com" },
+});
+
+console.log("QRIS:", qrisInvoice.qrString ?? qrisInvoice.qrCodeUrl);
+// ⚠️ `qrString` (EMVCo mentah) hanya diisi provider yang benar-benar
+// mengembalikannya. Midtrans Core API hanya memberi URL PNG, bukan string EMVCo.
+// Karena itu selalu pakai `?? qrCodeUrl` agar portabel lintas provider.
 ```
+
+> **Canonical ≠ tersedia di semua provider.** Tidak ada satu pun kode method yang
+> didukung 21/21 — `indodana` hanya di Duitku, `gopay` hanya di 4 provider, dan
+> `apple_pay` hanya di provider international. Cara memastikannya:
+>
+> ```typescript
+> buayar.supportsMethod("gopay", "duitku");              // false — ditolak sebelum request
+> buayar.getCapabilities("duitku").methods;              // daftar lengkap yang didukung
+> buayar.getCapabilities("adyen").serverForwardedMethods; // method yang benar-benar dikirim ke PG
+> ```
+>
+> Method di luar daftar ditolak pre-flight dengan pesan jelas — bukan gagal 400 dari PG.
 
 #### 4. Universal Webhook Handler
 ```typescript
 // Bekerja dengan Express, Elysia, Hono, Next.js App Router, dll.
 app.post("/api/payment/webhook", async (req, res) => {
   const result = await buayar.verifyWebhook(req.body, req.headers);
-  // Provider terdeteksi otomatis dari struktur payload
+  // Provider diambil dari BUAYAR_PROVIDER / config yang aktif.
+
+  // ⚠️ Deteksi dari payload HANYA jalan bila TIDAK ada provider yang dikonfigurasi.
+  // Kalau BUAYAR_PROVIDER di-set, payload provider lain ditolak — itu fail-closed
+  // yang disengaja. Untuk webhook multi-provider, tentukan sendiri provider-nya:
+  //
+  //   const detected = buayar.detectProviderFromPayload(req.body, req.headers);
+  //   const result = await buayar.verifyWebhook(req.body, req.headers, { provider: detected });
 
   if (!result.isValid) return res.status(400).json({ error: "Invalid signature" });
 
@@ -385,14 +478,37 @@ app.post("/api/payment/webhook", async (req, res) => {
 });
 ```
 
+> **`rawBody` wajib diteruskan** untuk provider yang menandatangani byte mentah
+> (Stripe, Checkout.com, Razorpay, Square, PayU, Braintree, DOKU SNAP, SumoPod,
+> Xenith). Tanpa itu verifikasi selalu `false`. Template dari `buayar init`
+> sudah menangani ini dengan benar.
+
 #### 5. Zero-Code PG Switch
 ```env
 # Ganti dari Midtrans ke Stripe — tanpa ubah satu baris kode pun
 BUAYAR_PROVIDER=stripe
 BUAYAR_API_KEY=sk_live_...
 BUAYAR_WEBHOOK_SECRET=whsec_...
-# (atau hapus BUAYAR_PROVIDER — provider auto-dideteksi dari kredensial)
 ```
+
+> ⚠️ **Dua hal yang harus diketahui sebelum bergantung pada switcher:**
+>
+> 1. **`BUAYAR_PROVIDER` itu wajib** bila memakai kredensial universal (`BUAYAR_*`).
+>    Autodetect hanya membaca env berprefiks provider (`MIDTRANS_SERVER_KEY`,
+>    `STRIPE_SECRET_KEY`, …) — nama universalnya sama untuk semua provider
+>    sehingga tidak ada yang bisa ditebak. Dan `PROVIDER_PG`/`PG_PROVIDER` (env
+>    legacy) masih menang atas `BUAYAR_PROVIDER` demi backward-compatibility;
+>    bila keduanya beda, SDK memberi peringatan di startup.
+> 2. **Jangan campur kredensial provider lain di satu `.env`.** Sekarang webhook
+>    secret sudah di-scope per provider, tapi satu env per provider tetap cara
+>    paling aman dan paling mudah dibaca.
+>
+> Knob khusus provider pun bisa lewat env: `BUAYAR_EXTRA_SNAP=true` untuk
+> DOKU QRIS via SNAP, `BUAYAR_EXTRA_COUNTRY_CODE=ID` untuk Adyen, dan seterusnya.
+>
+> Sebagian provider punya **field wajib yang spesifik** — iPaymu misalnya
+> mewajibkan `customer.phone` 5–15 digit. Ini divalidasi pre-flight dengan pesan
+> yang menyebut provider dan field-nya, sebelum request dikirim.
 
 ### 🏷️ Daftar Canonical Payment Methods
 

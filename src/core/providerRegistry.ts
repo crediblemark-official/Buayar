@@ -3,7 +3,8 @@ import {
   CANONICAL_TO_XENDIT, CANONICAL_TO_DOKU, CANONICAL_TO_PRISMALINK,
   CANONICAL_TO_FASPAY, CANONICAL_TO_FINPAY, CANONICAL_TO_NICEPAY,
   CANONICAL_TO_OY, CANONICAL_TO_STRIPE, CANONICAL_TO_SUMOPOD,
-  CANONICAL_TO_XENITH,
+  CANONICAL_TO_XENITH, CANONICAL_TO_PAYU, CANONICAL_TO_ADYEN,
+  CANONICAL_TO_RAZORPAY, SERVER_FORWARDED_METHODS,
 } from "./canonical";
 
 export interface ProviderCapability {
@@ -11,6 +12,37 @@ export interface ProviderCapability {
   methods: string[];
   /** Operasi lanjutan yang didukung */
   operations: { refund: boolean; checkBalance: boolean; disburse: boolean };
+  /**
+   * Metode yang NAMANYA didukung, tetapi TIDAK bisa di-enforce server-side:
+   * PSP yang menentukannya dari token / checkout sisi klien.
+   *
+   * `methods` tetap memuat daftar lengkap; field ini yang menyatakan apakah
+   * SDK benar-benar mengirim field method ke PG. Lihat juga
+   * `InvoiceResponse.paymentMethodApplied` pada response `createInvoice`.
+   */
+  serverForwardedMethods?: string[];
+  /**
+   * true bila provider ini PERNAH ditembakkan ke kredensial sandbox/production
+   * sungguhan (lihat docs/providers/README.md untuk status per provider).
+   *
+   * PENTING — apa arti dan tidak arti dari flag ini:
+   *
+   *   - `true`  → request nyata sudah pernah sampai ke PG dan balasannya
+   *                diamati. Endpoint & shape payload terbukti benar.
+   *   - `false` → implementasinya lengkap dan terkunci test contract/simulator
+   *                (webhook fail-closed, signature generator, pre-flight),
+   *                TAPI belum pernah menyentuh API asli.
+   *
+   * `false` BUKAN berarti kode rusak atau belum jadi. Itu berarti belum
+   * terverifikasi terhadap server sungguhan, karena kredensial sandbox-nya belum
+   * tersedia. Jangan tandai provider `false` sebagai "tidak dipakai" — ia tetap
+   * berfungsi, hanya belum dibuktikan secara end-to-end.
+   *
+   * Lihat `buayar audit` untuk daftar lengkap beserta alasannya.
+   */
+  verified?: boolean;
+  /** Kenapa provider belum terverifikasi live (isi hanya saat verified === false). */
+  verificationNote?: string;
 }
 
 export interface ProviderDescriptor extends ProviderCapability {
@@ -65,8 +97,7 @@ export class ProviderRegistry {
     * Mengembalikan undefined jika tidak ada / ambigu / parsial.
    */
   detectFromEnv(env: Record<string, string | undefined>): string | undefined {
-    const present: { name: string; count: number }[] = [];
-    let hasPartialProvider = false;
+    const present: { name: string; count: number; complete: boolean }[] = [];
     for (const [name, desc] of this.descriptors) {
       const filled = desc.envKeys.filter((k) => {
         const v = env[k];
@@ -75,15 +106,24 @@ export class ProviderRegistry {
       const complete = desc.requiredEnvKeys?.every((group) =>
         group.some((key) => filled.includes(key))
       ) ?? true;
-      if (filled.length > 0) present.push({ name, count: filled.length });
-      if (filled.length > 0 && !complete) hasPartialProvider = true;
+      if (filled.length > 0) present.push({ name, count: filled.length, complete });
     }
-    if (present.length === 0 || hasPartialProvider) return undefined;
-    // Ambil provider dengan jumlah kredensial terbanyak; anggap ambigu bila seri.
-    present.sort((a, b) => b.count - a.count);
-    const top = present[0];
-    const ties = present.filter((p) => p.count === top.count);
-    return ties.length === 1 ? top.name : undefined;
+    if (present.length === 0) return undefined;
+
+    // Hanya provider LENGKAP yang boleh jadi kandidat.
+    const completeList = present.filter((p) => p.complete);
+    if (completeList.length === 0) return undefined;
+
+    completeList.sort((a, b) => b.count - a.count);
+    const top = completeList[0];
+    const ties = completeList.filter((p) => p.count === top.count);
+
+    // Credo: kredensial parsial provider lain hanya boleh membatalkan deteksi
+    // bila kredensialnya SEDANG BANYAK — kalau tidak, satu sisa env (mis.
+    // `ADYEN_API_KEY=` untuk debugging) akan mematikan deteksi untuk semua orang.
+    const shadowed = present.some((p) => !p.complete && p.count >= top.count);
+
+    return ties.length === 1 && !shadowed ? top.name : undefined;
   }
 
   /**
@@ -156,15 +196,15 @@ export class ProviderRegistry {
 const ENV_KEYS: Record<string, string[]> = {
   midtrans:     ["MIDTRANS_SERVER_KEY", "MIDTRANS_CLIENT_KEY"],
   duitku:       ["DUITKU_API_KEY", "DUITKU_MERCHANT_CODE"],
-  ipaymu:       ["IPAYMU_API_KEY", "IPAYMU_VA"],
-  xendit:       ["XENDIT_SECRET_KEY", "XENDIT_WEBHOOK_TOKEN"],
-  doku:         ["DOKU_CLIENT_ID", "DOKU_SECRET_KEY"],
-  prismalink:   ["PRISMALINK_MERCHANT_ID", "PRISMALINK_SECRET_KEY"],
-  faspay:       ["FASPAY_MERCHANT_ID", "FASPAY_USER_ID", "FASPAY_PASSWORD"],
-  finpay:       ["FINPAY_MERCHANT_ID", "FINPAY_MERCHANT_KEY"],
-  nicepay:      ["NICEPAY_IMID", "NICEPAY_KEY"],
+  ipaymu:       ["IPAYMU_API_KEY", "IPAYMU_VA", "IPAYMU_MERCHANT_CODE"],
+  xendit:       ["XENDIT_SECRET_KEY", "XENDIT_API_KEY", "XENDIT_WEBHOOK_TOKEN", "XENDIT_WEBHOOK_VERIFICATION_TOKEN"],
+  doku:         ["DOKU_CLIENT_ID", "DOKU_SECRET_KEY", "DOKU_API_KEY", "DOKU_MERCHANT_ID"],
+  prismalink:   ["PRISMALINK_MERCHANT_ID", "PRISMALINK_SECRET_KEY", "PRISMALINK_API_KEY"],
+  faspay:       ["FASPAY_MERCHANT_ID", "FASPAY_USER_ID", "FASPAY_PASSWORD", "FASPAY_API_KEY"],
+  finpay:       ["FINPAY_MERCHANT_ID", "FINPAY_MERCHANT_KEY", "FINPAY_SECRET_KEY", "FINPAY_API_KEY"],
+  nicepay:      ["NICEPAY_IMID", "NICEPAY_KEY", "NICEPAY_SECRET_KEY", "NICEPAY_API_KEY"],
   oy:           ["OY_USERNAME", "OY_API_KEY"],
-  stripe:       ["STRIPE_SECRET_KEY", "STRIPE_PUBLIC_KEY", "STRIPE_WEBHOOK_SECRET"],
+  stripe:       ["STRIPE_SECRET_KEY", "STRIPE_KEY", "STRIPE_PUBLIC_KEY", "STRIPE_PUBLISHABLE_KEY", "STRIPE_WEBHOOK_SECRET"],
   paypal:       ["PAYPAL_CLIENT_ID", "PAYPAL_CLIENT_SECRET", "PAYPAL_WEBHOOK_ID"],
   adyen:        ["ADYEN_API_KEY", "ADYEN_MERCHANT_ACCOUNT", "ADYEN_HMAC_KEY"],
   checkoutcom:  ["CHECKOUTCOM_SECRET_KEY", "CHECKOUTCOM_PUBLIC_KEY", "CHECKOUTCOM_WEBHOOK_SECRET"],
@@ -173,14 +213,17 @@ const ENV_KEYS: Record<string, string[]> = {
   payu:         ["PAYU_POS_ID", "PAYU_MD5_KEY"],
   braintree:    ["BRAINTREE_MERCHANT_ID", "BRAINTREE_PUBLIC_KEY", "BRAINTREE_PRIVATE_KEY"],
   twocheckout:  ["TWOCHECKOUT_MERCHANT_CODE", "TWOCHECKOUT_SECRET_KEY", "TWOCHECKOUT_SECRET_WORD"],
-  sumopod:      ["SUMOPOD_API_KEY", "SUMOPOD_WEBHOOK_SECRET"],
-  xenith:       ["XENITH_ACCESS_KEY", "XENITH_SECRET_KEY", "XENITH_WEBHOOK_SECRET"],
+  sumopod:      ["SUMOPOD_API_KEY", "SUMOPOD_PRODUCTION_API_KEY", "SUMOPOD_SANDBOX_API_KEY",
+                 "SUMOPOD_WEBHOOK_TOKEN", "SUMOPOD_WEBHOOK_SECRET",
+                 "SUMOPOD_PRODUCTION_WEBHOOK_TOKEN", "SUMOPOD_SANDBOX_WEBHOOK_TOKEN",
+                 "SUMOPOD_PRODUCTION_WEBHOOK_SECRET", "SUMOPOD_SANDBOX_WEBHOOK_SECRET"],
+  xenith:       ["XENITH_ACCESS_KEY", "XENITH_API_KEY", "XENITH_SECRET_KEY", "XENITH_WEBHOOK_SECRET"],
 };
 
 const REQUIRED_ENV_KEYS: Record<string, string[][]> = {
   midtrans: [["MIDTRANS_SERVER_KEY"]],
   duitku: [["DUITKU_API_KEY"], ["DUITKU_MERCHANT_CODE"]],
-  ipaymu: [["IPAYMU_API_KEY"], ["IPAYMU_VA"]],
+  ipaymu: [["IPAYMU_API_KEY"], ["IPAYMU_VA", "IPAYMU_MERCHANT_CODE"]],
   xendit: [["XENDIT_SECRET_KEY", "XENDIT_API_KEY"]],
   doku: [["DOKU_CLIENT_ID"], ["DOKU_SECRET_KEY", "DOKU_API_KEY"]],
   prismalink: [["PRISMALINK_MERCHANT_ID"], ["PRISMALINK_SECRET_KEY", "PRISMALINK_API_KEY"]],
@@ -226,6 +269,33 @@ const WORKING_METHODS: Record<string, string[]> = {
   twocheckout: ["credit_card", "paypal", "paylater", "wire_transfer"],
 };
 
+// Provider yang benar-benar mengirim field method ke API PG. Untuk provider di
+// luar daftar ini, `methods` di atas hanya menyatakan metode yang MUNGKIN
+// didukung — penentuannya ada di PSP, bukan di SDK.
+//
+// Alasan per provider ada di docs/providers/<provider>/README.md; intinya:
+// sebagian besar PSP international menentukan metode dari token / nonce /
+// checkout SDK di browser, yang tidak bisa di-fabricate di server.
+const SERVER_FORWARDED_METHODS_LOCAL: Record<string, string[]> = {
+  ...SERVER_FORWARDED_METHODS,
+  // Semua provider yang punya tabel CANONICAL_TO_* mengirim field method
+  // sungguhan ke API PG-nya.
+  midtrans: Object.keys(CANONICAL_TO_MIDTRANS),
+  duitku: Object.keys(CANONICAL_TO_DUITKU),
+  ipaymu: Object.keys(CANONICAL_TO_IPAYMU),
+  xendit: Object.keys(CANONICAL_TO_XENDIT),
+  doku: Object.keys(CANONICAL_TO_DOKU),
+  prismalink: Object.keys(CANONICAL_TO_PRISMALINK),
+  faspay: Object.keys(CANONICAL_TO_FASPAY),
+  finpay: Object.keys(CANONICAL_TO_FINPAY),
+  nicepay: Object.keys(CANONICAL_TO_NICEPAY),
+  oy: Object.keys(CANONICAL_TO_OY),
+  stripe: Object.keys(CANONICAL_TO_STRIPE),
+  sumopod: Object.keys(CANONICAL_TO_SUMOPOD),
+  xenith: Object.keys(CANONICAL_TO_XENITH),
+  payu: Object.keys(CANONICAL_TO_PAYU),
+};
+
 // Operasi didukung (sinkron dengan switch di PaymentManager).
 const OPERATIONS: Record<string, { refund: boolean; checkBalance: boolean; disburse: boolean }> = {
   midtrans: { refund: true, checkBalance: true, disburse: false },
@@ -251,14 +321,62 @@ const OPERATIONS: Record<string, { refund: boolean; checkBalance: boolean; disbu
   xenith: { refund: false, checkBalance: true, disburse: true },
 };
 
+/**
+ * Provider yang sudah pernah diverifikasi terhadap kredensial sandbox/production
+ * sungguhan. Sumber: docs/providers/README.md § "Status per provider".
+ *
+ * Daftar ini SENGAJA ditulis tangan, bukan diturunkan dari test — yang diuji
+ * adalah kontrak dan kriptografi signature, bukan apakah HTTP request-nya pernah
+ * sampai ke server sungguhan.
+ */
+const VERIFIED_LIVE = new Set<string>([
+  "midtrans",   // 16/19 kanal Core API, Direct VA, QRIS, Snap
+  "duitku",     // POP Invoice, Direct Inquiry BCA VA, Direct QRIS
+  "ipaymu",     // 13/19 kanal Direct Payment, Direct VA 6 bank, QRIS
+  "xendit",     // 11/11 kanal v3 & v2, Payment Sessions, Direct VA, QRIS
+  "doku",       // Jokul v2 VA, Direct VA 6 bank, MCP 35 tools, SNAP Kirim DOKU
+  "sumopod",    // Payments v1 & QRIS API
+  "xenith",     // Hosted Link, Direct Pay In, Balances, 120 Bank Payouts
+  "finpay",     // 13/13 kanal aktif
+]);
+
+/** Alasan provider belum terverifikasi live, untuk ditampilkan di `buayar audit`. */
+const VERIFICATION_NOTES: Record<string, string> = {
+  nicepay: "Butuh akun sandbox Nicepay (NICEPAY_IMID, NICEPAY_KEY)",
+  faspay: "Butuh akun sandbox Faspay (FASPAY_MERCHANT_ID, FASPAY_USER_ID, FASPAY_PASSWORD)",
+  oy: "Butuh akun sandbox OY! Bisnis (OY_USERNAME, OY_API_KEY)",
+  prismalink: "Gateway tidak stabil; registrasi sandbox/staging tidak dapat diakses",
+  stripe: "Butuh API key sandbox Stripe (sk_test_...)",
+  paypal: "Butuh REST app credentials sandbox PayPal",
+  adyen: "Butuh API key test Adyen + merchant account test",
+  checkoutcom: "Butuh API key sandbox Checkout.com (sk_test_...)",
+  razorpay: "Butuh API key test Razorpay",
+  square: "Butuh access token sandbox Square",
+  payu: "Butuh kredensial sandbox PayU (POS_ID, MD5_KEY)",
+  braintree: "Butuh merchant account Braintree sandbox",
+  twocheckout: "Butuh kredensial sandbox 2Checkout",
+};
+
 export function buildDefaultDescriptors(): ProviderDescriptor[] {
-  return Object.keys(ENV_KEYS).map((name) => ({
-    name,
-    envKeys: ENV_KEYS[name],
-    requiredEnvKeys: REQUIRED_ENV_KEYS[name],
-    methods: WORKING_METHODS[name] || [],
-    operations: OPERATIONS[name] || { refund: false, checkBalance: false, disburse: false },
-  }));
+  return Object.keys(ENV_KEYS).map((name) => {
+    const methods = WORKING_METHODS[name] || [];
+    const forwarded = (SERVER_FORWARDED_METHODS_LOCAL[name] || []).filter((m) => methods.includes(m));
+    return {
+      name,
+      envKeys: ENV_KEYS[name],
+      requiredEnvKeys: REQUIRED_ENV_KEYS[name],
+      methods,
+      operations: OPERATIONS[name] || { refund: false, checkBalance: false, disburse: false },
+      // Provider yang punya tabel mapping kanonik → SDK mengirim field method
+      // sungguhan ke PG. Selain itu (mis. Square/Braintree/PayPal/Checkout.com)
+      // daftar ini kosong: metodenya ditentukan PSP dari token sisi klien.
+      ...(forwarded.length > 0 ? { serverForwardedMethods: forwarded } : {}),
+      verified: VERIFIED_LIVE.has(name),
+      ...(!VERIFIED_LIVE.has(name) && VERIFICATION_NOTES[name]
+        ? { verificationNote: VERIFICATION_NOTES[name] }
+        : {}),
+    };
+  });
 }
 
 export const providerRegistry = new ProviderRegistry(buildDefaultDescriptors());

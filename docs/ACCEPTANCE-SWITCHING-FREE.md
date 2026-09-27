@@ -5,8 +5,34 @@
 >
 > ⚠️ Catatan: audit awal bersifat read-only, tapi **temuan K3 sudah turun menjadi
 > perbaikan kode** — lihat [§3c. Pass Perbaikan Keamanan](#3c-pass-perbaikan-keamanan).
-> Klaim "✅ Terpenuhi" di bawah merujuk pada kondisi **setelah** pass tersebut, dan
-> angka test sudah diperbarui ke **537/537**.
+> Klaim "✅ Terpenuhi" di bawah merujuk pada kondisi **setelah** pass tersebut.
+>
+> ---
+>
+> ## ⚠️ Pass lanjutan — sebagian temuan sudah superseded
+>
+> Dokumen ini adalah **catatan historis sebuah audit**, bukan spesifikasi
+> yang berlaku. Angka test dan referensi `file:line` di dalamnya sudah tidak akurat
+> karena ada beberapa pass perbaikan setelahnya. Yang berubah setelah dokumen ini
+> ditulis:
+>
+> | Temuan pass ini | Status terbaru |
+> | :--- | :--- |
+> | "Autodetect dari `BUAYAR_*`" (diasumsikan bisa) | ❌ **Tidak pernah bisa.** `detectFromEnv` hanya memindai env berprefiks provider. `BUAYAR_PROVIDER` wajib bila memakai kredensial universal. |
+> | Webhook secret dibaca global | ✅ Diperbaiki — kini di-scope per provider (`src/core/config.ts`, `WEBHOOK_TOKEN_BY_PROVIDER`). |
+> | `PROVIDER_PG` diam-diam mengalahkan `BUAYAR_PROVIDER` | ✅ Diperbaiki — kini memunculkan peringatan startup, urutan prioritas tidak diubah (backward-compatible). |
+> | Autodetect dimatikan oleh satu sisa env | ✅ Diperbaiki — `hasPartialProvider` tidak lagi menjadi veto global. |
+> | `setConfig()` memakai kredensial provider lama | ✅ Diperbaiki — kredensial dibuang saat provider berubah. |
+> | Square & PayPal tidak bisa dikonfigurasi via `BUAYAR_*` | ✅ Diperbaiki — `BUAYAR_WEBHOOK_SIGNATURE_KEY` & `BUAYAR_WEBHOOK_ID`. |
+> | CLI tidak tahu provider Xenith | ✅ Diperbaiki — kini 21/21, dengan test sinkronisasi. |
+> | `mode` hanya diisi 6/21 provider | ✅ Diperbaiki — dinormalisasi di `PaymentManager.deriveMode`. |
+> | `BUAYAR_SIMULATE=1` masih kena network | ✅ Diperbaiki — kini benar-benar offline (termasuk 3 operasi VA DOKU). |
+> | `paymentMethod` diabaikan di 6 provider international | ⚠️ **Sebagian.** Adyen & Razorpay kini mengirim field method resmi. Square/Braintree/PayPal/Checkout.com tidak punya field server-side — ditandai `paymentMethodApplied: "advisory"`. |
+> | Knob provider hanya bisa diset lewat kode (`extra.snap`) | ✅ Diperbaiki — ada `BUAYAR_EXTRA_*`. |
+> | Field customer wajib per provider tidak divalidasi | ✅ Diperbaiki — `src/core/requirements.ts` (iPaymu wajib `phone` 5–15 digit). |
+> | "20 provider" | ✅ 21 provider (Xenith). |
+>
+> Sumber kebenaran terbaru: [`README.md`](../README.md) dan [`docs/guide.md`](guide.md).
 
 ---
 
@@ -49,7 +75,10 @@ adalah pengukuran objektif apakah optionality itu benar-benar ada di dalam kode.
 | K6 | Autodetect tanpa fallback senyap | ✅ Terpenuhi | **P0** | M |
 | K7 | Scaffold CLI menghasilkan kode yang bisa diverifikasi | ✅ Terpenuhi | **P0** | **S** |
 
-**Ringkasan: 7 dari 7 kriteria terpenuhi (537/537 tests passing).**
+**Ringkasan: 7 dari 7 kriteria terpenuhi.**
+
+> ⚠️ Angka test pada pass ini: 537/537. Angka ini bersifat historis dan sudah
+> tidak akurat — jalankan `bun test` untuk angka terkini.
 
 > Catatan pembacaan: rincian temuan dan angka di bagian bawah memuat snapshot audit historis
 > v0.8.x. Status terkini ada pada tabel dan ringkasan di atas; item lama yang sudah dicentang
@@ -83,7 +112,7 @@ Ini inti dari switching-bebas-biaya, dan desainnya **benar.**
 |---|---|
 | `src/core/config.ts:191` | `\|\| "midtrans"` — fallback **senyap** ke Midtrans (lihat K6) |
 | `src/core/config.ts:173` | `if (provider === "midtrans")` — inversi semantik sandbox |
-| `src/core/config.ts:217` | `provider === "braintree" ? cfg.apiKey : undefined` — cabang provider di config |
+| ~~`src/core/config.ts:217`~~ | Cabang provider di config — **sudah tidak ada di kode sekarang**; rujukan baris tidak berlaku |
 | `src/core/manager.ts:487` | `provider: "duitku"` di-hardcode di jalur balance |
 | `src/core/buayar.ts:473,485` | `getMidtransClient()` / `getXenditClient()` — escape hatch provider-specific di public API |
 
@@ -691,7 +720,8 @@ Ini perubahan perilaku yang dilihat merchant, jadi ikut naik ke **0.9.0** bersam
   `duitku-callback-integrity`. Setiap test baru diverifikasi **gagal pada kode lama** dan hijau
   pada kode baru, supaya tidak ada yang mengunci perilaku tidak aman tanpa terdeteksi. Untuk
   Duitku: **14 dari 16** regresi gagal pada kode lama.
-- Suite penuh **505/505**, `tsc --noEmit` bersih, `tsc -p tsconfig.scripts.json` bersih.
+- Suite penuh lulus, `tsc --noEmit` bersih, `tsc -p tsconfig.scripts.json` bersih.
+  (Angka absolut pada pass ini sudah historis — lihat banner status di atas.)
   Kedua-duanya dijalankan pre-commit.
 
 ### Yang BELUM dikerjakan
