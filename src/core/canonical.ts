@@ -11,7 +11,7 @@ export { resolvePaymentMethodCode };
  * Mapping dari Canonical Payment Method ke kode internal Duitku
  */
 export const CANONICAL_TO_DUITKU: Record<string, string> = {
-  // Virtual Account
+  // Virtual Account — kode persis tabel Payment Method resmi Duitku.
   bca_va: "BC",
   mandiri_va: "M2",
   bni_va: "I1",
@@ -19,39 +19,36 @@ export const CANONICAL_TO_DUITKU: Record<string, string> = {
   permata_va: "BT",
   cimb_va: "B1",
   danamon_va: "DM",
-  bsi_va: "BS",
-  seabank_va: "S1",
-  muamalat_va: "MY",
-  artajasa_va: "AG",
-  // QRIS
+  // BSI memakai kode resmi `BV`, bukan `BS` (diverifikasi live: BS -> 404).
+  bsi_va: "BV",
+  // Maybank (`VA`) & BNC (`NC`) ada di tabel resmi tapi sebelumnya belum dipetakan.
+  maybank_va: "VA",
+  bnc_va: "NC",
+  // QRIS — `SP` = ShopeePay QRIS (satu-satunya kanal QRIS generik yang aktif).
   qris: "SP",
-  gopay_qris: "SP",
   shopeepay_qris: "SP",
   nobu_qris: "NQ",
   // E-Wallet
-  gopay: "GP",
   shopeepay: "SA",
   ovo: "OV",
   dana: "DA",
   linkaja: "LA",
-  jenius: "JA",
-  // Retail
-  // Tabel Payment Method resmi Duitku hanya punya `FT` (Pegadaian/ALFA/Pos) dan
-  // `IR` (Indomaret). Kode lama `AL` sudah tidak valid — diverifikasi live:
-  // AL -> HTTP 404 "Payment channel not available". Jadi Alfamart dikirim
-  // sebagai `FT`, sama seperti `pos`.
+  // Jenius Pay memakai kode `JP`, bukan `JA` (diverifikasi live: JA -> 404).
+  jenius: "JP",
+  // Retail — tabel resmi hanya punya `FT` (Pegadaian/ALFA/Pos) dan `IR`
+  // (Indomaret). Alfamart dikirim sebagai `FT`, sama seperti `pos`; kode lama
+  // `AL` sudah tidak valid (diverifikasi live: AL -> 404).
   alfamart: "FT",
   indomaret: "IR",
   pos: "FT",
   // Card
   credit_card: "VC",
-  // Paylater
-  // Duitku memakai `DN` untuk Indodana Paylater (tabel Payment Method resmi).
-  // `ID` bukan kode Indodana (itu kode lama yang tidak ada di daftar kanal
-  // `getpaymentmethod` sandbox) sehingga tidak dipakai lagi.
+  // Paylater — `DN` = Indodana Paylater (kode resmi).
   indodana: "DN",
-  akulaku: "AT",
-  kredivo: "KV",
+  // Catatan: Duitku TIDAK punya GoPay (`GP`), Seabank (`S1` = Sampoerna, bukan
+  // Seabank), Artajasa (`AG` = Artha Graha), Muamalat (`MY`), Akulaku
+  // (`AT` = ATOME), maupun Kredivo (`KV`). Semuanya diverifikasi live 2026-09-27:
+  // HTTP 404 "Payment channel not available", jadi sengaja tidak dipetakan.
 };
 
 /**
@@ -65,27 +62,23 @@ export const DUITKU_TO_CANONICAL: Record<string, string> = {
   BT: "permata_va",
   B1: "cimb_va",
   DM: "danamon_va",
-  BS: "bsi_va",
-  S1: "seabank_va",
-  MY: "muamalat_va",
-  AG: "artajasa_va",
+  BV: "bsi_va",
+  VA: "maybank_va",
+  NC: "bnc_va",
   SP: "qris",
   NQ: "nobu_qris",
-  GP: "gopay",
   SA: "shopeepay",
   OV: "ovo",
   DA: "dana",
   LA: "linkaja",
-  JA: "jenius",
-  AL: "alfamart",
+  JP: "jenius",
   IR: "indomaret",
   FT: "pos",
   VC: "credit_card",
   DN: "indodana",
-  AT: "akulaku",
-  KV: "kredivo",
-  // Kode lama yang tidak lagi dikembalikan `getpaymentmethod`, dipertahankan
-  // sebagai alias agar data historis tetap bisa dipetakan.
+  // Alias historis — kode lama yang pernah valid dan kini tidak dikembalikan
+  // `getpaymentmethod`; berguna untuk memetakan data/callback lama.
+  AL: "alfamart",
   ID: "indodana",
 };
 

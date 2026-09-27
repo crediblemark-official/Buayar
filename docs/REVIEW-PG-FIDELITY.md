@@ -54,6 +54,7 @@
 | I-4 | iPaymu | 🟠 High | Daftar `paymentChannel` e-wallet/paylater tidak sesuai sumber resmi: `kredivo` dikirim (bukan kanal iPaymu), `ovo`/`gopay`/`linkaja` absen | `core/canonical.ts` | ✅ Fixed |
 | DU-1 | Duitku | 🔴 High | POP Create Invoice memakai signature **di body** (skema SHA256 lama yang sudah *obsolete*); resmi: header `x-duitku-signature` = HMAC-SHA256, dan body tanpa field `signature` | `duitku/provider.ts`, `duitku/signature.ts` | ✅ Fixed |
 | DU-2 | Duitku | 🟠 High | `createInvoice` (Direct Inquiry) tidak mengirim field Request Transaction resmi: `customerVaName` (wajib) dan `customerDetail` (wajib-efektif untuk metode credit, termasuk objek `billingAddress`) → kanal `DN`/Indodana Paylater gagal HTTP 400 berbadan kosong. Peta kanal juga salah: `indodana`→`ID` dan `alfamart`→`AL`, keduanya sudah tidak valid (HTTP 404 "Payment channel not available") | `duitku/provider.ts`, `core/canonical.ts`, `scripts/probe/duitku/channels.ts` | ✅ Fixed + Verified (live) |
+| DU-3 | Duitku | 🟠 High | Sisa peta kanal basi: `gopay`→`GP`, `jenius`→`JA`, `bsi_va`→`BS`, `seabank_va`→`S1` (S1=Bank Sampoerna, bukan Seabank), `artajasa_va`→`AG` (AG=Artha Graha, bukan Artajasa), `muamalat_va`→`MY`, `akulaku`→`AT` (AT=ATOME), `kredivo`→`KV` — semuanya diverifikasi live HTTP 404. Verifikasi callback juga hanya menerima MD5 padahal dokumentasi resmi kini memakai HMAC-SHA256 | `core/canonical.ts`, `duitku/signature.ts`, `simulator/generator.ts` | ✅ Fixed + Verified (live) |
 | N-1 | Nicepay | 🟠 High | Registrasi/inquiry memakai path tidak sesuai skema direct v2 (`/nicepay/direct/v2/registration`, `/nicepay/direct/v2/inquiry`) | `nicepay/provider.ts` | ✅ Fixed |
 | N-2 | Nicepay | 🟡 Medium | Kode mitra Alfamart memakai `ALFA`; kode resmi grup Alfamart adalah `ALMA` | `core/canonical.ts` | ✅ Fixed |
 | F-1 | Faspay | 🟢 Low | Signature debit (`sha1(md5(user_id + password + bill_no))`) **sudah sesuai** dokumentasi resmi — tidak ada perubahan | `faspay/provider.ts` | ✅ Verified |
@@ -555,6 +556,40 @@ sebagai `expected` beserta alasan, agar tidak tampak seperti bug permintaan SDK.
 Hasil live akhir: **24/27 diterima · 3 expected · 0 gagal** (semua kanal lain tidak
 terpengaruh oleh field tambahan).
 
+### DU-3 — Peta kanal basi & signature callback dua-skema
+
+Referensi: [Duitku API — Payment Method](https://docs.duitku.com/api/en/) (tabel
+*Payment Method* & changelog "signature enhancement using HMAC").
+
+**Peta kanal.** Beberapa kode kanonikal masih menunjuk kode Duitku yang sudah tidak ada
+(atau menunjuk kanal yang salah). Diverifikasi live 2026-09-27:
+
+| Kanonikal | Kode lama | Kode benar | Catatan live |
+|---|---|---|---|
+| `gopay` | `GP` | — (tidak ada) | `GP` → 404; Duitku tidak punya GoPay |
+| `jenius` | `JA` | `JP` | `JA` → 404, `JP` → 200 |
+| `bsi_va` | `BS` | `BV` | `BS` → 404, `BV` → 200 |
+| `seabank_va` | `S1` | — (S1=Sampoerna) | `S1` → 200 tapi itu **Bank Sampoerna**, bukan Seabank |
+| `artajasa_va` | `AG` | — (AG=Artha Graha) | `AG` → 200 tapi itu **Bank Artha Graha** |
+| `muamalat_va` | `MY` | — (tidak ada) | `MY` → 404 |
+| `akulaku` | `AT` | — (AT=ATOME) | `AT` → 404; `AT` resmi untuk ATOME |
+| `kredivo` | `KV` | — (tidak ada) | `KV` → 404 |
+| `maybank_va` | (belum ada) | `VA` | `VA` → 200 |
+| `bnc_va` | (belum ada) | `NC` | `NC` → 200 |
+
+`CANONICAL_TO_DUITKU`/`DUITKU_TO_CANONICAL` diperbaiki; entri yang menunjuk kanal tak ada
+dihapus dan `maybank_va`/`bnc_va` ditambahkan. `DM` (Danamon) resmi tetapi belum aktif untuk
+akun ini (404) — dibiarkan dengan catatan.
+
+**Signature callback.** Dokumentasi kini memakai
+`HMAC_SHA256(merchantCode + amount + merchantOrderId, apiKey)`, sedangkan SDK hanya menerima
+`MD5(merchantCode + amount + merchantOrderId + apiKey)`. `verifyDuitkuCallbackSignature`
+kini menerima **kedua skema** (HMAC lebih dulu, lalu MD5 sebagai fallback transisi) dan
+menolak bila `signature`/`apiKey` kosong. Simulator webhook Duitku diubah menghasilkan
+HMAC-SHA256 (skema saat ini). Fail-closed tetap terjaga: kedua skema memerlukan `apiKey`,
+dan `resultCode` tetap tidak ikut ditandatangani sehingga `isPaid` tetap tidak pernah `true`
+dari callback.
+
 ### N-1 / N-2 — Nicepay direct v2 & kode mitra Alfamart
 
 Referensi: [Nicepay — Direct API](https://docs.nicepay.co.id/).
@@ -949,16 +984,16 @@ bun run scripts/probe/all.ts      # = bun run probe
 |---|---|---:|---:|---:|---:|---|
 | Midtrans | live | 16/19 | 0 | 3 | 16 | Kode sehat; 3 kanal belum aktif di akun |
 | iPaymu | live | 13/19 | 0 | 6 | 19 | 2 partner-side, 2 timeout, 1 butuh `weight`, 1 VA gagal |
-| Xendit | static | 0/16 | 0 | 16 | 16 | **Diblokir IP allowlist** (hambatan akun) |
+| Xendit | live | 11/11 | 0 | 0 | 11 | ✅ Sehat (blokir IP allowlist sudah diperbaiki) |
 | DOKU | mcp | 20/32 | 12 | 0 | 20 | Sehat; 12 kanal SNAP-only / belum dipetakan |
 | Duitku | live | 24/27 | 3 | 0 | 24 | 24 kanal sehat; 3 kanal hambatan provider (FT/DN/LQ) — **DU-2** |
 | Finpay | live | 19/20 | 1 | 0 | 0 | **Sehat + auto-cleanup** (Cancel Order) |
-| Xenith | live | 2/12 | 0 | 10 | 0 | **Diblokir IP allowlist** (hambatan akun); webhook 2/2 |
-| **TOTAL** | | **94/145** | **16** | **35** | **95** | |
+| Xenith | live | 2/12 | 0 | 10 | 0 | IP allowlist lagi: egress WARP berotasi ke `.215.133` |
+| **TOTAL** | | **105/140** | **16** | **19** | **90** | |
 
 Analisis (memisahkan bug SDK dari hambatan akun/config):
 
-- **26 dari 38 kegagalan murni hambatan akun (IP allowlist):** Xendit 16 + Xenith 10. Bukan bug — IP keluar runner belum didaftarkan.
+- **10 dari 19 kegagalan murni hambatan akun (IP allowlist):** Xenith 10 — egress WARP berotasi ke IP di luar yang didaftarkan (lihat pembaruan di bawah). Xendit kini lolos setelah di-whitelist.
 - **9 kegagalan bersifat konfigurasi akun / partner / probe:**
   - Midtrans `ovo`/`dana` (400 generik), `linkaja` (401) → kanal belum diaktifkan di akun.
   - iPaymu `shopeepay`/`akulaku` ("Failed from partner"), `danamon`/`indomaret` (timeout 20s), `cod` (probe tidak mengirim `weight`), `bri` ("Failed to generate VA").
@@ -966,11 +1001,11 @@ Analisis (memisahkan bug SDK dari hambatan akun/config):
   - `FT` — RETAIL (Pegadaian/ALFA/Pos): HTTP 500 "Failed to generate payment number Retail" untuk semua nominal dan kombinasi field → kanal tidak dapat digenerate untuk akun ini.
   - `DN` — INDODANA PAYLATER: sebelum perbaikan, HTTP 400 berbadan kosong karena SDK tidak mengirim `customerDetail`/`billingAddress`; setelah dikirim, permintaan lolos validasi dan Duitku membalas HTTP 500 "Failed to generate Indodana payment Url" → paylater belum ter-provision di akun.
   - `LQ` — LINKAJA QRIS: sudah dihapus Duitku (changelog Jan 2025 "Remove payment channel QRIS Link Aja"), tetapi masih tampil di `getpaymentmethod` sandbox; inquiry selalu 500 "Failed to generate QR String LinkAja".
-- **Sehat & terverifikasi live:** DOKU (20/32 aktif, 12 SNAP-only), Finpay (semua kanal + auto-cleanup + signature fail-closed), webhook Xenith 2/2.
+- **Sehat & terverifikasi live:** Xendit (11/11), DOKU (20/32 aktif, 12 SNAP-only), Finpay (semua kanal + auto-cleanup + signature fail-closed), webhook Xenith 2/2.
 
 Tindakan lanjutan:
 
-1. Tambahkan IP keluar runner ke **IP allowlist** Xendit dan Xenith, lalu jalankan ulang probe kedua provider.
+1. Perluas **IP allowlist** Xenith ke rentang WARP (`104.28.215.0/24`, `104.28.247.0/24`) — Xendit sudah selesai; Xenith masih berotasi keluar rentang yang didaftarkan.
 2. iPaymu COD: kirim rincian pengiriman (`PROBE_COD_SHIPPING=1`) agar bobot ikut terkirim.
 3. Duitku `FT`/`DN`/`LQ`: ~~cocokkan kode kanal dengan dokumentasi resmi~~ — **terjawab (DU-2)**: `FT`=RETAIL (Pegadaian/ALFA/Pos), `DN`=Indodana Paylater, `LQ`=LinkAja QRIS. Field `customerVaName`/`customerDetail`/`billingAddress`/`itemDetails` kini dikirim sesuai dokumentasi; ketiga kanal diklasifikasikan `expected` (hambatan provider).
 
@@ -985,14 +1020,19 @@ WARP** dan IP yang dilihat server **berbeda tergantung tujuan**:
 - **Xenith bukan Cloudflare** (`openapi.sandbox.xenithpay.com` → `13.114.248.245`, AWS
   Singapura) sehingga kemungkinan besar melihat `104.28.247.132`, bukan `104.28.215.130`.
 
-**Xenith ✅ kini 13/13 diterima live** setelah `104.28.247.132` (rentang `.130`–`.132` salah
-subnet; perlu entry `.247.132`) ditambahkan ke **Developer Settings → IP Whitelist**.
-Jadi dua entry IP yang diperlukan: `104.28.215.130`–`104.28.215.132` (destinasi di belakang
-Cloudflare, mis. Xendit) dan `104.28.247.132` (destinasi publik, mis. Xenith). Karena ini
-pool WARP, kalau egress berubah lagi kedua entry mungkin perlu disesuaikan.
+**Xenith ✅ sempat 13/13** setelah `104.28.247.132` ditambahkan ke **Developer Settings →
+IP Whitelist** (uji webhook yang tadinya tampak gagal hanya karena `XENITH_WEBHOOK_SECRET`
+belum diset di env). Namun di run gabungan berikutnya, egress non-Cloudflare **berotasi ke
+`104.28.215.133`** — tepat di luar rentang `.130`–`.132` yang didaftarkan — sehingga Xenith
+kembali tertolak 10. Ini membuktikan IP WARP adalah **pool yang berputar**, dan mendaftarkan
+IP satu per satu tidak cukup.
 
-Hasil akhir setelah whitelist: **Xendit 11/11** dan **Xenith 13/13** (termasuk webhook 2/2 —
-uji webhook sempat gagal hanya karena `XENITH_WEBHOOK_SECRET` belum diset di env).
+**Rekomendasi:** perluas IP Whitelist ke rentang yang menutup pool WARP yang teramati,
+mis. `104.28.215.0/24` + `104.28.247.0/24`, lalu jalankan ulang probe. Alternatifnya,
+periksa & sesuaikan IP tiap kali menjalankan probe:
+
+- destinasi publik (Xenith): `curl -s -4 https://checkip.amazonaws.com`
+- destinasi di belakang Cloudflare (Xendit): `curl -s -4 https://api.ipify.org`
 
 Catatan integrasi probe:
 
@@ -1055,15 +1095,13 @@ Catatan integrasi probe:
    — sesuai prioritas "Indonesia dulu".
 7. **Provider internasional:** Stripe, PayPal, Adyen, Checkout.com, Razorpay, Square, PayU,
    Braintree, 2Checkout, SumoPod — audit yang sama.
-8. **IP allowlist (Xendit & Xenith):** daftarkan IP keluar runner agar probe yang tertolak bisa diuji live. **Selesai ✅** — Xendit (`104.28.215.130`) kini 11/11 live; Xenith (`104.28.247.132`) kini 13/13 live. Catatan: runner keluar lewat **Cloudflare WARP** dan IP yang dilihat server berbeda per tujuan (Cloudflare-fronted vs publik).
+8. **IP allowlist (Xendit & Xenith):** daftarkan IP keluar runner agar probe yang tertolak bisa diuji live. **Xendit ✅** (`104.28.215.130`) kini 11/11 live. **Xenith ⏳** sempat 13/13 tetapi kembali tertolak karena egress berotasi ke `104.28.215.133` — perluas whitelist ke rentang WARP (`104.28.215.0/24`, `104.28.247.0/24`). Runner keluar lewat **Cloudflare WARP** dan IP yang dilihat server berbeda per tujuan (Cloudflare-fronted vs publik) serta berputar sepanjang waktu.
 9. ~~**Duitku `FT`/`DN`/`LQ`:** periksa 3 kanal yang gagal di probe terhadap dokumentasi resmi.~~ — **selesai (DU-2)**: kode kanal dipetakan (`FT`=RETAIL/Pegadaian-ALFA-Pos, `DN`=Indodana Paylater, `LQ`=LinkAja QRIS); SDK menyertakan `customerVaName` + `customerDetail` (termasuk `billingAddress` wajib-efektif untuk `DN`) + `itemDetails` sesuai Request Transaction resmi; ketiga kanal ditandai `expected` di probe karena hambatan provider (kanal dihapus / belum ter-provision).
-10. **Duitku — signature legacy MD5 (temuan sampingan DU-2):** dokumentasi resmi kini memakai
-    `HMAC_SHA256(merchantCode + merchantOrderId + paymentAmount, apiKey)` untuk Direct Inquiry dan
+10. ~~**Duitku — signature legacy MD5 (temuan sampingan DU-2):** dokumentasi resmi kini memakai
     `HMAC_SHA256(merchantCode + amount + merchantOrderId, apiKey)` untuk callback (changelog
-    Apr 2026: *"set obsolete md5 and sha256"*), sedangkan `src/providers/duitku/signature.ts`
-    masih memakai MD5 (`getDuitkuInquirySignatures`, `verifyDuitkuCallbackSignature`). Sandbox
-    saat ini masih menerima MD5 (probe lolos), tetapi callback asli dari Duitku kemungkinan
-    memakai HMAC-SHA256 sehingga `verifyDuitkuCallbackSignature` akan menolaknya (fail-closed,
-    jadi aman tetapi tidak fungsional). Perlu diuji dengan callback live sungguhan lalu
-    dipertimbangkan menerima **kedua** skema selama transisi — **belum dikerjakan** (di luar
-    lingkup DU-2).
+    Apr 2026: *"set obsolete md5 and sha256"*), sedangkan SDK hanya menerima MD5.~~ — **selesai
+    (DU-3):** `verifyDuitkuCallbackSignature` kini menerima HMAC-SHA256 (lebih dulu) **dan** MD5
+    lama (fallback transisi), menolak bila `signature`/`apiKey` kosong; simulator menghasilkan
+    HMAC-SHA256. Sisa: `getDuitkuInquirySignatures` (signature body Direct Inquiry) **masih MD5**
+    dan sandbox masih menerimanya — perlu dipantau/diuji dengan callback live sungguhan sebelum
+    memindahkan Direct Inquiry ke HMAC (lihat `src/providers/duitku/signature.ts`).

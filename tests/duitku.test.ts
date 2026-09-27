@@ -1,5 +1,7 @@
 import { describe, expect, it } from "bun:test";
+import { createHash, createHmac } from "node:crypto";
 import { Buayar } from "../src";
+import { verifyDuitkuCallbackSignature } from "../src/providers/duitku/signature";
 
 describe("Duitku Provider & Client Integration", () => {
   it("should parse Direct VA and QRIS responses in Duitku Direct Inquiry", async () => {
@@ -215,5 +217,29 @@ describe("Duitku Provider & Client Integration", () => {
     } finally {
       globalThis.fetch = originalFetch;
     }
+  });
+});
+
+describe("Duitku callback signature — HMAC-SHA256 (resmi) + legacy MD5", () => {
+  const apiKey = "duitku-key";
+  const base = { merchantCode: "D1234", amount: "50000", merchantOrderId: "ORDER-SIG-1" };
+  const stringToSign = base.merchantCode + base.amount + base.merchantOrderId;
+
+  it("menerima skema resmi HMAC-SHA256", () => {
+    const signature = createHmac("sha256", apiKey).update(stringToSign).digest("hex");
+    expect(verifyDuitkuCallbackSignature({ ...base, signature }, apiKey)).toBe(true);
+  });
+
+  it("tetap menerima skema lama MD5 selama transisi", () => {
+    const signature = createHash("md5").update(stringToSign + apiKey).digest("hex");
+    expect(verifyDuitkuCallbackSignature({ ...base, signature }, apiKey)).toBe(true);
+  });
+
+  it("menolak signature palsu, payload yang diubah, signature kosong, dan apiKey kosong", () => {
+    const signature = createHmac("sha256", apiKey).update(stringToSign).digest("hex");
+    expect(verifyDuitkuCallbackSignature({ ...base, signature: "deadbeef" }, apiKey)).toBe(false);
+    expect(verifyDuitkuCallbackSignature({ ...base, signature, amount: "99999" }, apiKey)).toBe(false);
+    expect(verifyDuitkuCallbackSignature({ ...base, signature: "" }, apiKey)).toBe(false);
+    expect(verifyDuitkuCallbackSignature({ ...base, signature }, "")).toBe(false);
   });
 });

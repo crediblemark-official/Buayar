@@ -1,13 +1,13 @@
 # Duitku — Implementasi Buayar
 
-> Status: ✅ **LIVE SANDBOX TESTED** (POP, Direct VA BCA, Direct QRIS, checkTransaction) · Audit fidelity: item **DU-1** & **DU-2** — lihat [`docs/REVIEW-PG-FIDELITY.md` §5](../../REVIEW-PG-FIDELITY.md).
+> Status: ✅ **LIVE SANDBOX TESTED** (POP, Direct VA BCA, Direct QRIS, checkTransaction) · Audit fidelity: item **DU-1**, **DU-2**, **DU-3** — lihat [`docs/REVIEW-PG-FIDELITY.md` §5](../../REVIEW-PG-FIDELITY.md).
 
 ## File
 
 | File | Isi |
 |---|---|
 | `src/providers/duitku/provider.ts` | POP Create Invoice, inquiry, callback |
-| `src/providers/duitku/signature.ts` | Signature POP: header `x-duitku-signature` = HMAC-SHA256(`email`+`timestamp`+`apiKey`, `merchantCode`) (DU-1) |
+| `src/providers/duitku/signature.ts` | Signature POP: header `x-duitku-signature` = HMAC-SHA256(`merchantCode`+`timestamp`, `apiKey`) (DU-1); verifikasi callback = HMAC-SHA256(`merchantCode`+`amount`+`merchantOrderId`, `apiKey`) dengan MD5 lama tetap diterima (DU-3) |
 
 ## Operasi
 
@@ -17,11 +17,14 @@
   `billingAddress` (wajib-efektif untuk metode credit seperti Indodana Paylater/`DN`), dan
   `itemDetails` bila `items` diberikan. Sebelumnya ketiganya tidak dikirim sehingga kanal
   `DN` gagal HTTP 400 berbadan kosong.
-- `verifyCallback` — **signature sah tidak berarti terbayar.** Signature callback Duitku hanya
-  mencakup `MD5(merchantCode + amount + merchantOrderId + apiKey)`, sedangkan `resultCode` —
-  satu-satunya penentu status — **tidak ikut ditandatangani**. Jadi `verifyCallback` tidak pernah
-  melaporkan `isPaid: true`: hasilnya `isValid: true` dengan `status: "pending"` dan
-  `paymentUnconfirmed: true`. Alasannya ada di `unconfirmedReason`.
+- `verifyCallback` — menerima **dua skema signature**: HMAC-SHA256 resmi saat ini
+  (`hmacSha256(merchantCode + amount + merchantOrderId, apiKey)`) **dan** MD5 lama
+  (`md5(merchantCode + amount + merchantOrderId + apiKey)`) selama masa transisi, sehingga
+  callback yang belum dimigrasi maupun sandbox lama tidak ikut tertolak (DU-3). Terlepas dari
+  itu, **signature sah tidak berarti terbayar**: `resultCode` — satu-satunya penentu status —
+  **tidak ikut ditandatangani**. Jadi `verifyCallback` tidak pernah melaporkan `isPaid: true`:
+  hasilnya `isValid: true` dengan `status: "pending"` dan `paymentUnconfirmed: true`.
+  Alasannya ada di `unconfirmedReason`.
 - `checkTransaction` — satu-satunya cara sah naik dari `pending` ke `paid` (server-to-server).
   Kegagalan saat mengecek **tidak pernah** menjadi `isFailed: true`; "tidak ditemukan" ditandai
   terpisah lewat `orderNotFound: true`.
@@ -51,6 +54,7 @@ latensi webhook dan tidak bergantung pada Duitku sedang hidup atau tidak.
 | Kanal `FT` (RETAIL / Pegadaian-ALFA-Pos) | Hambatan provider: Duitku membalas HTTP 500 "Failed to generate payment number Retail" untuk semua nominal/field. Tidak dapat digenerate untuk akun (sandbox) ini; probe menandainya `expected`. |
 | Kanal `DN` (Indodana Paylater) | Field wajib sudah dikirim dan validasi lolos, tetapi Duitku membalas HTTP 500 "Failed to generate Indodana payment Url" — paylater belum ter-provision di akun. Diverifikasi live 2026-09-27. |
 | Kanal `LQ` (LinkAja QRIS) | Sudah dihapus Duitku (changelog Jan 2025 "Remove payment channel QRIS Link Aja"). Sandbox masih mencantumkannya di `getpaymentmethod`, tetapi inquiry selalu HTTP 500 "Failed to generate QR String LinkAja". Gunakan `LA` (LinkAja App, percentage fee) atau `LF` (fixed fee) sebagai gantinya. |
+| Kode kanal basi (DU-3) | Kode `GP` (GoPay), `JA` (Jenius), `BS` (BSI), `MY` (Muamalat), `AT` (Akulaku), `KV` (Kredivo), `AL` (Alfamart), `ID` (Indodana), `S1`=Seabank, `AG`=Artajasa tidak valid — diverifikasi live HTTP 404 "Payment channel not available". Yang benar: BSI=`BV`, Jenius=`JP`, Alfamart=`FT`, Indodana=`DN`, Maybank=`VA`, BNC=`NC`, S1=Bank Sampoerna, AG=Bank Artha Graha. Duitku tidak menyediakan GoPay/Akulaku/Kredivo/Seabank/Muamalat/Artajasa. |
 
 ## Kredensial (`.env`)
 
@@ -75,3 +79,5 @@ DUITKU_EMAIL=...      # dipakai komponen signature header
   Memverifikasi matriks kanal **dan** integritas callback terhadap sandbox Duitku sungguhan.
   Hasil terakhir (2026-09-27): **24/27 diterima · 3 expected · 0 gagal**. Kanal `FT`/`DN`/`LQ`
   ditandai `expected` karena hambatan sisi provider (lihat tabel di atas), bukan bug SDK.
+- Peta kanal dan verifikasi dua-skema signature dijaga oleh `tests/canonical.test.ts` dan
+  `tests/duitku.test.ts` (blok "Duitku callback signature").

@@ -110,9 +110,14 @@ export function generateSimulatedWebhook(
     case "duitku": {
       const merchantCode = secrets.merchantCode || DEFAULT_SIMULATOR_SECRETS.duitku.merchantCode;
       const apiKey = secrets.apiKey || DEFAULT_SIMULATOR_SECRETS.duitku.apiKey;
+      // Skema resmi terkini: HMAC_SHA256(merchantCode + amount + orderId, apiKey).
+      // Simulator mengikuti skema yang sekarang dipakai Duitku.
       const signature = params.tampered
         ? "invalid_duitku_signature"
-        : md5Hex(`${merchantCode}${params.amount}${params.orderId}${apiKey}`);
+        : crypto
+            .createHmac("sha256", apiKey)
+            .update(`${merchantCode}${params.amount}${params.orderId}`)
+            .digest("hex");
 
       body = {
         merchantCode,

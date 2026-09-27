@@ -13,11 +13,18 @@ describe("Canonical Payment Methods Mapping", () => {
     expect(toDuitkuPaymentMethod("bni_va")).toBe("I1");
     expect(toDuitkuPaymentMethod("bri_va")).toBe("BR");
     expect(toDuitkuPaymentMethod("qris")).toBe("SP");
-    expect(toDuitkuPaymentMethod("gopay")).toBe("GP");
     expect(toDuitkuPaymentMethod("shopeepay")).toBe("SA");
     expect(toDuitkuPaymentMethod("ovo")).toBe("OV");
     expect(toDuitkuPaymentMethod("dana")).toBe("DA");
     expect(toDuitkuPaymentMethod("linkaja")).toBe("LA");
+    // Kode resmi yang dikoreksi (diverifikasi live 2026-09-27): Jenius=`JP`,
+    // BSI=`BV`, Maybank=`VA`, BNC=`NC`. Duitku tidak punya GoPay(`GP`),
+    // Artajasa(`AG`=Artha Graha), Seabank(`S1`=Sampoerna), Kredivo(`KV`),
+    // maupun Akulaku(`AT`=ATOME) — semuanya 404.
+    expect(toDuitkuPaymentMethod("jenius")).toBe("JP");
+    expect(toDuitkuPaymentMethod("bsi_va")).toBe("BV");
+    expect(toDuitkuPaymentMethod("maybank_va")).toBe("VA");
+    expect(toDuitkuPaymentMethod("bnc_va")).toBe("NC");
     // `FT` = RETAIL (Pegadaian/ALFA/Pos) menurut tabel resmi Duitku; kode lama
     // `AL` sudah tidak valid (diverifikasi live: HTTP 404 "Payment channel not available").
     expect(toDuitkuPaymentMethod("alfamart")).toBe("FT");
@@ -39,6 +46,10 @@ describe("Canonical Payment Methods Mapping", () => {
     expect(toCanonicalPaymentMethod("duitku", "SP")).toBe("qris");
     expect(toCanonicalPaymentMethod("duitku", "DA")).toBe("dana");
     expect(toCanonicalPaymentMethod("duitku", "DN")).toBe("indodana");
+    expect(toCanonicalPaymentMethod("duitku", "BV")).toBe("bsi_va");
+    expect(toCanonicalPaymentMethod("duitku", "JP")).toBe("jenius");
+    expect(toCanonicalPaymentMethod("duitku", "NC")).toBe("bnc_va");
+    expect(toCanonicalPaymentMethod("duitku", "VA")).toBe("maybank_va");
   });
 
   it("should map canonical codes to iPaymu direct channels", () => {

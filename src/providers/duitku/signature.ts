@@ -25,14 +25,36 @@ export function getDuitkuPopSignature(merchantCode: string, apiKey: string) {
   return { timestamp, signature };
 }
 
+/**
+ * Verifikasi signature callback Duitku.
+ *
+ * Skema resmi terkini (changelog Apr 2026 — "signature enhancement using HMAC
+ * and set obsolete md5 and sha256"):
+ *
+ *   stringToSign = merchantCode + amount + merchantOrderId
+ *   signature    = HMAC_SHA256(stringToSign, apiKey)   // hex, lowercase
+ *
+ * Skema lama MD5(merchantCode + amount + merchantOrderId + apiKey) **masih
+ * diterima** selama masa transisi agar callback yang belum dimigrasi (dan
+ * sandbox lama) tidak tertolak. Menerima dua skema tidak melemahkan fail-closed:
+ * keduanya tetap membutuhkan `apiKey` sebagai rahasia, dan `apiKey` yang kosong
+ * ditolak lebih dulu.
+ */
 export function verifyDuitkuCallbackSignature(body: any, apiKey: string): boolean {
   const merchantCode = body.merchantCode || "";
   const amount = body.amount || "";
   const merchantOrderId = body.merchantOrderId || "";
   const signature = body.signature || "";
 
-  const computedSignature = md5(merchantCode + amount + merchantOrderId + apiKey);
-  return safeCompare(signature, computedSignature);
+  if (!signature || !apiKey) return false;
+
+  const stringToSign = merchantCode + amount + merchantOrderId;
+
+  const hmacSignature = hmacSha256(stringToSign, apiKey);
+  if (safeCompare(signature, hmacSignature)) return true;
+
+  const legacySignature = md5(stringToSign + apiKey);
+  return safeCompare(signature, legacySignature);
 }
 
 export function getDuitkuPaymentMethodsSignature(merchantCode: string, amount: number, datetime: string, apiKey: string): string {
