@@ -167,4 +167,53 @@ describe("Duitku Provider & Client Integration", () => {
       globalThis.fetch = originalFetch;
     }
   });
+
+  it("should send the documented customerVaName/customerDetail (and itemDetails) on Direct Inquiry", async () => {
+    // Regresi convention: Request Transaction Duitku menandai `customerVaName`
+    // sebagai WAJIB, dan metode credit (mis. Indodana Paylater/DN) menolak
+    // permintaan dengan HTTP 400 tanpa `customerDetail`.
+    let captured: any = null;
+    const originalFetch = globalThis.fetch;
+    (globalThis as any).fetch = async (_url: any, options: any) => {
+      captured = JSON.parse(options.body);
+      return {
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify({ reference: "REF", paymentUrl: "https://x/y", statusCode: "00", statusMessage: "SUCCESS" }),
+      } as any;
+    };
+
+    try {
+      const buayar = new Buayar({
+        provider: "duitku",
+        merchantCode: "D1234",
+        apiKey: "duitku-key",
+        sandbox: true,
+      });
+
+      await buayar.createInvoice({
+        orderId: "ORDER-DK-CUST-001",
+        amount: 50000,
+        paymentMethod: "indodana", // Canonical Paylater → kode Duitku DN
+        productDetails: "Sepatu",
+        customer: { name: "Budi Santoso", email: "budi@mail.com", phone: "081234567890" },
+        items: [{ name: "Sepatu", price: 50000, quantity: 1 }],
+      });
+
+      expect(captured.paymentMethod).toBe("DN");
+      expect(captured.customerVaName).toBe("Budi Santoso");
+      expect(captured.customerDetail).toEqual({
+        firstName: "Budi Santoso",
+        lastName: "",
+        email: "budi@mail.com",
+        phoneNumber: "081234567890",
+        // Wajib secara efektif untuk metode credit (Indodana/DN).
+        billingAddress: { firstName: "Budi Santoso", lastName: "", phone: "081234567890" },
+      });
+      expect(captured.itemDetails).toEqual([{ name: "Sepatu", price: 50000, quantity: 1 }]);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
 });

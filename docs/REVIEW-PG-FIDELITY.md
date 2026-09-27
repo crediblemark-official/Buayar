@@ -53,10 +53,14 @@
 | I-3 | iPaymu | 🟡 Medium | Direct Payment tidak mengirim `successUrl`/`cancelUrl` untuk channel redirect (CC & Paylater) | `ipaymu/provider.ts` | ✅ Info |
 | I-4 | iPaymu | 🟠 High | Daftar `paymentChannel` e-wallet/paylater tidak sesuai sumber resmi: `kredivo` dikirim (bukan kanal iPaymu), `ovo`/`gopay`/`linkaja` absen | `core/canonical.ts` | ✅ Fixed |
 | DU-1 | Duitku | 🔴 High | POP Create Invoice memakai signature **di body** (skema SHA256 lama yang sudah *obsolete*); resmi: header `x-duitku-signature` = HMAC-SHA256, dan body tanpa field `signature` | `duitku/provider.ts`, `duitku/signature.ts` | ✅ Fixed |
+| DU-2 | Duitku | 🟠 High | `createInvoice` (Direct Inquiry) tidak mengirim field Request Transaction resmi: `customerVaName` (wajib) dan `customerDetail` (wajib-efektif untuk metode credit, termasuk objek `billingAddress`) → kanal `DN`/Indodana Paylater gagal HTTP 400 berbadan kosong. Peta kanal juga salah: `indodana`→`ID` dan `alfamart`→`AL`, keduanya sudah tidak valid (HTTP 404 "Payment channel not available") | `duitku/provider.ts`, `core/canonical.ts`, `scripts/probe/duitku/channels.ts` | ✅ Fixed + Verified (live) |
 | N-1 | Nicepay | 🟠 High | Registrasi/inquiry memakai path tidak sesuai skema direct v2 (`/nicepay/direct/v2/registration`, `/nicepay/direct/v2/inquiry`) | `nicepay/provider.ts` | ✅ Fixed |
 | N-2 | Nicepay | 🟡 Medium | Kode mitra Alfamart memakai `ALFA`; kode resmi grup Alfamart adalah `ALMA` | `core/canonical.ts` | ✅ Fixed |
 | F-1 | Faspay | 🟢 Low | Signature debit (`sha1(md5(user_id + password + bill_no))`) **sudah sesuai** dokumentasi resmi — tidak ada perubahan | `faspay/provider.ts` | ✅ Verified |
-| FP-1 | Finpay & Prismalink | ⚪ Blocked | Dokumentasi resmi tidak ditemukan lewat pencarian → payload/signature belum dapat divalidasi; **tidak ada perubahan kode** (butuh dokumen/akun merchant) | `finpay/*`, `prismalink/*` | ⏸ Blocked |
+| FP-1 | Finpay | 🔴 High | Implementasi memakai endpoint/auth/payload/signature yang **tidak sesuai** docs resmi (base `sandbox.finpay.co.id`, `merchant_id` di body, signature `merchantId%orderId%amount%key`, callback field datar) | `finpay/provider.ts`, `finpay/signature.ts`, `clients/finpay.ts`, `core/canonical.ts` | ✅ Fixed + Verified (live sandbox) |
+| FP-3 | Finpay | 🟠 High | Aturan kanal yang hanya terlihat live: `mobilePhone` wajib E.164, DANA/LinkAja wajib `order.item` (+ DANA butuh `item.category`), OVO wajib `sourceOfFunds.accountId` format lokal, status awal `REQUEST_INITIATED` = pending | `finpay/provider.ts` | ✅ Fixed (verified live) |
+| FP-4 | Finpay | 🟡 Medium | Cancel Order / Void belum diimplementasikan → probe tidak bisa membersihkan transaksinya sendiri | `finpay/provider.ts`, `finpay/*`, `clients/finpay.ts` | ✅ Implemented + Verified (live cancel; void reachable & fail-closed) |
+| FP-2 | Prismalink | ⚪ Blocked | Gateway tidak stabil & registrasi sandbox/staging tidak dapat diakses; dokumentasi resmi juga tidak ditemukan → payload/signature belum dapat divalidasi; tidak ada perubahan kode | `prismalink/*` | ⏸ Blocked (vendor) |
 | M-5 | Midtrans (BI-SNAP) | 🔴 High | Core API standar Bank Indonesia memakai domain, kredensial, endpoint, dan alur autentikasi **berbeda total** dari legacy (`api.midtrans.com/v2`); belum ada dukungan sama sekali | `midtrans/snap.ts` (baru) | ✅ Implemented |
 | M-6 | Midtrans (BI-SNAP) | 🟠 High | Status transaksi SNAP bersifat **numerik** (00/01/03/04/05/06/08/09), bukan `transaction_status` tekstual | `midtrans/snap.ts` | ✅ Implemented |
 | M-7 | Midtrans (BI-SNAP) | 🔴 High | Tanda tangan: access token = `SHA256withRSA(clientId \| timestamp)`, transaksi = `HMAC_SHA512(HTTPMethod:Path:Token:sha256(body):Timestamp)` | `midtrans/snap.ts`, `utils/snap.ts` (baru) | ✅ Implemented |
@@ -523,6 +527,34 @@ Kode lama mengirim `signature` (MD5/sha256 atas body) di dalam body POP → requ
 Ditambahkan `getDuitkuPopSignature()` dan header di atas; field `signature` dihapus dari
 body POP. Jalur legacy `webapi/.../v2/inquiry` (signature MD5 pada body) **tetap** dipertahankan.
 
+### DU-2 — Field Request Transaction yang hilang & peta kanal FT/DN/LQ
+
+Referensi: [Duitku API — Request Transaction](https://docs.duitku.com/api/en/)
+(tabel *Payment Method* & *HTTP Code*).
+
+Probe live 2026-09-27 menemukan 3 kanal gagal: `FT`, `DN`, `LQ`. Hasil penyelidikan terhadap
+dokumentasi resmi & sandbox:
+
+| Kode | Nama resmi | Penyebab | Tindakan |
+|---|---|---|---|
+| `FT` | RETAIL (Pegadaian/ALFA/Pos) | HTTP 500 "Failed to generate payment number Retail" untuk semua nominal & kombinasi field → hambatan provider, tidak dapat digenerate untuk akun ini | diklasifikasikan `expected` di probe |
+| `DN` | INDODANA PAYLATER | SDK tidak mengirim `customerDetail` (dan `billingAddress`-nya) sehingga Duitku membalas HTTP 400 berbadan kosong; setelah dikirim, validasi lolos → HTTP 500 "Failed to generate Indodana payment Url" (paylater belum ter-provision) | field dikirim; sisa kegagalan provider-side → `expected` |
+| `LQ` | LINKAJA QRIS | Sudah dihapus Duitku (changelog Jan 2025 "Remove payment channel QRIS Link Aja") tetapi sandbox masih mencantumkannya di `getpaymentmethod`; inquiry selalu HTTP 500 "Failed to generate QR String LinkAja" | diklasifikasikan `expected` di probe |
+
+Yang diperbaiki di SDK:
+
+1. `createInvoice` Direct Inquiry kini mengirim `customerVaName` (dipotong 20 karakter sesuai
+tabel parameter Duitku), `customerDetail` (beserta `billingAddress` — wajib-efektif untuk
+`DN`, walaupun dokumentasi menandai alamat opsional), dan `itemDetails` bila merchant
+menyediakan `params.items` (agar jumlahnya konsisten dengan `paymentAmount`).
+2. Peta kanonikal diperbaiki: `indodana` → `DN` (sebelumnya `ID`) dan `alfamart` → `FT`
+(sebelumnya `AL`). Diverifikasi live: `ID`/`AL` → HTTP 404 "Payment channel not available".
+3. `scripts/probe/duitku/channels.ts` menandai kanal hambatan provider (`FT`/`DN`/`LQ`)
+sebagai `expected` beserta alasan, agar tidak tampak seperti bug permintaan SDK.
+
+Hasil live akhir: **24/27 diterima · 3 expected · 0 gagal** (semua kanal lain tidak
+terpengaruh oleh field tambahan).
+
 ### N-1 / N-2 — Nicepay direct v2 & kode mitra Alfamart
 
 Referensi: [Nicepay — Direct API](https://docs.nicepay.co.id/).
@@ -542,12 +574,75 @@ Referensi: [Faspay — POST Data Transaction](https://docs.faspay.co.id/merchant
 Signature debit `sha1(md5(user_id + password + bill_no))` yang dipakai kode **sudah cocok**
 dengan dokumentasi resmi.
 
-### FP-1 — Finpay & Prismalink (blocked)
+### FP-1 — Finpay (fixed) — dokumentasi resmi ditemukan
 
-Pencarian dokumentasi resmi Finpay dan Prismalink tidak menemukan sumber otoritatif
-(spesifikasi payload, signature, dan daftar kanal belum dapat dipastikan). Sesuai prinsip
-"jangan menebak payload", **tidak ada perubahan kode**. Diperlukan dokumen integrasi atau
-akun merchant dari kedua vendor untuk melanjutkan audit.
+Referensi: [docs.finpay.id](https://docs.finpay.id/api-reference/finpay-pg/) —
+[Authorization & Headers](https://docs.finpay.id/api-reference/finpay-pg/authorization-and-headers.md),
+[Hosted Payment](https://docs.finpay.id/api-reference/finpay-pg/hosted-payment.md),
+[Initiate VA](https://docs.finpay.id/api-reference/finpay-pg/core-api/virtual-account/close-payment/initiate-virtual-account.md),
+[Status Check](https://docs.finpay.id/api-reference/finpay-pg/after-payment/status-check-payment-gateway.md),
+[Notification Callback](https://docs.finpay.id/api-reference/finpay-pg/after-payment/notification-callback.md),
+[Source Of Funds List](https://docs.finpay.id/api-reference/appendix/enumeration/source-of-funds-list.md).
+
+Temuan: kode lama memakai kontrak yang **sama sekali berbeda** dari API resmi.
+
+| Aspek | Kode lama (salah) | Dokumentasi resmi | Perbaikan |
+|---|---|---|---|
+| Base URL | `https://sandbox.finpay.co.id` / `https://api.finpay.id` | `https://devo.finnet.co.id` / `https://live.finnet.co.id` | ✅ |
+| Auth | `merchant_id` + `signature` di body | `Authorization: Basic base64(merchantId:merchantKey)` | ✅ |
+| Create | `POST /pg/payment/direct` (flat) | `POST /pg/payment/card/initiate` (nested `{order,customer,url,sourceOfFunds}`) | ✅ |
+| Sukses | `status`/`response_code` bervariasi | `responseCode === "2000000"` | ✅ |
+| Status | `POST /pg/payment/status` | `GET /pg/payment/card/check/{orderId}` | ✅ |
+| Callback | field datar `order_id`/`payment_status` | bersarang `order.id`, `result.payment.status` | ✅ |
+| Signature | `HMAC-SHA512("merchantId%orderId%amount%merchantKey")` | `HMAC-SHA512(json_encode(body tanpa signature), Merchant Key)` | ✅ |
+| Kanal | kode buatan (`BCA`, `QRIS`, …) | SOF ID resmi (`vabca`, `qris`, `idm`, `cc`, …) | ✅ |
+
+Caller diperbarui: `FinpayClient`, `simulator/generator.ts` (callback bersarang bertanda tangan),
+`providerRegistry` (deteksi payload `order.id` + `result.payment.status`), dan test.
+Regresi baru: `tests/finpay.test.ts` + blok **FP-1** di `tests/pg-fidelity.test.ts`.
+
+**Verifikasi live (akun sandbox merchant)** — `scripts/probe/finpay/channels.ts`: **19/20 lolos · 1 diharapkan · 0 gagal**.
+Probe membersihkan dirinya sendiri lewat **Cancel Order** (`GET /pg/payment/card/cancel/{orderId}`,
+FP-4): **8/13 transaksi dibatalkan**; QRIS & e-wallet menolak cancel pada status awal
+(`4040100 Invalid Transaction Status`) sehingga ditandai *expected* dan kedaluwarsa sendiri.
+
+**Void live (`PROBE_VOID=<orderId>`):** endpoint `GET /pg/payment/card/void/{orderId}` terbukti
+**reachable & terautentikasi**; pada order belum dibayar ia menjawab `4030015 Transaction Not Permitted`
+yang dipetakan ke `success:false` (fail-closed) tanpa mengubah status. Jalur sukses Void butuh order
+yang benar-benar sudah dibayar — sandbox Finpay tidak menyediakan simulator pembayaran (simulator
+legacy `sandbox.finpay.co.id/simdev` hanya untuk platform bill-hosting lama).
+
+| Kanal | SOF | Hasil live |
+|---|---|---|
+| bca_va / bni_va / bri_va / mandiri_va / permata_va | vabca / vabni / vabri / vamandiri / vapermata | ✅ VA terbit |
+| qris | qris | ✅ string QR terbit |
+| alfamart | alfamart | ✅ paymentCode terbit |
+| ovo / dana / shopeepay / linkaja | ovo / dana / shopeepay / linkaja | ✅ setelah fix `accountId`/`order.item` |
+| credit_card | cc | ✅ redirect URL |
+| hosted (tanpa method) | — | ✅ redirect URL |
+| indomaret | idm | ⏭️ `Feature Not Allowed` (kanal belum aktif di akun) |
+
+Temuan live tambahan (**FP-3**): `customer.mobilePhone` wajib berformat E.164 (fix:
+`normalizeFinpayPhone`), DANA & LinkAja wajib `order.item` (DANA juga wajib
+`item.category`), OVO wajib `sourceOfFunds.accountId` format lokal `0…`, dan status awal
+status-check `REQUEST_INITIATED` berarti `pending`. Semua sudah diperbaiki + diuji.
+
+Sisa opsional: aktifkan kanal Indomaret, dan implementasikan Cancel/Void agar probe bisa
+membersihkan transaksinya sendiri.
+
+### FP-2 — Prismalink (blocked oleh pihak vendor)
+
+Terblokir bukan karena kurang riset, melainkan karena **kondisi vendor**:
+
+1. **Gateway Prismalink (VALINK) saat ini kurang stabil** sehingga tidak dapat diandalkan untuk pengujian.
+2. **Registrasi untuk mengakses sandbox/staging tidak dapat dilakukan** — tidak ada jalur untuk memperoleh akun uji.
+3. **Dokumentasi API resmi tidak ditemukan** lewat pencarian, sehingga spesifikasi payload, signature, dan daftar kanal belum dapat dipastikan.
+
+Sesuai prinsip "jangan menebak payload", **tidak ada perubahan kode** pada kode warisan.
+Satu-satunya jaminan saat ini adalah webhook **fail-closed** (`tests/webhook-security.test.ts`).
+
+Pembuka blokir: akses sandbox/staging yang stabil, dokumentasi API resmi, atau akun merchant
++ dukungan teknis Prismalink.
 
 ### I-4 / I-5 / I-6 — Konfirmasi `paymentChannel` e-wallet/paylater iPaymu
 
@@ -639,7 +734,7 @@ Tanpa `extra.snap`/kredensial SNAP, seluruh jalur legacy berjalan persis seperti
 
 ---
 
-## 7. Verifikasi Live — daftar channel yang tersedia (Midtrans, DOKU, iPaymu, Xendit)
+## 7. Verifikasi Live — daftar channel & laporan gabungan probe
 
 Skrip: `scripts/probe/check.ts`
 
@@ -840,6 +935,69 @@ Hasil *endpoint existence probe* untuk **seluruh 17 bank VA** di daftar MCP:
   **D-16** (VA 7 bank via MCP `create_virtual_account_payment`).
 - DOKU tidak menyediakan pembatalan seragam untuk transaksi non-SNAP → transaksi sandbox tertinggal.
 
+### Laporan gabungan — semua probe live (2026-09-27)
+
+Perintah (kredensial sandbox dari `sandbox.md`):
+
+```bash
+bun run scripts/probe/all.ts      # = bun run probe
+```
+
+7 provider berjalan (sisanya tanpa kredensial, mis. Prismalink yang terblokir vendor):
+
+| Provider | Sumber | Diterima | Diharapkan | Gagal | Efek samping | Penilaian |
+|---|---|---:|---:|---:|---:|---|
+| Midtrans | live | 16/19 | 0 | 3 | 16 | Kode sehat; 3 kanal belum aktif di akun |
+| iPaymu | live | 13/19 | 0 | 6 | 19 | 2 partner-side, 2 timeout, 1 butuh `weight`, 1 VA gagal |
+| Xendit | static | 0/16 | 0 | 16 | 16 | **Diblokir IP allowlist** (hambatan akun) |
+| DOKU | mcp | 20/32 | 12 | 0 | 20 | Sehat; 12 kanal SNAP-only / belum dipetakan |
+| Duitku | live | 24/27 | 3 | 0 | 24 | 24 kanal sehat; 3 kanal hambatan provider (FT/DN/LQ) — **DU-2** |
+| Finpay | live | 19/20 | 1 | 0 | 0 | **Sehat + auto-cleanup** (Cancel Order) |
+| Xenith | live | 2/12 | 0 | 10 | 0 | **Diblokir IP allowlist** (hambatan akun); webhook 2/2 |
+| **TOTAL** | | **94/145** | **16** | **35** | **95** | |
+
+Analisis (memisahkan bug SDK dari hambatan akun/config):
+
+- **26 dari 38 kegagalan murni hambatan akun (IP allowlist):** Xendit 16 + Xenith 10. Bukan bug — IP keluar runner belum didaftarkan.
+- **9 kegagalan bersifat konfigurasi akun / partner / probe:**
+  - Midtrans `ovo`/`dana` (400 generik), `linkaja` (401) → kanal belum diaktifkan di akun.
+  - iPaymu `shopeepay`/`akulaku` ("Failed from partner"), `danamon`/`indomaret` (timeout 20s), `cod` (probe tidak mengirim `weight`), `bri` ("Failed to generate VA").
+- **3 kanal Duitku adalah hambatan provider, bukan bug SDK (DU-2):**
+  - `FT` — RETAIL (Pegadaian/ALFA/Pos): HTTP 500 "Failed to generate payment number Retail" untuk semua nominal dan kombinasi field → kanal tidak dapat digenerate untuk akun ini.
+  - `DN` — INDODANA PAYLATER: sebelum perbaikan, HTTP 400 berbadan kosong karena SDK tidak mengirim `customerDetail`/`billingAddress`; setelah dikirim, permintaan lolos validasi dan Duitku membalas HTTP 500 "Failed to generate Indodana payment Url" → paylater belum ter-provision di akun.
+  - `LQ` — LINKAJA QRIS: sudah dihapus Duitku (changelog Jan 2025 "Remove payment channel QRIS Link Aja"), tetapi masih tampil di `getpaymentmethod` sandbox; inquiry selalu 500 "Failed to generate QR String LinkAja".
+- **Sehat & terverifikasi live:** DOKU (20/32 aktif, 12 SNAP-only), Finpay (semua kanal + auto-cleanup + signature fail-closed), webhook Xenith 2/2.
+
+Tindakan lanjutan:
+
+1. Tambahkan IP keluar runner ke **IP allowlist** Xendit dan Xenith, lalu jalankan ulang probe kedua provider.
+2. iPaymu COD: kirim rincian pengiriman (`PROBE_COD_SHIPPING=1`) agar bobot ikut terkirim.
+3. Duitku `FT`/`DN`/`LQ`: ~~cocokkan kode kanal dengan dokumentasi resmi~~ — **terjawab (DU-2)**: `FT`=RETAIL (Pegadaian/ALFA/Pos), `DN`=Indodana Paylater, `LQ`=LinkAja QRIS. Field `customerVaName`/`customerDetail`/`billingAddress`/`itemDetails` kini dikirim sesuai dokumentasi; ketiga kanal diklasifikasikan `expected` (hambatan provider).
+
+**Pembaruan whitelist IP (2026-09-27):** setelah IP keluar runner `104.28.215.130`
+didaftarkan, **Xendit ✅ kini 11/11 diterima live**. Ternyata runner keluar lewat **Cloudflare
+WARP** dan IP yang dilihat server **berbeda tergantung tujuan**:
+
+- Destination **di belakang Cloudflare** (mis. `api.xendit.co` → `104.19.159.99`) melihat
+  `104.28.215.130` → inilah yang membuat Xendit lolos setelah di-whitelist.
+- Destination **publik biasa** (mis. `checkip.amazonaws.com`, `ident.me`, `ifconfig.me`)
+  melihat `104.28.247.132`.
+- **Xenith bukan Cloudflare** (`openapi.sandbox.xenithpay.com` → `13.114.248.245`, AWS
+  Singapura) sehingga kemungkinan besar melihat `104.28.247.132`, bukan `104.28.215.130`.
+
+**Xenith ✅ kini 13/13 diterima live** setelah `104.28.247.132` (rentang `.130`–`.132` salah
+subnet; perlu entry `.247.132`) ditambahkan ke **Developer Settings → IP Whitelist**.
+Jadi dua entry IP yang diperlukan: `104.28.215.130`–`104.28.215.132` (destinasi di belakang
+Cloudflare, mis. Xendit) dan `104.28.247.132` (destinasi publik, mis. Xenith). Karena ini
+pool WARP, kalau egress berubah lagi kedua entry mungkin perlu disesuaikan.
+
+Hasil akhir setelah whitelist: **Xendit 11/11** dan **Xenith 13/13** (termasuk webhook 2/2 —
+uji webhook sempat gagal hanya karena `XENITH_WEBHOOK_SECRET` belum diset di env).
+
+Catatan integrasi probe:
+
+- `scripts/probe/xenith/channels.ts` dirapikan agar memancarkan **ringkasan JSON** (sebelumnya muncul sebagai "dilewati" di CLI terpadu) dan **kredensial sandbox tidak lagi tertanam di file** — sekarang wajib dari environment (`XENITH_ACCESS_KEY`/`XENITH_SECRET_KEY`).
+
 ---
 
 ## 8. Definition of Done gelombang ini
@@ -865,7 +1023,8 @@ Hasil *endpoint existence probe* untuk **seluruh 17 bank VA** di daftar MCP:
 - [x] CLI terpadu `bun run probe` — menjalankan semua probe provider dengan ringkasan JSON (`scripts/probe/all.ts`, `scripts/probe/lib.ts`)
 - [x] Test regresi MCP DOKU: peta kode MCP (D-14), jalur live & fallback statis (D-15), endpoint VA baru (D-13)
 - [x] `bun test` hijau + `tsc --noEmit` bersih
-- [ ] Finpay & Prismalink (FP-1) — terblokir hingga dokumen/akun merchant tersedia
+- [x] Finpay (FP-1/FP-3/FP-4) — dokumentasi resmi (`docs.finpay.id`) + **verifikasi live sandbox** (`scripts/probe/finpay/channels.ts`, 19/20 lolos · 1 diharapkan, auto-cleanup via Cancel Order); endpoint/auth/payload/signature/status/kanal + aturan telepon/item/accountId + Cancel/Void diselaraskan + regresi baru
+- [ ] Prismalink (FP-2) — ⏸ **terblokir oleh vendor**: gateway tidak stabil & registrasi sandbox/staging tidak dapat diakses; butuh akses/dokumen dari Prismalink
 
 ## 9. Gelombang berikutnya (belum dikerjakan)
 
@@ -874,6 +1033,8 @@ Hasil *endpoint existence probe* untuk **seluruh 17 bank VA** di daftar MCP:
    terstruktur pada v3 (setelah strategi `reference_id` alfanumerik diputuskan).
    _Probe per channel sudah dilakukan (X-5…X-8); `gopay`/`shopeepay`/`credit_card`/`kredivo`
    tidak dikembalikan `GET /payment_channels` untuk akun sandbox ini sehingga belum diuji live._
+   **Blocker 2026-09-27:** seluruh 16 probe Xendit ditolak **IP allowlist** (IP keluar runner belum
+   didaftarkan) — tambahkan IP ke dashboard Xendit lalu jalankan ulang (§7 laporan gabungan).
 2. **DOKU:** tombol `snapQueryType` otomatis berdasarkan metadata transaksi. ~~Temukan penamaan
    kanal non-SNAP untuk BTN, BJB, BPD Bali, Sinarmas, OCBC, BNC, BSS~~ — **terjawab (D-16): tidak
    ada endpoint REST non-SNAP; VA diterbitkan lewat DOKU MCP `create_virtual_account_payment`,
@@ -883,7 +1044,7 @@ Hasil *endpoint existence probe* untuk **seluruh 17 bank VA** di daftar MCP:
    lewat kanal bank asli, atau pantau penambahan kanal simulator DOKU.
 3. **iPaymu:** ~jalankan ulang probe setelah kanal partner (`shopeepay`, `akulaku`, `danamon`, `bri`)
    diaktifkan; konfirmasi penamaan kanal QRIS (`mpm`) — **sudah terjawab live** (I-6).
-4. **Finpay & Prismalink:** dapatkan dokumen resmi/akun merchant, lalu audit payload & signature (FP-1).
+4. **Finpay (FP-1):** ✅ selesai terhadap dokumentasi resmi — sisa opsional: uji live sandbox dengan akun merchant (`FINPAY_MERCHANT_ID`, `FINPAY_MERCHANT_KEY`). **Prismalink (FP-2):** ⏸ terblokir oleh vendor — gateway tidak stabil & registrasi sandbox/staging tidak dapat diakses; audit menunggu akses/dokumen dari Prismalink.
 5. **Midtrans BI-SNAP:** verifikasi sandbox untuk `additionalInfo.bank` per bank, field status VA,
    dan flow Direct Debit (GoPay tokenization / GoPay deeplink) yang belum diadopsi.
 5b. **Daftar channel:** Midtrans & DOKU sudah diprobe per channel (§7); DOKU MCP
@@ -894,3 +1055,15 @@ Hasil *endpoint existence probe* untuk **seluruh 17 bank VA** di daftar MCP:
    — sesuai prioritas "Indonesia dulu".
 7. **Provider internasional:** Stripe, PayPal, Adyen, Checkout.com, Razorpay, Square, PayU,
    Braintree, 2Checkout, SumoPod — audit yang sama.
+8. **IP allowlist (Xendit & Xenith):** daftarkan IP keluar runner agar probe yang tertolak bisa diuji live. **Selesai ✅** — Xendit (`104.28.215.130`) kini 11/11 live; Xenith (`104.28.247.132`) kini 13/13 live. Catatan: runner keluar lewat **Cloudflare WARP** dan IP yang dilihat server berbeda per tujuan (Cloudflare-fronted vs publik).
+9. ~~**Duitku `FT`/`DN`/`LQ`:** periksa 3 kanal yang gagal di probe terhadap dokumentasi resmi.~~ — **selesai (DU-2)**: kode kanal dipetakan (`FT`=RETAIL/Pegadaian-ALFA-Pos, `DN`=Indodana Paylater, `LQ`=LinkAja QRIS); SDK menyertakan `customerVaName` + `customerDetail` (termasuk `billingAddress` wajib-efektif untuk `DN`) + `itemDetails` sesuai Request Transaction resmi; ketiga kanal ditandai `expected` di probe karena hambatan provider (kanal dihapus / belum ter-provision).
+10. **Duitku — signature legacy MD5 (temuan sampingan DU-2):** dokumentasi resmi kini memakai
+    `HMAC_SHA256(merchantCode + merchantOrderId + paymentAmount, apiKey)` untuk Direct Inquiry dan
+    `HMAC_SHA256(merchantCode + amount + merchantOrderId, apiKey)` untuk callback (changelog
+    Apr 2026: *"set obsolete md5 and sha256"*), sedangkan `src/providers/duitku/signature.ts`
+    masih memakai MD5 (`getDuitkuInquirySignatures`, `verifyDuitkuCallbackSignature`). Sandbox
+    saat ini masih menerima MD5 (probe lolos), tetapi callback asli dari Duitku kemungkinan
+    memakai HMAC-SHA256 sehingga `verifyDuitkuCallbackSignature` akan menolaknya (fail-closed,
+    jadi aman tetapi tidak fungsional). Perlu diuji dengan callback live sungguhan lalu
+    dipertimbangkan menerima **kedua** skema selama transisi — **belum dikerjakan** (di luar
+    lingkup DU-2).

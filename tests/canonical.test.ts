@@ -18,8 +18,12 @@ describe("Canonical Payment Methods Mapping", () => {
     expect(toDuitkuPaymentMethod("ovo")).toBe("OV");
     expect(toDuitkuPaymentMethod("dana")).toBe("DA");
     expect(toDuitkuPaymentMethod("linkaja")).toBe("LA");
-    expect(toDuitkuPaymentMethod("alfamart")).toBe("AL");
+    // `FT` = RETAIL (Pegadaian/ALFA/Pos) menurut tabel resmi Duitku; kode lama
+    // `AL` sudah tidak valid (diverifikasi live: HTTP 404 "Payment channel not available").
+    expect(toDuitkuPaymentMethod("alfamart")).toBe("FT");
+    expect(toDuitkuPaymentMethod("pos")).toBe("FT");
     expect(toDuitkuPaymentMethod("indomaret")).toBe("IR");
+    expect(toDuitkuPaymentMethod("indodana")).toBe("DN");
     expect(toDuitkuPaymentMethod("credit_card")).toBe("VC");
   });
 
@@ -34,6 +38,7 @@ describe("Canonical Payment Methods Mapping", () => {
     expect(toCanonicalPaymentMethod("duitku", "M2")).toBe("mandiri_va");
     expect(toCanonicalPaymentMethod("duitku", "SP")).toBe("qris");
     expect(toCanonicalPaymentMethod("duitku", "DA")).toBe("dana");
+    expect(toCanonicalPaymentMethod("duitku", "DN")).toBe("indodana");
   });
 
   it("should map canonical codes to iPaymu direct channels", () => {

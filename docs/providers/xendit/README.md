@@ -11,7 +11,7 @@
 
 ## Operasi
 
-- `createInvoice` — v3 `POST /v3/payment_requests` dengan header `api-version: 2020-02-01` (X-2); VA `_VIRTUAL_ACCOUNT` + `display_name` (X-5), OTC `REUSABLE_PAYMENT_CODE` + `payer_name` (X-6), OVO mobile (X-7). `reference_id` alfanumerik; `failure_return_url` dikirim (X-2).
+- `createInvoice` — v3 `POST /v3/payment_requests` dengan header `api-version: 2024-11-11`; VA `_VIRTUAL_ACCOUNT` + `display_name` (X-5), OTC `REUSABLE_PAYMENT_CODE` + `payer_name` (X-6), OVO mobile (X-7). `reference_id` alfanumerik; `failure_return_url` dikirim (X-2).
 - `checkTransaction` — v3 `GET /v3/payment_requests/{id}` & jalur `/sessions`; parser mendukung respons v3 & v2.
 - `verifyCallback` — bandingkan header `x-callback-token` dengan `XENDIT_WEBHOOK_VERIFICATION_TOKEN`; fail-closed.
 

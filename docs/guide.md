@@ -1,6 +1,6 @@
 # 💳 Panduan Unified `@crediblemark/buayar`
 
-Panduan ini adalah **satu-satunya** panduan yang Anda butuhkan untuk mengintegrasikan **semua** payment gateway yang didukung Buayar (20 provider: 11 Indonesia + 9 Internasional). Anda **tidak perlu** membaca dokumentasi masing-masing PG — kode yang Anda tulis **identik** untuk semua provider.
+Panduan ini adalah **satu-satunya** panduan yang Anda butuhkan untuk mengintegrasikan **semua** payment gateway yang didukung Buayar (21 provider: 12 Indonesia + 9 Internasional). Anda **tidak perlu** membaca dokumentasi masing-masing PG — kode yang Anda tulis **identik** untuk semua provider.
 
 > 🎯 **Prinsip "mata tertutup":** Anda 100% tidak tahu (dan tidak perlu tahu) provider mana yang sedang aktif. Yang Anda tahu hanya: "Buaya mendukung PG A, PG B, PG C". Cukup ubah kredensial di `.env`, semuanya jalan.
 
@@ -73,7 +73,7 @@ import { buayar } from "@crediblemark/buayar";
 // Konfigurasi ter-baca otomatis dari process.env. Selesai.
 ```
 
-> **🪄 Autodetect:** Jika `BUAYAR_PROVIDER` dikosongkan, Buayar menebak provider aktif dari kredensial yang terisi di `.env` (mis. `STRIPE_SECRET_KEY` → Stripe, `DUITKU_API_KEY` → Duitku). Anda bahkan bisa **tidak menyebut nama provider sama sekali**.
+> **🪄 Autodetect:** Jika `BUAYAR_PROVIDER` dikosongkan, Buayar hanya menebak provider dari env spesifik yang memuat identitas gateway (mis. `STRIPE_SECRET_KEY` → Stripe, `DUITKU_API_KEY` → Duitku). Jika hanya memakai `BUAYAR_*` universal, `BUAYAR_PROVIDER` **wajib** diisi karena nama env tersebut sama untuk semua provider.
 
 ### 2. Inisialisasi Manual (programatik)
 
@@ -450,7 +450,7 @@ Rangkuman kemampuan ekstra tiap provider:
 | DOKU | - | `getDokuClient()` | checkTransaction |
 | PrismaLink | - | `getPrismalinkClient()` | checkTransaction |
 | Faspay | - | `getFaspayClient()` | cancelTransaction, checkTransaction |
-| Finpay | - | `getFinpayClient()` | checkTransaction |
+| Finpay | Tested live | `getFinpayClient()` | checkTransaction, cancelOrder, voidTransaction |
 | Nicepay | - | `getNicepayClient()` | cancelTransaction, checkTransaction |
 | OY! Bisnis | - | `getOyClient()` | checkTransaction, balance, remit (transfer dana) |
 | Stripe | - | `getStripeClient()` | balance, createRefund, retrieveCheckoutSession, retrievePaymentIntent |

@@ -148,3 +148,71 @@ export class DuitkuDisbursementError extends Error {
 export function isDuitkuDisbursementSuccess(body: any): boolean {
   return String(body?.responseCode ?? "").trim() === DUITKU_DISBURSEMENT_SUCCESS_CODE;
 }
+
+import type { DisburseParams, DisburseResult, CheckBalanceResult, ProviderConfig } from "../../types";
+import { DuitkuClient } from "../../clients/duitku";
+
+export async function executeDuitkuDisburse(
+  params: DisburseParams,
+  config: ProviderConfig,
+  client?: DuitkuClient
+): Promise<DisburseResult> {
+  try {
+    const c = client || new DuitkuClient(config);
+    const hasil = await c.disburse({
+      bankCode: params.bankCode,
+      bankAccount: params.accountNumber,
+      amount: params.amount,
+      purpose: params.description || "Disbursement",
+      disburseId: params.providerParams?.disburseId,
+      accountHolderName: params.providerParams?.accountHolderName,
+      custRefNumber: params.providerParams?.custRefNumber,
+    });
+
+    return {
+      success: hasil.success,
+      supported: true,
+      provider: "duitku",
+      reference: hasil.disburseId || params.externalId,
+      status: hasil.success ? "PENDING" : "FAILED",
+      error: hasil.error,
+      rawResponse: hasil.rawResponse,
+    };
+  } catch (e: any) {
+    return {
+      success: false,
+      supported: true,
+      provider: "duitku",
+      reference: params.externalId,
+      status: "FAILED",
+      error: e.message || "Disbursement failed",
+      rawResponse: null,
+    };
+  }
+}
+
+export async function executeDuitkuCheckBalance(
+  config: ProviderConfig,
+  client?: DuitkuClient
+): Promise<CheckBalanceResult> {
+  try {
+    const c = client || new DuitkuClient(config);
+    const result = await c.checkBalance();
+    return {
+      success: result.success,
+      supported: true,
+      provider: "duitku",
+      balance: result.balance,
+      rawResponse: result.rawResponse,
+      error: result.error,
+    };
+  } catch (e: any) {
+    return {
+      success: false,
+      supported: true,
+      provider: "duitku",
+      rawResponse: null,
+      error: e.message || "Balance check failed",
+    };
+  }
+}

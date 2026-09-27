@@ -59,7 +59,7 @@ const LOOKS_PAID: Record<string, any> = {
   doku: { result: "success", order_id: "FORGED-14", status: "success" },
   prismalink: { status: "success", merchant_id: "m1", order_id: "FORGED-15" },
   faspay: { bill_no: "FORGED-16", payment_status_code: "2" },
-  finpay: { order_id: "FORGED-17", payment_status: "PAID" },
+  finpay: { order: { id: "FORGED-17", amount: 1000 }, result: { payment: { status: "PAID" } } },
   nicepay: { resultCd: "0000", orderId: "FORGED-18", status: "PAID" },
   adyen: { eventCode: "AUTHORISATION", success: "true", merchantReference: "FORGED-19" },
   twocheckout: { ORDERSTATUS: "COMPLETE", ORDERID: "FORGED-20" },

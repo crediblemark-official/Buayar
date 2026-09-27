@@ -27,8 +27,20 @@ describe("Autodetect & Dynamic Provider Registry", () => {
       expect(providerRegistry.detectFromEnv({ DUITKU_API_KEY: "k", DUITKU_MERCHANT_CODE: "M" })).toBe("duitku");
     });
 
+    it("menolak autodetect dari credential provider yang parsial", () => {
+      expect(providerRegistry.detectFromEnv({ DUITKU_API_KEY: "k" })).toBeUndefined();
+    });
+
     it("mendeteksi stripe dari STRIPE_SECRET_KEY", () => {
       expect(providerRegistry.detectFromEnv({ STRIPE_SECRET_KEY: "sk_test_x" })).toBe("stripe");
+    });
+
+    it("tidak menebak provider dari kredensial BUAYAR_* yang universal", () => {
+      // Nama env universal sama untuk semua provider, jadi tidak deterministik.
+      expect(providerRegistry.detectFromEnv({
+        BUAYAR_API_KEY: "secret",
+        BUAYAR_MERCHANT_CODE: "merchant",
+      })).toBeUndefined();
     });
 
     it("mengembalikan undefined bila ambigu (2 provider sama-sama 1 kredensial)", () => {

@@ -36,13 +36,20 @@ export const CANONICAL_TO_DUITKU: Record<string, string> = {
   linkaja: "LA",
   jenius: "JA",
   // Retail
-  alfamart: "AL",
+  // Tabel Payment Method resmi Duitku hanya punya `FT` (Pegadaian/ALFA/Pos) dan
+  // `IR` (Indomaret). Kode lama `AL` sudah tidak valid — diverifikasi live:
+  // AL -> HTTP 404 "Payment channel not available". Jadi Alfamart dikirim
+  // sebagai `FT`, sama seperti `pos`.
+  alfamart: "FT",
   indomaret: "IR",
   pos: "FT",
   // Card
   credit_card: "VC",
   // Paylater
-  indodana: "ID",
+  // Duitku memakai `DN` untuk Indodana Paylater (tabel Payment Method resmi).
+  // `ID` bukan kode Indodana (itu kode lama yang tidak ada di daftar kanal
+  // `getpaymentmethod` sandbox) sehingga tidak dipakai lagi.
+  indodana: "DN",
   akulaku: "AT",
   kredivo: "KV",
 };
@@ -74,9 +81,12 @@ export const DUITKU_TO_CANONICAL: Record<string, string> = {
   IR: "indomaret",
   FT: "pos",
   VC: "credit_card",
-  ID: "indodana",
+  DN: "indodana",
   AT: "akulaku",
   KV: "kredivo",
+  // Kode lama yang tidak lagi dikembalikan `getpaymentmethod`, dipertahankan
+  // sebagai alias agar data historis tetap bisa dipetakan.
+  ID: "indodana",
 };
 
 /**
@@ -297,29 +307,40 @@ export const CANONICAL_TO_FASPAY: Record<string, string> = {
 };
 
 /**
- * Mapping dari Canonical Payment Method ke kode channel Finpay
+ * Mapping dari Canonical Payment Method ke `sourceOfFunds.type` Finpay.
+ *
+ * Sumber otoritatif — docs resmi Finpay, "Source Of Funds List":
+ *   https://docs.finpay.id/api-reference/appendix/enumeration/source-of-funds-list.md
+ * Nilai di bawah persis sama dengan SOF ID resmi (huruf kecil semua).
  */
 export const CANONICAL_TO_FINPAY: Record<string, string> = {
-  bca_va: "BCA",
-  mandiri_va: "MANDIRI",
-  bni_va: "BNI",
-  bri_va: "BRI",
-  permata_va: "PERMATA",
-  cimb_va: "CIMB",
-  danamon_va: "DANAMON",
-  bsi_va: "BSI",
-  qris: "QRIS",
-  gopay_qris: "QRIS",
-  shopeepay_qris: "QRIS",
-  gopay: "GOPAY",
-  ovo: "OVO",
-  dana: "DANA",
-  shopeepay: "SHOPEEPAY",
-  linkaja: "LINKAJA",
-  alfamart: "ALFAMART",
-  indomaret: "INDOMARET",
-  pos: "POS",
-  credit_card: "CC",
+  bca_va: "vabca",
+  mandiri_va: "vamandiri",
+  bni_va: "vabni",
+  bri_va: "vabri",
+  permata_va: "vapermata",
+  cimb_va: "vacimb",
+  danamon_va: "vadanamon",
+  bsi_va: "vabsi",
+  btn_va: "vabtn",
+  bjb_va: "vabjb",
+  bnc_va: "vabnc",
+  mega_va: "vamega",
+  muamalat_va: "vamuamalat",
+  maybank_va: "vamaybank",
+  seabank_va: "vaseabank",
+  qris: "qris",
+  gopay_qris: "qris",
+  shopeepay_qris: "qris",
+  ovo: "ovo",
+  dana: "dana",
+  shopeepay: "shopeepay",
+  linkaja: "linkaja",
+  jenius: "jeniuspay",
+  alfamart: "alfamart",
+  indomaret: "idm",
+  pos: "pospay",
+  credit_card: "cc",
 };
 
 /**

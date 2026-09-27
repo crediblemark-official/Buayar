@@ -6,7 +6,7 @@
 [![Tests](https://github.com/crediblemark-official/Buayar/actions/workflows/tests.yml/badge.svg?style=flat-square)](https://github.com/crediblemark-official/Buayar/actions/workflows/tests.yml)
 [![Typecheck](https://github.com/crediblemark-official/Buayar/actions/workflows/typecheck.yml/badge.svg?style=flat-square)](https://github.com/crediblemark-official/Buayar/actions/workflows/typecheck.yml)
 [![audit](https://img.shields.io/badge/PG%20audit-D1%E2%80%A6D17%20%7C%20M1%E2%80%A6M15%20%7C%20X1%E2%80%A6X8%20%7C%20I1%E2%80%A6I9-verified-blueviolet?style=flat-square)](docs/REVIEW-PG-FIDELITY.md)
-[![docs](https://img.shields.io/badge/docs-per%20provider%20%C3%9720-8A2BE2?style=flat-square)](docs/providers/README.md)
+[![docs](https://img.shields.io/badge/docs-per%20provider%20%C3%9721-8A2BE2?style=flat-square)](docs/providers/README.md)
 
 > 🇮🇩 [Baca dalam Bahasa Indonesia](#-bahasa-indonesia) · 🇬🇧 [Read in English](#-english)
 
@@ -14,7 +14,7 @@
 
 | Dokumen | Isi |
 |---|---|
-| **[docs/providers/](docs/providers/README.md)** | **Implementasi per provider (×20)** — peta file, operasi, kredensial, endpoint, status verifikasi live |
+| **[docs/providers/](docs/providers/README.md)** | **Implementasi per provider (×21)** — peta file, operasi, kredensial, endpoint, status verifikasi live |
 | [docs/REVIEW-PG-FIDELITY.md](docs/REVIEW-PG-FIDELITY.md) | Audit fidelity vs dokumentasi resmi PG (D-1…D-17, M-1…M-15, X-1…X-8, I-1…I-9, DU/N/F/FP) |
 | [docs/AUDIT-BUG-DAN-PREMATURE.md](docs/AUDIT-BUG-DAN-PREMATURE.md) | Ringkasan bug "premature" & status perbaikan per provider |
 | [docs/guide.md](docs/guide.md) · [docs/sumopod.md](docs/sumopod.md) | Panduan pemakaian SDK · panduan lengkap SumoPod |
@@ -23,7 +23,7 @@
 
 ## 🇬🇧 English
 
-**`@crediblemark/buayar`** is a **Unified Payment Gateway SDK** for Node.js and TypeScript, supporting **20 payment providers** (11 Indonesian + 9 International) through a single, consistent API.
+**`@crediblemark/buayar`** is a **Unified Payment Gateway SDK** for Node.js and TypeScript, supporting **21 payment providers** (12 Indonesian + 9 International) through a single, consistent API.
 
 > 💡 **Zero-Code PG Switcher:** Switch your active payment provider — e.g. from Midtrans to Stripe — **without changing a single line in your controller or service layer**. Just update the credentials in your `.env` file.
 
@@ -60,8 +60,8 @@
 | [Nicepay](docs/providers/nicepay/README.md) | ⏳ **Untested Live** *(Simulator Only)* | ✅ | ✅ | SHA-256 | `NicepayClient` |
 | [Faspay](docs/providers/faspay/README.md) | ⏳ **Untested Live** *(Simulator Only)* | ✅ | ✅ | SHA1(MD5) | `FaspayClient` |
 | [OY! Bisnis](docs/providers/oy/README.md) | ⏳ **Untested Live** *(Simulator Only)* | ✅ | ✅ | Header Auth | `OyClient` |
-| [PrismaLink](docs/providers/prismalink/README.md) | ⏸️ **Untested** *(Docs Blocked)* | ✅ | ✅ | SHA-256 | `PrismalinkClient` |
-| [Finpay](docs/providers/finpay/README.md) | ⏸️ **Untested** *(Docs Blocked)* | ✅ | ✅ | HMAC-SHA512 | `FinpayClient` |
+| [PrismaLink](docs/providers/prismalink/README.md) | ⏸️ **Untested** *(Gateway Unstable / Sandbox Inaccessible)* | ✅ | ✅ | SHA-256 | `PrismalinkClient` |
+| [Finpay](docs/providers/finpay/README.md) | ✅ **Tested Live (Sandbox)** | ✅ | ✅ | HMAC-SHA512 | `FinpayClient` |
 
 #### 🌍 International (9)
 
@@ -226,7 +226,7 @@ BUAYAR_WEBHOOK_SECRET=whsec_...
 
 ## 🇮🇩 Bahasa Indonesia
 
-**`@crediblemark/buayar`** adalah **Unified Payment Gateway SDK** untuk Node.js dan TypeScript yang mendukung **20 payment provider** (11 Indonesia + 9 Internasional) melalui satu arsitektur API yang seragam.
+**`@crediblemark/buayar`** adalah **Unified Payment Gateway SDK** untuk Node.js dan TypeScript yang mendukung **21 payment provider** (12 Indonesia + 9 Internasional) melalui satu arsitektur API yang seragam.
 
 > 💡 **Zero-Code PG Switcher:** Berganti provider payment gateway (misal dari Midtrans ke Duitku atau sebaliknya) **tanpa perlu merombak kode controller/service aplikasi**. Cukup ubah kredensial di file `.env`!
 
@@ -234,7 +234,7 @@ BUAYAR_WEBHOOK_SECRET=whsec_...
 
 - 🔄 **Zero-Code PG Switcher** — Ganti provider hanya via `.env`, tanpa refactoring kode.
 - 🧪 **Zero-Approval Contract Simulator** — Koding dan uji transaksi secara production-grade sebelum menunggu 3–6 minggu persetujuan akun PG. Cukup aktifkan `BUAYAR_SIMULATE=1` atau `buayar.simulator`.
-- 🛡️ **Fail-Closed Webhook Verifier (20/20)** — Satu endpoint untuk verifikasi dan normalisasi callback dari seluruh 20 provider dengan fail-closed ketat dan dukungan streaming raw bytes.
+- 🛡️ **Fail-Closed Webhook Verifier (21/21)** — Satu endpoint untuk verifikasi dan normalisasi callback dari seluruh 21 provider dengan fail-closed ketat dan dukungan streaming raw bytes.
 - 🔒 **Compiler-Enforced Portability** — Canonical payment method terjamin type-safe; kode method provider yang tidak portable langsung dicegah oleh `tsc`.
 - ⚡ **Pre-flight Capability Check** — Validasi kapabilitas pembayaran sebelum request dikirim ke PG, mencegah kegagalan runtime.
 - ⚡ **Dukungan Spektrum Integrasi Penuh**:
@@ -257,9 +257,9 @@ BUAYAR_WEBHOOK_SECRET=whsec_...
 * **[iPaymu](docs/providers/ipaymu/README.md)** `[Live & Contract Tested]` — Redirect & Direct Payment API v2. Verifikasi HMAC-SHA256. `IpaymuClient` (Cek Saldo, Cek Transaksi, Histori, Bank List, Dynamic Methods, COD).
 * **[Xendit](docs/providers/xendit/README.md)** `[Contract Tested]` — Invoice v2 & Payment Requests v3. Webhook Token. `XenditClient` (Saldo, Expire Invoice, Disbursement).
 * **[DOKU Jokul](docs/providers/doku/README.md)** `[Contract Tested]` — Checkout v1 & Direct API v2. HMAC-SHA256 + Digest. `DokuClient`. Daftar channel **live** via DOKU MCP Server (`get_merchant_payment_methods`, sandbox 32 channel), fallback katalog statis.
-* **[PrismaLink](docs/providers/prismalink/README.md)** `[Contract Tested]` — Checkout Page & Direct API. SHA-256. `PrismalinkClient`.
+* **[PrismaLink](docs/providers/prismalink/README.md)** `[Contract Tested]` — Checkout Page & Direct API. SHA-256. `PrismalinkClient`. ⏸️ **Terblokir (FP-2):** gateway tidak stabil & registrasi sandbox/staging tidak dapat diakses.
 * **[Faspay](docs/providers/faspay/README.md)** `[Contract Tested]` — Post Data Transaction (Redirect & Direct). SHA1(MD5()). `FaspayClient`.
-* **[Finpay](docs/providers/finpay/README.md)** `[Contract Tested]` — Payment Initiate & Direct API. HMAC-SHA512. `FinpayClient`.
+* **[Finpay](docs/providers/finpay/README.md)** `[Live & Contract Tested]` — Hosted Payment & Core API (`/pg/payment/card/initiate`), Basic auth, status check `GET /pg/payment/card/check/{orderId}`. Signature callback HMAC-SHA512. `FinpayClient`. Selaras [docs.finpay.id](https://docs.finpay.id); probe live per kanal: `bun run probe finpay`.
 * **[Nicepay](docs/providers/nicepay/README.md)** `[Contract Tested]` — Order Regist & One-Step API. SHA-256 merchantToken. `NicepayClient`.
 * **[OY! Bisnis](docs/providers/oy/README.md)** `[Contract Tested]` — Payment Checkout v2 & Direct VA/QRIS. Header Auth. `OyClient` (Inquiry, Saldo, Disbursement).
 * **[SumoPod](docs/providers/sumopod/README.md)** `[Live & Contract Tested]` — Payment Link API v1 & QRIS. Verifikasi Svix HMAC-SHA256 / X-Webhook-Token. `SumopodClient`. *Lihat [panduan lengkap SumoPod](docs/sumopod.md)*.
@@ -280,7 +280,7 @@ BUAYAR_WEBHOOK_SECRET=whsec_...
 
 #### Universal (Direkomendasikan)
 ```env
-# (opsional) Provider aktif (20 pilihan). Bila kosong, AUTO-DIDETEKSI
+# Provider aktif (21 pilihan). Wajib diisi bila memakai kredensial universal BUAYAR_*.
 # dari kredensial yang terisi. Set var ini sama untuk semua provider.
 BUAYAR_PROVIDER=midtrans
 
@@ -408,7 +408,7 @@ BUAYAR_WEBHOOK_SECRET=whsec_...
 
 ### 🧪 Zero-Approval Sandbox & Contract Simulator
 
-Anda tidak perlu menunggu 3–6 minggu sampai merchant account PG disetujui hanya untuk menguji alur integrasi pembayaran. `@crediblemark/buayar` menyertakan simulator kontrak bawaan yang realistis untuk ke-20 provider.
+Anda tidak perlu menunggu 3–6 minggu sampai merchant account PG disetujui hanya untuk menguji alur integrasi pembayaran. `@crediblemark/buayar` menyertakan simulator kontrak bawaan yang realistis untuk ke-21 provider.
 
 #### 1. Aktifkan Mode Simulasi
 Cukup tambahkan di environment variable atau instance config:

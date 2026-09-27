@@ -40,7 +40,7 @@ const ONLY = (process.env.PROBE_ONLY || "")
 if (!MERCHANT_CODE || !API_KEY) {
   console.error("❌ DUITKU_MERCHANT_CODE (atau PAYMENT_MERCHANT_CODE) dan DUITKU_API_KEY wajib diset.");
   console.error(
-    "   Contoh: DUITKU_MERCHANT_CODE=DS35829 DUITKU_API_KEY=... bun run scripts/probe/duitku/channels.ts",
+    "   Contoh: DUITKU_MERCHANT_CODE=<merchant-code> DUITKU_API_KEY=<api-key> bun run scripts/probe/duitku/channels.ts",
   );
   process.exit(1);
 }
@@ -92,6 +92,29 @@ function ringkasInvoice(res: any): string {
   if (res.reference) bits.push(`ref=${res.reference}`);
   return bits.join(" | ") || "—";
 }
+
+/**
+ * Kanal yang gagal bukan karena bug pustaka, melainkan karena keterbatasan
+ * sisi Duitku. Diverifikasi live 2026-09-27 terhadap sandbox:
+ *
+ *   • FT — RETAIL (Pegadaian/ALFA/Pos): Duitku membalas HTTP 500
+ *     `Failed to generate payment number Retail` untuk semua nominal dan
+ *     kombinasi `customerVaName`/`customerDetail`/`itemDetails`.
+ *   • DN — INDODANA PAYLATER: awalnya HTTP 400 berbadan kosong karena
+ *     `customerDetail` belum dikirim. Setelah `customerDetail` dikirim (wajib
+ *     menurut docs untuk metode credit), validasi lolos dan Duitku membalas
+ *     HTTP 500 `Failed to generate Indodana payment Url` — akun belum
+ *     ter-provision untuk paylater ini.
+ *   • LQ — LINKAJA QRIS: sudah dihapus Duitku (changelog Jan 2025
+ *     "Remove payment channel QRIS Link Aja"), tetapi sandbox masih
+ *     mencantumkannya di `getpaymentmethod` → HTTP 500
+ *     `Failed to generate QR String LinkAja`.
+ */
+const PROVIDER_SIDE_UNAVAILABLE: Record<string, string> = {
+  FT: "Kanal RETAIL (Pegadaian/ALFA/Pos) tidak dapat digenerate Duitku untuk akun ini (provider-side).",
+  DN: "Indodana Paylater belum ter-provision di akun ini; permintaan sudah lolos validasi (provider-side).",
+  LQ: "QRIS LinkAja sudah dihapus Duitku (changelog Jan 2025) tetapi masih tampil di getpaymentmethod (provider-side).",
+};
 
 async function main() {
   console.log("=".repeat(96));
@@ -149,9 +172,18 @@ async function main() {
       console.log(`✅ ${kode.padEnd(10)} ${ringkasInvoice(res)}`);
     } else {
       // Kanal yang tidak diaktifkan di akun ini memang gagal; itu informasi,
-      // bukan bug pustaka.
-      results.push({ method: kode, ok: false, error: String(res.error ?? "").slice(0, 140) });
-      console.log(`❌ ${kode.padEnd(10)} ${String(res.error ?? "").slice(0, 110)}`);
+      // bukan bug pustaka. Kanal yang sudah dihapus Duitku (LQ) atau belum
+      // ter-provision (FT/DN) ditandai `expected` dengan alasan eksplisit,
+      // supaya kegagalan sisi provider tidak tersamar sebagai bug permintaan.
+      const error = String(res.error ?? "").slice(0, 140);
+      const providerSide = PROVIDER_SIDE_UNAVAILABLE[kode];
+      results.push({
+        method: kode,
+        ok: false,
+        error,
+        ...(providerSide ? { expected: true, hint: providerSide } : {}),
+      });
+      console.log(`${providerSide ? "⏸️ " : "❌"} ${kode.padEnd(10)} ${error.slice(0, 110)}`);
     }
   }
 

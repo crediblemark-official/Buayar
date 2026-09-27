@@ -226,20 +226,35 @@ export function generateSimulatedWebhook(
     }
 
     case "finpay": {
-      const merchantId = secrets.merchantCode || DEFAULT_SIMULATOR_SECRETS.finpay.merchantCode;
       const merchantKey = secrets.apiKey || DEFAULT_SIMULATOR_SECRETS.finpay.apiKey;
+      // Callback resmi Finpay berbentuk bersarang dan ditandatangani atas
+      // seluruh body tanpa field `signature` (HMAC-SHA512, key = Merchant Key).
+      const fields: any = {
+        customer: { id: "simulator@finpay.id" },
+        order: {
+          id: params.orderId,
+          reference: "REF-" + params.orderId,
+          amount: params.amount,
+          currency: "IDR",
+        },
+        meta: { data: null },
+        result: {
+          payment: {
+            amount: params.amount,
+            status: fix.payment_status,
+            channel: "014",
+            datetime: "2026-09-27 13:33:09",
+            userDesc: fix.response_code,
+            reference: "SIM-" + params.orderId,
+            statusDesc: fix.payment_status,
+          },
+        },
+      };
       const signature = params.tampered
         ? "invalid_finpay_signature"
-        : generateFinpaySignature(merchantId, params.orderId, params.amount, merchantKey);
+        : generateFinpaySignature(fields, merchantKey);
 
-      body = {
-        merchant_id: merchantId,
-        order_id: params.orderId,
-        amount: params.amount,
-        payment_status: fix.payment_status,
-        response_code: fix.response_code,
-        signature,
-      };
+      body = { ...fields, signature };
       rawBody = JSON.stringify(body);
       break;
     }

@@ -9,6 +9,9 @@ import {
   CheckTransactionParams,
   CheckTransactionResult,
   PaymentMethod,
+  DisburseParams,
+  DisburseResult,
+  CheckBalanceResult,
 } from "../../types";
 import { getPaymentMethodCategory } from "../../utils/category";
 import { toDuitkuPaymentMethod, toCanonicalPaymentMethod } from "../../core/canonical";
@@ -19,6 +22,7 @@ import {
   getDuitkuPaymentMethodsSignature,
   getDuitkuStatusSignatures,
 } from "./signature";
+import { executeDuitkuDisburse, executeDuitkuCheckBalance } from "./disbursement";
 import { httpFetch } from "../../utils/http";
 
 export class DuitkuProvider extends BasePaymentProvider {
@@ -52,6 +56,43 @@ export class DuitkuProvider extends BasePaymentProvider {
     const { payloadSignature } = getDuitkuInquirySignatures(merchantCode, orderId, integerAmount, apiKey);
     const popSignature = isDirectInquiry ? undefined : getDuitkuPopSignature(merchantCode, apiKey);
 
+    // Dokumentasi resmi Duitku menandai `customerVaName` sebagai parameter
+    // **wajib** pada Request Transaction, dan sejumlah kanal (mis. Indodana
+    // Paylater/DN) menolak permintaan dengan HTTP 400 tanpa `customerDetail`.
+    // Sebelumnya kedua field ini tidak pernah dikirim, sehingga kanal seperti
+    // DN gagal dengan body kosong yang tidak informatif.
+    //   - `customerVaName` dibatasi 20 karakter sesuai tabel parameter Duitku.
+    //   - `customerDetail` diisi dari data pelanggan yang tersedia; field lain
+    //     bersifat opsional.
+    const customerVaName = (customer.name || "").trim().slice(0, 20);
+    const customerDetail = {
+      firstName: customer.name || "",
+      lastName: "",
+      email: customer.email || "",
+      phoneNumber: customer.phone || "",
+      // Dokumentasi Duitku menandai alamat sebagai opsional, tetapi metode
+      // credit (mis. Indodana Paylater/DN) menolak permintaan dengan HTTP 400
+      // berbadan kosong jika objek `billingAddress` tidak ada (diverifikasi
+      // live: `billingAddress: {}` sudah cukup). Isinya opsional, jadi diisi
+      // dari data pelanggan yang tersedia; merchant bisa menimpanya lewat
+      // `providerParams.customerDetail`.
+      billingAddress: {
+        firstName: customer.name || "",
+        lastName: "",
+        phone: customer.phone || "",
+      },
+    };
+    // `itemDetails` hanya dikirim bila merchant memang menyediakannya, agar
+    // jumlahnya selalu konsisten dengan `paymentAmount` (Duitku membalas 409
+    // "Payment amount must be equal to all item price" jika tidak).
+    const itemDetails = Array.isArray(params.items) && params.items.length
+      ? params.items.map((it) => ({
+          name: it.name,
+          price: Math.round(it.price),
+          quantity: it.quantity,
+        }))
+      : undefined;
+
     const payload = {
       ...(isDirectInquiry ? { merchantCode } : {}),
       paymentAmount: integerAmount,
@@ -59,6 +100,9 @@ export class DuitkuProvider extends BasePaymentProvider {
       productDetails,
       email: customer.email,
       phoneNumber: customer.phone || "",
+      customerVaName,
+      customerDetail,
+      ...(itemDetails ? { itemDetails } : {}),
       ...(isDirectInquiry ? { signature: payloadSignature } : {}),
       callbackUrl: callbackUrl || config.callbackUrl || "",
       returnUrl: returnUrl || config.returnUrl || "",
@@ -472,5 +516,19 @@ export class DuitkuProvider extends BasePaymentProvider {
         error: e.message,
       };
     }
+  }
+
+  /**
+   * Payout / Transfer Dana (Duitku Transfer Online)
+   */
+  async disburse(params: DisburseParams, config: ProviderConfig): Promise<DisburseResult> {
+    return executeDuitkuDisburse(params, config);
+  }
+
+  /**
+   * Cek saldo merchant (Duitku Disbursement Check Balance)
+   */
+  async checkBalance(config: ProviderConfig): Promise<CheckBalanceResult> {
+    return executeDuitkuCheckBalance(config);
   }
 }

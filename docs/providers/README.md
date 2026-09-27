@@ -2,6 +2,8 @@
 
 Setiap provider punya folder kode `src/providers/<provider>/` dan folder dokumentasi `docs/providers/<provider>/README.md` ini.
 
+> 📊 **Laporan probe live gabungan (2026-09-27):** lihat [`docs/REVIEW-PG-FIDELITY.md` §7](../REVIEW-PG-FIDELITY.md#7-verifikasi-live--daftar-channel--laporan-gabungan-probe) — total **94/145** diterima · 13 diharapkan · 38 gagal (26 di antaranya hambatan IP allowlist Xendit/Xenith).
+
 ## Struktur
 
 ```
@@ -43,13 +45,17 @@ Provider yang sudah diuji langsung dengan kredensial sandbox nyata (`sandbox.md`
 
 ---
 
-### ⏳ Provider Belum Diuji Live Sandbox / Simulator Only (14)
+### ✅ Provider Diuji Live Sandbox — Finpay (1)
+| Provider | Audit | Status Live | Catatan | Dokumentasi |
+|---|---|---|---|---|
+| Finpay | ✅ FP-1/FP-3 | ✅ **TESTED LIVE (sandbox)** | 13/13 kanal aktif lolos; `indomaret` belum diaktifkan di akun | [finpay](./finpay/README.md) |
+
+### ⏳ Provider Belum Diuji Live Sandbox / Simulator Only (13)
 Provider yang implementasinya telah selesai & terkunci 535 test unit/simulator, tetapi **belum pernah ditembakkan ke akun sandbox nyata** karena menunggu tersedianya kredensial:
 | Nicepay | ✅ N-1/N-2 | ⏳ **BELUM TESTED LIVE** | Butuh akun sandbox Nicepay (`NICEPAY_IMID`, `NICEPAY_KEY`) | [nicepay](./nicepay/README.md) |
 | Faspay | ✅ F-1 (verified) | ⏳ **BELUM TESTED LIVE** | Butuh akun sandbox Faspay (`FASPAY_MERCHANT_ID`, `FASPAY_USER_ID`, `FASPAY_PASSWORD`) | [faspay](./faspay/README.md) |
 | OY! Bisnis | ⏳ Gelombang 3 | ⏳ **BELUM TESTED LIVE** | Butuh akun sandbox OY! (`OY_USERNAME`, `OY_API_KEY`) | [oy](./oy/README.md) |
-| Finpay | ⏸ BLOCKED (FP-1) | ⏸️ **BELUM TESTED LIVE** | Dokumentasi payload resmi tertutup (butuh dokumen integrasi & akun merchant) | [finpay](./finpay/README.md) |
-| Prismalink | ⏸ BLOCKED (FP-1) | ⏸️ **BELUM TESTED LIVE** | Dokumentasi payload resmi tertutup (butuh dokumen integrasi & akun merchant) | [prismalink](./prismalink/README.md) |
+| Prismalink | ⏸ BLOCKED (FP-2) | ⏸️ **BELUM TESTED LIVE** | Gateway tidak stabil & registrasi sandbox/staging tidak dapat diakses; butuh akses/dokumen dari vendor | [prismalink](./prismalink/README.md) |
 | Stripe | 🔎 Terintegrasi | ⏳ **BELUM TESTED LIVE** | Butuh API Key sandbox (`sk_test_...`) | [stripe](./stripe/README.md) |
 | PayPal | 🔎 Terintegrasi | ⏳ **BELUM TESTED LIVE** | Butuh PayPal Developer Sandbox Client ID & Secret | [paypal](./paypal/README.md) |
 | Adyen | 🔎 Terintegrasi | ⏳ **BELUM TESTED LIVE** | Butuh Adyen Test Account (`API Key`, `Merchant Account`, `HMAC Key`) | [adyen](./adyen/README.md) |

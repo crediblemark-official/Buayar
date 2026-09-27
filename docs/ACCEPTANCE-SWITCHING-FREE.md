@@ -1,12 +1,12 @@
 # Acceptance Criteria — Switching Bebas-Biaya
 
 > Status dokumen: **usulan kerja** (bukan spesifikasi final).
-> Repo saat audit: `0.8.10` · 20 provider · 2 berstatus `Tested` (iPaymu, SumoPod).
+> Repo saat audit: `0.9.0` · 21 provider · 7 berstatus `Tested` di sandbox/live.
 >
 > ⚠️ Catatan: audit awal bersifat read-only, tapi **temuan K3 sudah turun menjadi
 > perbaikan kode** — lihat [§3c. Pass Perbaikan Keamanan](#3c-pass-perbaikan-keamanan).
 > Klaim "✅ Terpenuhi" di bawah merujuk pada kondisi **setelah** pass tersebut, dan
-> angka test sudah diperbarui ke **489/489**.
+> angka test sudah diperbarui ke **537/537**.
 
 ---
 
@@ -24,7 +24,7 @@ gagal, dan harus mengulang ke PG berikutnya — **dengan risiko menulis ulang in
 
 Karena itu klaim yang benar bukan:
 
-> ~~"Satu API untuk 20 payment gateway"~~ ← terdengar seperti utilitas, mudah dibandingkan
+> ~~"Satu API untuk 21 payment gateway"~~ ← terdengar seperti utilitas, mudah dibandingkan
 > dengan SDK Midtrans/Xendit gratis.
 
 Klaim yang benar:
@@ -32,7 +32,7 @@ Klaim yang benar:
 > **"Daftar ke beberapa PG sekaligus, koding sekali, go-live dengan yang pertama disetujui —
 > tanpa menulis ulang kode."**
 
-Nilai yang diuji adalah **optionality**, bukan unification. Six acceptance criteria di bawah
+Nilai yang diuji adalah **optionality**, bukan unification. Seven acceptance criteria di bawah
 adalah pengukuran objektif apakah optionality itu benar-benar ada di dalam kode.
 
 ---
@@ -42,14 +42,18 @@ adalah pengukuran objektif apakah optionality itu benar-benar ada di dalam kode.
 | # | Kriteria | Status | Severity | Estimasi |
 |---|----------|--------|----------|----------|
 | K1 | Ganti PG = ganti env var, tanpa sentuh kode | ✅ Terpenuhi | P1 | M |
-| K2 | Compiler menangkap payment method non-portable | ✅ Terpenuhi di `main` — ⚠️ **belum ada di release** | P1 | S |
+| K2 | Compiler menangkap payment method non-portable | ✅ Terpenuhi | P1 | S |
 | K3 | Webhook diverifikasi ketat di semua PG | ✅ Terpenuhi | **P0** | S–M |
 | K4 | Bisa test penuh tanpa account approved | ✅ Terpenuhi | P1 | **XL** |
 | K5 | Pre-flight warning jika method tidak didukung | ✅ Terpenuhi | P1 | M |
 | K6 | Autodetect tanpa fallback senyap | ✅ Terpenuhi | **P0** | M |
 | K7 | Scaffold CLI menghasilkan kode yang bisa diverifikasi | ✅ Terpenuhi | **P0** | **S** |
 
-**Ringkasan: 7 dari 7 kriteria terpenuhi (489/489 tests passing).**
+**Ringkasan: 7 dari 7 kriteria terpenuhi (537/537 tests passing).**
+
+> Catatan pembacaan: rincian temuan dan angka di bagian bawah memuat snapshot audit historis
+> v0.8.x. Status terkini ada pada tabel dan ringkasan di atas; item lama yang sudah dicentang
+> dipertahankan sebagai jejak keputusan dan bukti regresi.
 
 Tiga P0: **K7, K3, K6.** K4 adalah gap terbesar dan sekaligus pembeda produk yang paling
 sulit ditiru pesaing.
@@ -93,10 +97,10 @@ melawan janji switching.
 - [x] Hilangkan hardcode `provider: "duitku"` di `manager.ts:487`
 - [x] Tandai `getMidtransClient()` / `getXenditClient()` sebagai **advanced/legacy** di docs,
       dengan konsekuensi "tidak portable" disebut eksplisit
-- [x] Smoke test: satu skenario invoice untuk **semua 20 provider** yang dikonfigurasi
+- [x] Smoke test: satu skenario invoice untuk **semua 21 provider** yang dikonfigurasi
       hanya lewat env var
 
-**DoD:** CI hijau untuk matriks 20 provider × 1 skenario, konfigurasi 100% via env.
+**DoD:** CI hijau untuk matriks 21 provider × 1 skenario, konfigurasi 100% via env.
 
 ---
 
@@ -105,39 +109,20 @@ melawan janji switching.
 **Target:** kalau Anda tulis kode provider-spesifik, `tsc` harus gagal — **sebelum** runtime,
 sebelum Anda switch, sebelum ada transaksi gagal.
 
-**Aset yang sudah ada ✅**
+**Status saat ini ✅**
 
 `src/types/canonical.ts` mendefinisikan `CanonicalPaymentMethod` yang solid:
 `bca_va`, `mandiri_va`, `qris`, `gopay`, `shopeepay`, `alfamaret`, dst.
 
-Ini persis primitif yang dibutuhkan agar UI Anda tetap jalan setelah ganti PG, dan ini
-satu-satunya aset strategis nyata di repo. **Namun belum dikunci.**
+Ini persis primitif yang dibutuhkan agar UI Anda tetap jalan setelah ganti PG. Kontrak publik
+kini hanya menerima canonical code atau escape hatch eksplisit `providerOnly`.
 
-**Gap ❌ — type safety dimatikan oleh library sendiri**
+**Kontrak yang sekarang ✅**
 
-`src/types/index.ts:24`
+`src/types/index.ts`
 ```ts
-paymentMethod?: CanonicalPaymentMethod | string;
+paymentMethod?: CanonicalPaymentMethod | { raw: string; providerOnly: true };
 ```
-
-Union dengan `| string` membuat ini tetap terkompilasi:
-
-```ts
-paymentMethod: "bca_va"   // ✅ portable
-paymentMethod: "BC"       // ✅ juga terkompilasi — kode internal Duitku
-```
-
-Tiga konsekuensi langsung:
-
-1. Saat switch Duitku → Midtrans, **compiler tidak memberi tahu apa pun.**
-2. Metode pembayaran diam-diam tidak bisa dibayar.
-3. Anda baru sadar saat transaksi produksi gagal.
-
-Untuk pain yang Anda paparkan, ini **lebih buruk** dari rewrite 2 minggu: yang rewrite
-terlihat dan painful, sedangkan yang ini **tidak terlihat sampai terlambat** — persis
-skenario yang abstraksi ini promise akan cegah.
-
-`src/types/index.ts:219,227` — `category: "..." | string` punya masalah yang sama.
 
 **Work items**
 
@@ -207,10 +192,10 @@ perilaku unsigned sebagai `valid: true` — jadi regression ini justru terkunci 
 - [x] Ubah 3 fail-open: default `false`, dan secret webhook **wajib** atau lempar error saat init
 - [x] Sambungkan `PayPalProvider.verifyCallback` ke `verifyWebhookSignature` yang sudah ada
 - [x] Perbaiki test PayPal/OY agar unsigned = `false` (hapus asersi yang mengunci fail-open)
-- [x] Tetapkan kontrak **satu** raw-body di level façade (`rawBody?: string`), konsisten di 20 provider
+- [x] Tetapkan kontrak **satu** raw-body di level façade (`rawBody?: string`), konsisten di 21 provider
 - [x] Hapus `JSON.stringify()` pada body yang sudah ter-parse
 
-**DoD:** test negatif tanpa-kredensial hijau di **20/20** provider; tidak ada `isValid: true`
+**DoD:** test negatif tanpa-kredensial hijau di **21/21** provider; tidak ada `isValid: true`
 yang bisa dicapai tanpa bukti signature.
 
 ---
@@ -226,7 +211,7 @@ account disetujui** — dan tanpa satu rupiah pun.
 
 Simulator lengkap per-PG tersedia di `src/simulator/` dan terintegrasi via `BUAYAR_SIMULATE=1` atau `buayar.simulator`.
 Semua status didukung: `SIM_PAID`, `SIM_PENDING`, `SIM_EXPIRED`, `SIM_FAILED`, `SIM_TIMEOUT`, `SIM_ERROR`.
-Webhook replay dan generator kriptografis bekerja untuk seluruh 20 provider tanpa membutuhkan kredensial live.
+Webhook replay dan generator kriptografis bekerja untuk seluruh 21 provider tanpa membutuhkan kredensial live.
 
 **Kenapa ini penting secara khusus untuk passing Anda:**
 

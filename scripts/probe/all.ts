@@ -70,6 +70,15 @@ const ALL: ProviderSpec[] = [
     missingHint: "DUITKU_MERCHANT_CODE + DUITKU_API_KEY",
   },
   {
+    id: "finpay",
+    label: "Finpay",
+    script: "finpay/channels.ts",
+    hasCredentials: (e) =>
+      Boolean(e.FINPAY_MERCHANT_ID || e.BUAYAR_MERCHANT_CODE) &&
+      Boolean(e.FINPAY_MERCHANT_KEY || e.BUAYAR_API_KEY),
+    missingHint: "FINPAY_MERCHANT_ID + FINPAY_MERCHANT_KEY",
+  },
+  {
     id: "xenith",
     label: "Xenith",
     script: "xenith/channels.ts",

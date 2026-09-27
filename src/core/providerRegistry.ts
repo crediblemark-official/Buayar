@@ -17,6 +17,8 @@ export interface ProviderDescriptor extends ProviderCapability {
   name: string;
   /** Kunci env kredensial yang menandakan provider ini aktif (untuk autodetect) */
   envKeys: string[];
+  /** Grup kunci wajib; tiap grup boleh dipenuhi oleh salah satu alternatifnya. */
+  requiredEnvKeys?: string[][];
 }
 
 /**
@@ -57,19 +59,26 @@ export class ProviderRegistry {
 
   /**
    * Autodetect provider aktif dari variabel lingkungan.
-   * Mengembalikan nama provider yang kredensial .env-nya terisi penuh,
-   * atau undefined jika tidak ada / ambigu.
+    * Hanya env key spesifik provider yang dipakai. Kredensial `BUAYAR_*`
+    * universal tidak memuat identitas provider, jadi `BUAYAR_PROVIDER` tetap
+    * wajib diisi bila konfigurasi hanya menggunakan env universal.
+    * Mengembalikan undefined jika tidak ada / ambigu / parsial.
    */
   detectFromEnv(env: Record<string, string | undefined>): string | undefined {
     const present: { name: string; count: number }[] = [];
+    let hasPartialProvider = false;
     for (const [name, desc] of this.descriptors) {
       const filled = desc.envKeys.filter((k) => {
         const v = env[k];
         return typeof v === "string" && v.trim().length > 0;
       });
+      const complete = desc.requiredEnvKeys?.every((group) =>
+        group.some((key) => filled.includes(key))
+      ) ?? true;
       if (filled.length > 0) present.push({ name, count: filled.length });
+      if (filled.length > 0 && !complete) hasPartialProvider = true;
     }
-    if (present.length === 0) return undefined;
+    if (present.length === 0 || hasPartialProvider) return undefined;
     // Ambil provider dengan jumlah kredensial terbanyak; anggap ambigu bila seri.
     present.sort((a, b) => b.count - a.count);
     const top = present[0];
@@ -115,7 +124,7 @@ export class ProviderRegistry {
     if (p.trx_id && (p.sid || p.reference_id || p.via)) return "ipaymu";
     if (p.service?.id || (p.order?.invoice_number && p.transaction?.status)) return "doku";
     if (p.bill_no && (p.payment_status_code !== undefined || p.payment_status_desc)) return "faspay";
-    if (p.merchant_id && p.order_id && p.payment_status) return "finpay";
+    if (p.order?.id && p.result?.payment?.status) return "finpay";
     if (p.tXid && p.merchantToken && (p.referenceNo || p.amt)) return "nicepay";
     if (p.partner_tx_id || p.partner_trx_id) return "oy";
     if (p.merchant_id && p.order_id && p.signature) return "prismalink";
@@ -166,6 +175,30 @@ const ENV_KEYS: Record<string, string[]> = {
   twocheckout:  ["TWOCHECKOUT_MERCHANT_CODE", "TWOCHECKOUT_SECRET_KEY", "TWOCHECKOUT_SECRET_WORD"],
   sumopod:      ["SUMOPOD_API_KEY", "SUMOPOD_WEBHOOK_SECRET"],
   xenith:       ["XENITH_ACCESS_KEY", "XENITH_SECRET_KEY", "XENITH_WEBHOOK_SECRET"],
+};
+
+const REQUIRED_ENV_KEYS: Record<string, string[][]> = {
+  midtrans: [["MIDTRANS_SERVER_KEY"]],
+  duitku: [["DUITKU_API_KEY"], ["DUITKU_MERCHANT_CODE"]],
+  ipaymu: [["IPAYMU_API_KEY"], ["IPAYMU_VA"]],
+  xendit: [["XENDIT_SECRET_KEY", "XENDIT_API_KEY"]],
+  doku: [["DOKU_CLIENT_ID"], ["DOKU_SECRET_KEY", "DOKU_API_KEY"]],
+  prismalink: [["PRISMALINK_MERCHANT_ID"], ["PRISMALINK_SECRET_KEY", "PRISMALINK_API_KEY"]],
+  faspay: [["FASPAY_MERCHANT_ID"], ["FASPAY_USER_ID"], ["FASPAY_PASSWORD", "FASPAY_API_KEY"]],
+  finpay: [["FINPAY_MERCHANT_ID"], ["FINPAY_MERCHANT_KEY", "FINPAY_SECRET_KEY", "FINPAY_API_KEY"]],
+  nicepay: [["NICEPAY_IMID"], ["NICEPAY_KEY", "NICEPAY_SECRET_KEY", "NICEPAY_API_KEY"]],
+  oy: [["OY_USERNAME"], ["OY_API_KEY"]],
+  stripe: [["STRIPE_SECRET_KEY", "STRIPE_KEY"]],
+  paypal: [["PAYPAL_CLIENT_ID"], ["PAYPAL_CLIENT_SECRET"]],
+  adyen: [["ADYEN_API_KEY"], ["ADYEN_MERCHANT_ACCOUNT"]],
+  checkoutcom: [["CHECKOUTCOM_SECRET_KEY"]],
+  razorpay: [["RAZORPAY_KEY_ID"], ["RAZORPAY_KEY_SECRET"]],
+  square: [["SQUARE_ACCESS_TOKEN"], ["SQUARE_LOCATION_ID"]],
+  payu: [["PAYU_POS_ID"], ["PAYU_MD5_KEY"]],
+  braintree: [["BRAINTREE_MERCHANT_ID"], ["BRAINTREE_PUBLIC_KEY"], ["BRAINTREE_PRIVATE_KEY"]],
+  twocheckout: [["TWOCHECKOUT_MERCHANT_CODE"], ["TWOCHECKOUT_SECRET_KEY"]],
+  sumopod: [["SUMOPOD_API_KEY", "SUMOPOD_PRODUCTION_API_KEY", "SUMOPOD_SANDBOX_API_KEY"]],
+  xenith: [["XENITH_ACCESS_KEY", "XENITH_API_KEY"], ["XENITH_SECRET_KEY"]],
 };
 
 // Metode kanonik per provider (layout dari core/canonical + static internasional).
@@ -222,6 +255,7 @@ export function buildDefaultDescriptors(): ProviderDescriptor[] {
   return Object.keys(ENV_KEYS).map((name) => ({
     name,
     envKeys: ENV_KEYS[name],
+    requiredEnvKeys: REQUIRED_ENV_KEYS[name],
     methods: WORKING_METHODS[name] || [],
     operations: OPERATIONS[name] || { refund: false, checkBalance: false, disburse: false },
   }));

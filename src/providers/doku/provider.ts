@@ -28,6 +28,7 @@ import { signedPayload, resolveRawBody, RAW_BODY_REQUIRED_MESSAGE } from "../../
 import { sha256 } from "../../utils/crypto";
 import { SnapClient } from "../../clients/snap";
 import { DokuClient } from "../../clients/doku";
+import { executeDokuDisburse, validateDokuBankAccount } from "./disbursement";
 import { verifySnapWebhookSignature, snapTimestamp, snapExternalId, generateSnapSymmetricSignature, sha256Hex } from "./snap";
 import {
   buildDokuMcpMethods,
@@ -1433,16 +1434,10 @@ export class DokuProvider extends BasePaymentProvider {
    */
   async validateBankAccount(params: ValidateBankAccountParams, config: ProviderConfig): Promise<ValidateBankAccountResult> {
     try {
-      const client = new DokuClient(config);
-      // DokuClient sudah fail-closed: melempar bila field wajib kurang atau
-      // DOKU tidak mengembalikan `sessionId`. Jadi `success: true` di bawah
-      // hanya tercapai bila benar-benar ada sessionId.
-      //
-      // Versi sebelumnya memakai `success: true` tanpa syarat apa pun, jadi
-      // respons 404 "No static resource" pun terbaca sebagai validasi berhasil
-      // — merchant menganggap nama pemilik rekening sudah terkonfirmasi padahal
-      // tidak ada yang diverifikasi.
-      const hasil = await client.validateBankAccount(params);
+      const clientId = config.merchantCode || (config as any).clientId || (config as any).clientKey || "";
+      const secretKey = config.apiKey || (config as any).secretKey || (config as any).serverKey || "";
+      const sandbox = !!config.sandbox;
+      const hasil = await validateDokuBankAccount(config, clientId, secretKey, sandbox, params);
       return {
         success: true,
         provider: "doku",
@@ -1468,51 +1463,9 @@ export class DokuProvider extends BasePaymentProvider {
    * Payout / Transfer Dana (Kirim DOKU Domestic Payouts)
    */
   async disburse(params: DisburseParams, config: ProviderConfig): Promise<DisburseResult> {
-    try {
-      const client = new DokuClient(config);
-      const data = await client.disburse(params);
-
-      // Kirim DOKU (Transfer Bank) tidak punya field `status` maupun `error` di
-      // respons — hanya `responseCode` + `responseMessage`. Karena itu respons sukses
-      // harus dibaca dari responseCode, bukan dari ketiadaan field error.
-      //
-      // Whitelist resmi (developers.doku.com → Response Code → Kirim DOKU →
-      // Transfer Bank):
-      //   2004300 = Successful, "Treat transactions with this status as success."
-      //   2024300 = Transaction still on process
-      // Selain itu DOKU menolak: 400/401/403/404/409/429/5xx — termasuk
-      // 4034314 (Insufficient Funds) dan 4044311 (rekening penerima tidak valid).
-      const responseCode = String(data?.responseCode ?? data?.response_code ?? "");
-      const rawStatus = String(data?.status || "").toUpperCase();
-
-      // `success` di sini berarti "permintaan diterima DOKU" — BUKAN "uang sudah
-      // sampai". 2024300 tetap dianggap success supaya pemanggil tidak mengulang
-      // payout yang sedang berjalan (risiko pengiriman ganda); yang menandai
-      // masih proses adalah `status`.
-      const isAccepted =
-        responseCode === "2004300" || responseCode === "2024300" || rawStatus === "SUCCESS";
-      const isPending = responseCode === "2024300" || rawStatus === "PENDING";
-
-      return {
-        success: isAccepted,
-        supported: true,
-        provider: "doku",
-        reference: data?.referenceNo || data?.reference_no || data?.partnerReferenceNo || data?.partner_reference_no || params.externalId,
-        status: isPending ? "PENDING" : rawStatus || (responseCode === "2004300" ? "SUCCESS" : "FAILED"),
-        error: isAccepted
-          ? undefined
-          : data?.responseMessage || data?.response_message || `DOKU menolak payout (responseCode ${responseCode || "tidak ada"}).`,
-        rawResponse: data,
-      };
-    } catch (e: any) {
-      return {
-        success: false,
-        supported: true,
-        provider: "doku",
-        status: "FAILED",
-        rawResponse: e?.raw ?? null,
-        error: e.message || "DOKU disbursement failed",
-      };
-    }
+    const clientId = config.merchantCode || (config as any).clientId || (config as any).clientKey || "";
+    const secretKey = config.apiKey || (config as any).secretKey || (config as any).serverKey || "";
+    const sandbox = !!config.sandbox;
+    return executeDokuDisburse(config, clientId, secretKey, sandbox, params);
   }
 }

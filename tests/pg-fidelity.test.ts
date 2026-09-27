@@ -24,6 +24,8 @@ import {
   parseDokuMcpChannels,
 } from "../src/providers/doku/mcp";
 import { XenditProvider } from "../src/providers/xendit/provider";
+import { FinpayProvider } from "../src/providers/finpay/provider";
+import { generateFinpaySignature, verifyFinpaySignature } from "../src/providers/finpay/signature";
 import {
   MIDTRANS_SNAP_DOMAINS,
   MIDTRANS_SNAP_PATHS,
@@ -1475,5 +1477,102 @@ describe("Midtrans BI-SNAP — fidelity vs dokumentasi resmi", () => {
     } finally {
       globalThis.fetch = originalFetch;
     }
+  });
+});
+
+// ─── Finpay (FP-1) ───────────────────────────────────────────────────────────
+
+const FP_MERCHANT_ID = "FINPAY770";
+const FP_MERCHANT_KEY = "SoSecret123";
+
+describe("Finpay — fidelity vs dokumentasi resmi (FP-1)", () => {
+  it("memakai domain devo/live.finnet.co.id yang resmi, bukan sandbox.finpay.co.id", async () => {
+    const originalFetch = globalThis.fetch;
+    const urls: string[] = [];
+    (globalThis as any).fetch = async (url: any) => {
+      urls.push(String(url));
+      return { ok: true, status: 200, text: async () => JSON.stringify({ responseCode: "2000000" }) } as any;
+    };
+    try {
+      const sandbox = new FinpayProvider();
+      await sandbox.createInvoice(
+        { orderId: "A", amount: 1000, customer: { name: "A", email: "a@b.c" } },
+        { provider: "finpay", merchantCode: FP_MERCHANT_ID, apiKey: FP_MERCHANT_KEY, sandbox: true },
+      );
+      await sandbox.createInvoice(
+        { orderId: "B", amount: 1000, customer: { name: "A", email: "a@b.c" } },
+        { provider: "finpay", merchantCode: FP_MERCHANT_ID, apiKey: FP_MERCHANT_KEY, sandbox: false },
+      );
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+    expect(urls[0]).toBe("https://devo.finnet.co.id/pg/payment/card/initiate");
+    expect(urls[1]).toBe("https://live.finnet.co.id/pg/payment/card/initiate");
+  });
+
+  it("memakai Authorization Basic base64(merchantId:merchantKey) sesuai dokumen", async () => {
+    const originalFetch = globalThis.fetch;
+    let auth = "";
+    (globalThis as any).fetch = async (_url: any, options: any) => {
+      auth = options.headers.Authorization;
+      return { ok: true, status: 200, text: async () => JSON.stringify({ responseCode: "2000000" }) } as any;
+    };
+    try {
+      const provider = new FinpayProvider();
+      await provider.createInvoice(
+        { orderId: "A", amount: 1000, customer: { name: "A", email: "a@b.c" } },
+        { provider: "finpay", merchantCode: FP_MERCHANT_ID, apiKey: FP_MERCHANT_KEY, sandbox: true },
+      );
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+    // Contoh resmi: base64("FINPAY770:SoSecret123") = RklOUEFZNzcwOlNvU2VjcmV0MTIz
+    expect(auth).toBe("Basic RklOUEFZNzcwOlNvU2VjcmV0MTIz");
+  });
+
+  it("menandatangani callback dengan HMAC-SHA512 atas seluruh body minus signature", () => {
+    const fields = {
+      customer: { id: "hajar@yahoo.com" },
+      order: { id: "1664255905824", reference: "16642559058241000000000", amount: 1000, currency: "IDR" },
+      result: { payment: { amount: 1000, status: "PAID" } },
+    };
+    const signature = generateFinpaySignature(fields, FP_MERCHANT_KEY);
+    expect(signature).toHaveLength(128);
+    expect(verifyFinpaySignature({ ...fields, signature }, FP_MERCHANT_KEY, signature)).toBe(true);
+    // Signature tidak boleh sah atas field yang diubah.
+    expect(
+      verifyFinpaySignature(
+        { ...fields, order: { ...fields.order, amount: 999999 }, signature },
+        FP_MERCHANT_KEY,
+        signature,
+      ),
+    ).toBe(false);
+  });
+
+  it("memetakan status callback resmi (PAID/CAPTURED/EXPIRED) dan menolak status tanpa signature", async () => {
+    const provider = new FinpayProvider();
+    const cfg = { provider: "finpay", merchantCode: FP_MERCHANT_ID, apiKey: FP_MERCHANT_KEY };
+
+    const paidFields = { order: { id: "O", amount: 1000 }, result: { payment: { status: "CAPTURED" } } };
+    const paid = await provider.verifyCallback(
+      { ...paidFields, signature: generateFinpaySignature(paidFields, FP_MERCHANT_KEY) },
+      cfg,
+    );
+    expect(paid.isPaid).toBe(true);
+    expect(paid.status).toBe("paid");
+
+    const expiredFields = { order: { id: "O", amount: 1000 }, result: { payment: { status: "EXPIRED" } } };
+    const expired = await provider.verifyCallback(
+      { ...expiredFields, signature: generateFinpaySignature(expiredFields, FP_MERCHANT_KEY) },
+      cfg,
+    );
+    expect(expired.isExpired).toBe(true);
+    expect(expired.status).toBe("expired");
+
+    // Tanpa signature → fail-closed, status tidak dipercaya.
+    const forged = await provider.verifyCallback(paidFields as any, cfg);
+    expect(forged.isValid).toBe(false);
+    expect(forged.isPaid).toBe(false);
+    expect(forged.status).toBe("failed");
   });
 });
