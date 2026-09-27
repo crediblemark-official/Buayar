@@ -6,7 +6,18 @@ export interface TemplateFiles {
   [path: string]: string;
 }
 
-export const DOT_ENV_TEMPLATE = `# ── @crediblemark/buayar · Konfigurasi ─────────────────────────────
+/**
+ * Template .env.example.
+ *
+ * WAJIB menerima provider yang dipilih: `buayar init --provider xenith` dulu
+ * menulis `BUAYAR_PROVIDER=midtrans` ke .env.example, jadi config hasil scaffold
+ * langsung bertentangan dengan provider yang dipakai. Itu kelas bug yang sama
+ * dengan env legacy yang mengalahkan BUAYAR_PROVIDER — hanya manifesting di
+ * file hasil generate, bukan di .env user.
+ */
+export function buildDotEnvTemplate(provider?: string): string {
+  const active = provider || "midtrans";
+  return `# ── @crediblemark/buayar · Konfigurasi ─────────────────────────────
 # Saat pindah provider, kode aplikasi TIDAK berubah — cukup ganti
 # BUAYAR_PROVIDER + kredensial di bawah.
 #
@@ -16,7 +27,7 @@ export const DOT_ENV_TEMPLATE = `# ── @crediblemark/buayar · Konfigurasi �
 #    bukan dari BUAYAR_* — nama universalnya sama untuk semua provider
 #    sehingga tidak ada yang bisa ditebak.
 
-BUAYAR_PROVIDER=midtrans
+BUAYAR_PROVIDER=${active}
 
 # midtrans | duitku | ipaymu | xendit | doku | prismalink | faspay | finpay
 # nicepay | oy | stripe | paypal | adyen | checkoutcom | razorpay | square
@@ -122,6 +133,10 @@ BUAYAR_RETURN_URL=http://localhost:3000/payment/success
 # XENITH_SECRET_KEY=
 # XENITH_WEBHOOK_SECRET=
 `;
+}
+
+/** Tanpa argumen: dipakai test lama & skrip yang butuh string statis. */
+export const DOT_ENV_TEMPLATE = buildDotEnvTemplate();
 
 export const CONFIG_TEMPLATE = `// src/payment/buayar.ts
 // Inisialisasi Buayar — baca otomatis dari process.env (.env)
@@ -516,7 +531,7 @@ export function buildScaffold(
     : "src/payment/routes/index.ts";
 
   return {
-    ".env.example": DOT_ENV_TEMPLATE,
+    ".env.example": buildDotEnvTemplate(provider),
     "src/payment/buayar.ts": CONFIG_TEMPLATE,
     "src/payment/service.ts": SERVICE_TEMPLATE,
     "src/payment/types.ts": TYPE_DECL_TEMPLATE,

@@ -2,7 +2,7 @@ import { describe, expect, it, beforeEach, afterEach } from "bun:test";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { buildScaffold, getRouteTemplate, FRAMEWORKS, PROVIDERS } from "../src/cli/templates";
+import { buildScaffold, getRouteTemplate, FRAMEWORKS, PROVIDERS, buildDotEnvTemplate, DOT_ENV_TEMPLATE } from "../src/cli/templates";
 import { providerRegistry } from "../src/core/providerRegistry";
 import { scaffold } from "../src/cli/scaffold";
 
@@ -162,5 +162,42 @@ describe("scaffold", () => {
     const rerun = scaffold(target, "midtrans", "express", { overwrite: true });
     expect(rerun.skipped).not.toContain("src/payment/service.ts");
     expect(fs.readFileSync(path.join(target, "src/payment/service.ts"), "utf8")).not.toBe("CUSTOM");
+  });
+});
+
+describe("CLI — scaffold .env.example tidak boleh bertentangan dengan provider yang dipilih", () => {
+  it("buildDotEnvTemplate memakai provider yang diminta, bukan hardcode midtrans", () => {
+    expect(buildDotEnvTemplate("xenith")).toContain("BUAYAR_PROVIDER=xenith");
+    expect(buildDotEnvTemplate("xendit")).toContain("BUAYAR_PROVIDER=xendit");
+  });
+
+  it("fallback ke midtrans bila provider tidak diberikan", () => {
+    expect(buildDotEnvTemplate()).toContain("BUAYAR_PROVIDER=midtrans");
+    expect(buildDotEnvTemplate("")).toContain("BUAYAR_PROVIDER=midtrans");
+  });
+
+  it("setiap provider menghasilkan .env.example yang menunjuk dirinya sendiri", () => {
+    for (const p of PROVIDERS) {
+      expect(buildDotEnvTemplate(p), p).toContain(`BUAYAR_PROVIDER=${p}`);
+    }
+  });
+
+  it("buildScaffold(--provider X) menulis provider X ke .env.example", () => {
+    const files = buildScaffold("xenith", "express");
+    expect(files[".env.example"]).toContain("BUAYAR_PROVIDER=xenith");
+    expect(files[".env.example"]).not.toContain("BUAYAR_PROVIDER=midtrans");
+  });
+
+  it("DOT_ENV_TEMPLATE (konstanta) tetap tersedia untuk konsumen lama", () => {
+    expect(DOT_ENV_TEMPLATE).toContain("BUAYAR_PROVIDER=midtrans");
+  });
+
+  it("outro CLI tidak menyuruh memakai env legacy PROVIDER_PG", () => {
+    const src = fs.readFileSync(path.resolve(__dirname, "../src/cli/index.ts"), "utf8");
+    // PROVIDER_PG menang atas BUAYAR_PROVIDER secara diam-diam; outro tidak
+    // boleh mengarahkan user memakainya.
+    const outroLine = src.split("\n").find((l) => l.includes("Salin .env.example")) || "";
+    expect(outroLine).not.toContain("PROVIDER_PG +");
+    expect(outroLine).toContain("BUAYAR_PROVIDER");
   });
 });

@@ -182,7 +182,9 @@ async function runInit(argv: string[]): Promise<number> {
 
   p.outro(`
 Selesai! Langkah berikutnya:
-  1. Salin .env.example ke .env & isi kredensial (PROVIDER_PG + key provider aktif).
+  1. Salin .env.example ke .env, pastikan BUAYAR_PROVIDER=<provider>, lalu isi kredensial.
+     Jangan pakai PROVIDER_PG/PG_PROVIDER: itu env legacy yang,
+     kalau masih ada di .env, akan MENGALAHKAN BUAYAR_PROVIDER secara diam-diam.
   2. Mount route payment (lihat README-PAYMENT.md).
   3. Ganti provider cukup ubah .env — kode tidak berubah.
 `);
