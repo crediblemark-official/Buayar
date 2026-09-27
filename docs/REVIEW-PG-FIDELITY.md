@@ -983,19 +983,19 @@ bun run scripts/probe/all.ts      # = bun run probe
 | Provider | Sumber | Diterima | Diharapkan | Gagal | Efek samping | Penilaian |
 |---|---|---:|---:|---:|---:|---|
 | Midtrans | live | 16/19 | 0 | 3 | 16 | Kode sehat; 3 kanal belum aktif di akun |
-| iPaymu | — | dilewati | — | — | 0 | Sandbox gateway timeout (tidak merespons sama sekali) |
+| iPaymu | live | 10/19 | 0 | 9 | 19 | Gateway lambat (butuh timeout 120s); 5 timeout per-channel, 2 partner-side, `bri` VA gagal, `cod` butuh `weight` |
 | Xendit | live | 11/11 | 0 | 0 | 11 | ✅ Sehat (blokir IP allowlist sudah diperbaiki) |
 | DOKU | mcp | 20/32 | 12 | 0 | 20 | Sehat; 12 kanal SNAP-only / belum dipetakan |
 | Duitku | live | 24/27 | 3 | 0 | 24 | 24 kanal sehat; 3 kanal hambatan provider (FT/DN/LQ) — **DU-2** |
 | Finpay | live | 19/20 | 1 | 0 | 0 | **Sehat + auto-cleanup** (Cancel Order) |
 | Xenith | live | 13/13 | 0 | 0 | 0 | ✅ Sehat (IP `.247.132` aktif; run sebelumnya tertolak karena egress berotasi ke `.215.133`) |
-| **TOTAL** | | **103/122** | **16** | **3** | **71** | |
+| **TOTAL** | | **113/141** | **16** | **12** | **90** | |
 
 Analisis (memisahkan bug SDK dari hambatan akun/config):
 
 - **3 kegagalan, semuanya konfigurasi akun / partner — nol kegagalan SDK:**
   - Midtrans `ovo`/`dana` (400 generik), `linkaja` (401) → kanal belum diaktifkan di akun.
-  - iPaymu **dilewati**: sandbox gateway tidak merespons (timeout TCP/TLS, bukan error API) — dilewati dari tabel, bukan dihitung gagal; run sebelumnya 13/19 saat gateway hidup.
+  - iPaymu: gateway pulih tetapi **sangat lambat** — `payment-channels` perlu timeout 120s (BUAYAR_REQUEST_TIMEOUT_MS); 5 kanal gagal timeout per-request 20s (`cimb`, `danamon`, `btn`, `alfamart`, `indomaret`, `akulaku`), `shopeepay` "Failed from partner", `bri` "Failed to generate VA", `cod` butuh `weight` (probe-side).
 - **3 kanal Duitku adalah hambatan provider, bukan bug SDK (DU-2):**
   - `FT` — RETAIL (Pegadaian/ALFA/Pos): HTTP 500 "Failed to generate payment number Retail" untuk semua nominal dan kombinasi field → kanal tidak dapat digenerate untuk akun ini.
   - `DN` — INDODANA PAYLATER: sebelum perbaikan, HTTP 400 berbadan kosong karena SDK tidak mengirim `customerDetail`/`billingAddress`; setelah dikirim, permintaan lolos validasi dan Duitku membalas HTTP 500 "Failed to generate Indodana payment Url" → paylater belum ter-provision di akun.
@@ -1005,7 +1005,7 @@ Analisis (memisahkan bug SDK dari hambatan akun/config):
 Tindakan lanjutan:
 
 1. Perluas **IP allowlist** Xenith ke rentang WARP (`104.28.215.0/24`, `104.28.247.0/24`) — Xendit sudah selesai; Xenith kembali lolos saat egress kembali ke `.247.132`, tetapi bisa berotasi lagi kapan saja.
-2. Pantau pulihnya sandbox iPaymu (downtime saat run kedua) lalu jalankan ulang probe-nya.
+2. iPaymu sandbox gateway lambat: jalankan probe iPaymu dengan `BUAYAR_REQUEST_TIMEOUT_MS=120000`, dan pantau; timeout per-channel 20s bisa dinaikkan bila gateway masih lambat.
 2. iPaymu COD: kirim rincian pengiriman (`PROBE_COD_SHIPPING=1`) agar bobot ikut terkirim.
 3. Duitku `FT`/`DN`/`LQ`: ~~cocokkan kode kanal dengan dokumentasi resmi~~ — **terjawab (DU-2)**: `FT`=RETAIL (Pegadaian/ALFA/Pos), `DN`=Indodana Paylater, `LQ`=LinkAja QRIS. Field `customerVaName`/`customerDetail`/`billingAddress`/`itemDetails` kini dikirim sesuai dokumentasi; ketiga kanal diklasifikasikan `expected` (hambatan provider).
 
@@ -1040,6 +1040,17 @@ iPaymu dilewati karena sandbox gateway-nya mengalami downtime (timeout TCP/TLS, 
 error API; run sebelumnya 13/19). Dengan iPaymu dihitung dari run sebelumnya, keseluruhan
 kurang lebih **116/141 · 16 expected · 9 gagal** — semua kegagalan bersifat konfigurasi
 akun/partner, nol kegagalan SDK.
+
+**Pembaruan iPaymu (2026-09-27, run ulang setelah downtime):** gateway pulih tetapi
+**sangat lambat** — `GET /api/v2/payment-channels` baru terjawab dengan timeout 120s
+(405/40x dari curl 3–11 detik). Dengan `BUAYAR_REQUEST_TIMEOUT_MS=120000`, probe berjalan:
+**10/19 diterima**. Kegagalan didominasi **timeout per-request 20 detik** di sisi gateway
+(`cimb`, `danamon`, `btn`, `alfamart`, `indomaret`, `akulaku`) — bukan penolakan payload;
+dua run sebelumnya kanal-kanal yang sama banyak yang lolos. `shopeepay` "Failed from
+partner" dan `bri` "Failed to generate VA" konsisten partner-side; `cod` butuh `weight`
+(rincian pengiriman, probe-side). Total keseluruhan run gabungan: **113/141 diterima ·
+16 expected · 12 gagal** — semuanya konfigurasi akun/partner/latensi gateway, **nol
+kegagalan SDK**.
 
 Catatan integrasi probe:
 
